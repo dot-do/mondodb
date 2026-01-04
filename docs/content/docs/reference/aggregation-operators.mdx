@@ -1,0 +1,1151 @@
+---
+title: Aggregation Operators Reference
+description: Complete reference for all aggregation expression operators supported by MondoDB
+---
+
+# Aggregation Operators Reference
+
+This reference documents all expression operators supported in MondoDB aggregation pipelines. These operators can be used within stages like `$project`, `$addFields`, `$group`, and `$bucket` to transform, compute, and manipulate document data.
+
+## Overview
+
+MondoDB translates MongoDB aggregation expressions to SQL operations. Expression operators fall into several categories:
+
+| Category | Description |
+|----------|-------------|
+| [Arithmetic](#arithmetic-operators) | Mathematical operations (+, -, *, /, %) |
+| [String](#string-operators) | Text manipulation and formatting |
+| [Conditional](#conditional-operators) | If/then/else logic and switches |
+| [Comparison](#comparison-operators) | Value comparisons returning boolean |
+| [Logical](#logical-operators) | Boolean algebra (AND, OR, NOT) |
+| [Accumulator](#accumulator-operators) | Aggregation functions for $group |
+| [Custom Functions](#function-operator) | User-defined JavaScript functions |
+
+---
+
+## Arithmetic Operators
+
+Perform mathematical calculations on numeric values.
+
+### $add
+
+Adds numbers or concatenates numbers and a date.
+
+**Syntax:**
+```typescript
+{ $add: [<expression1>, <expression2>, ...] }
+```
+
+**SQL Translation:** `(expr1 + expr2 + ...)`
+
+**Examples:**
+```typescript
+// Add two fields
+{ total: { $add: ['$price', '$tax'] } }
+
+// Add multiple values
+{ sum: { $add: ['$a', '$b', '$c', 10] } }
+
+// Use in $project
+await collection.aggregate([
+  { $project: {
+    item: 1,
+    totalCost: { $add: ['$price', '$shippingFee', '$handlingFee'] }
+  } }
+]).toArray();
+```
+
+---
+
+### $subtract
+
+Subtracts two numbers.
+
+**Syntax:**
+```typescript
+{ $subtract: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 - expr2)`
+
+**Examples:**
+```typescript
+// Calculate difference
+{ profit: { $subtract: ['$revenue', '$cost'] } }
+
+// Calculate discount
+{ finalPrice: { $subtract: ['$price', '$discount'] } }
+
+// Percentage calculation
+await collection.aggregate([
+  { $project: {
+    item: 1,
+    savings: { $subtract: ['$originalPrice', '$salePrice'] }
+  } }
+]).toArray();
+```
+
+---
+
+### $multiply
+
+Multiplies numbers together.
+
+**Syntax:**
+```typescript
+{ $multiply: [<expression1>, <expression2>, ...] }
+```
+
+**SQL Translation:** `(expr1 * expr2 * ...)`
+
+**Examples:**
+```typescript
+// Calculate total
+{ lineTotal: { $multiply: ['$quantity', '$unitPrice'] } }
+
+// Apply percentage
+{ discountedPrice: { $multiply: ['$price', 0.9] } }  // 10% off
+
+// Multiple factors
+await collection.aggregate([
+  { $project: {
+    item: 1,
+    totalWithTax: { $multiply: ['$quantity', '$unitPrice', 1.08] }
+  } }
+]).toArray();
+```
+
+---
+
+### $divide
+
+Divides one number by another.
+
+**Syntax:**
+```typescript
+{ $divide: [<dividend>, <divisor>] }
+```
+
+**SQL Translation:** `(dividend / divisor)`
+
+**Examples:**
+```typescript
+// Calculate average per item
+{ averagePrice: { $divide: ['$totalCost', '$itemCount'] } }
+
+// Calculate percentage
+{ completionRate: { $divide: ['$completed', '$total'] } }
+
+// With rounding (combine with other expressions)
+await collection.aggregate([
+  { $project: {
+    item: 1,
+    unitPrice: { $divide: ['$totalPrice', '$quantity'] }
+  } }
+]).toArray();
+```
+
+---
+
+### $mod
+
+Returns the remainder of division (modulo operation).
+
+**Syntax:**
+```typescript
+{ $mod: [<dividend>, <divisor>] }
+```
+
+**SQL Translation:** `(dividend % divisor)`
+
+**Examples:**
+```typescript
+// Check if even/odd
+{ isEven: { $eq: [{ $mod: ['$number', 2] }, 0] } }
+
+// Cyclical grouping
+{ bucket: { $mod: ['$id', 10] } }
+
+// Remainder calculation
+await collection.aggregate([
+  { $project: {
+    number: 1,
+    remainder: { $mod: ['$value', 3] },
+    isMultipleOf5: { $eq: [{ $mod: ['$value', 5] }, 0] }
+  } }
+]).toArray();
+```
+
+---
+
+## String Operators
+
+Manipulate and transform string values.
+
+### $concat
+
+Concatenates strings together.
+
+**Syntax:**
+```typescript
+{ $concat: [<expression1>, <expression2>, ...] }
+```
+
+**SQL Translation:** `(expr1 || expr2 || ...)`
+
+**Examples:**
+```typescript
+// Combine first and last name
+{ fullName: { $concat: ['$firstName', ' ', '$lastName'] } }
+
+// Build formatted string
+{ address: { $concat: ['$street', ', ', '$city', ', ', '$state'] } }
+
+// With static text
+await collection.aggregate([
+  { $project: {
+    displayName: { $concat: ['User: ', '$username', ' (', '$role', ')'] }
+  } }
+]).toArray();
+```
+
+---
+
+### $substr
+
+Returns a substring from a specified position.
+
+**Syntax:**
+```typescript
+{ $substr: [<string>, <start>, <length>] }
+```
+
+**SQL Translation:** `SUBSTR(string, start + 1, length)` (Note: MongoDB uses 0-based indexing)
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `string` | expression | The source string |
+| `start` | number | Starting position (0-based) |
+| `length` | number | Number of characters to extract |
+
+**Examples:**
+```typescript
+// Get first 3 characters
+{ code: { $substr: ['$productCode', 0, 3] } }
+
+// Extract year from date string (YYYY-MM-DD)
+{ year: { $substr: ['$dateString', 0, 4] } }
+{ month: { $substr: ['$dateString', 5, 2] } }
+{ day: { $substr: ['$dateString', 8, 2] } }
+
+// Truncate long descriptions
+await collection.aggregate([
+  { $project: {
+    title: 1,
+    excerpt: { $substr: ['$description', 0, 100] }
+  } }
+]).toArray();
+```
+
+---
+
+### $toLower
+
+Converts a string to lowercase.
+
+**Syntax:**
+```typescript
+{ $toLower: <expression> }
+```
+
+**SQL Translation:** `LOWER(expression)`
+
+**Examples:**
+```typescript
+// Normalize email
+{ normalizedEmail: { $toLower: '$email' } }
+
+// Case-insensitive comparison prep
+await collection.aggregate([
+  { $addFields: {
+    searchableName: { $toLower: '$name' }
+  } },
+  { $match: {
+    searchableName: { $regex: '^john' }
+  } }
+]).toArray();
+```
+
+---
+
+### $toUpper
+
+Converts a string to uppercase.
+
+**Syntax:**
+```typescript
+{ $toUpper: <expression> }
+```
+
+**SQL Translation:** `UPPER(expression)`
+
+**Examples:**
+```typescript
+// Format code
+{ productCode: { $toUpper: '$sku' } }
+
+// Standardize country codes
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    countryCode: { $toUpper: '$country' }
+  } }
+]).toArray();
+```
+
+---
+
+## Conditional Operators
+
+Control flow and conditional value selection.
+
+### $cond
+
+Evaluates a boolean expression and returns one of two values.
+
+**Syntax (Object form):**
+```typescript
+{ $cond: { if: <boolean-expression>, then: <true-value>, else: <false-value> } }
+```
+
+**Syntax (Array form):**
+```typescript
+{ $cond: [<boolean-expression>, <true-value>, <false-value>] }
+```
+
+**SQL Translation:** `CASE WHEN condition THEN trueVal ELSE falseVal END`
+
+**Examples:**
+```typescript
+// Object form (more readable)
+{ status: {
+  $cond: {
+    if: { $gte: ['$score', 70] },
+    then: 'pass',
+    else: 'fail'
+  }
+} }
+
+// Array form (more concise)
+{ status: { $cond: [{ $gte: ['$score', 70] }, 'pass', 'fail'] } }
+
+// Nested conditions
+{ grade: {
+  $cond: {
+    if: { $gte: ['$score', 90] },
+    then: 'A',
+    else: {
+      $cond: {
+        if: { $gte: ['$score', 80] },
+        then: 'B',
+        else: {
+          $cond: {
+            if: { $gte: ['$score', 70] },
+            then: 'C',
+            else: 'F'
+          }
+        }
+      }
+    }
+  }
+} }
+
+// Practical example
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    price: 1,
+    priceCategory: {
+      $cond: {
+        if: { $gte: ['$price', 100] },
+        then: 'premium',
+        else: { $cond: [{ $gte: ['$price', 50] }, 'standard', 'budget'] }
+      }
+    }
+  } }
+]).toArray();
+```
+
+---
+
+### $ifNull
+
+Returns an expression value if not null, otherwise returns a fallback.
+
+**Syntax:**
+```typescript
+{ $ifNull: [<expression>, <replacement>] }
+```
+
+**SQL Translation:** `COALESCE(expression, replacement)`
+
+**Examples:**
+```typescript
+// Default value for missing field
+{ displayName: { $ifNull: ['$nickname', '$name'] } }
+
+// Multiple fallbacks
+{ contactEmail: { $ifNull: ['$workEmail', '$personalEmail', 'noemail@example.com'] } }
+
+// Handle null in calculations
+await collection.aggregate([
+  { $project: {
+    item: 1,
+    discount: { $ifNull: ['$discount', 0] },
+    finalPrice: {
+      $subtract: ['$price', { $ifNull: ['$discount', 0] }]
+    }
+  } }
+]).toArray();
+```
+
+---
+
+### $switch
+
+Evaluates multiple conditions and returns a value based on the first matching case.
+
+**Syntax:**
+```typescript
+{
+  $switch: {
+    branches: [
+      { case: <expression>, then: <value> },
+      { case: <expression>, then: <value> },
+      ...
+    ],
+    default: <value>
+  }
+}
+```
+
+**SQL Translation:** `CASE WHEN case1 THEN then1 WHEN case2 THEN then2 ... ELSE default END`
+
+**Examples:**
+```typescript
+// Grade assignment
+{ grade: {
+  $switch: {
+    branches: [
+      { case: { $gte: ['$score', 90] }, then: 'A' },
+      { case: { $gte: ['$score', 80] }, then: 'B' },
+      { case: { $gte: ['$score', 70] }, then: 'C' },
+      { case: { $gte: ['$score', 60] }, then: 'D' }
+    ],
+    default: 'F'
+  }
+} }
+
+// Category mapping
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    priceRange: {
+      $switch: {
+        branches: [
+          { case: { $lt: ['$price', 25] }, then: '$' },
+          { case: { $lt: ['$price', 50] }, then: '$$' },
+          { case: { $lt: ['$price', 100] }, then: '$$$' }
+        ],
+        default: '$$$$'
+      }
+    }
+  } }
+]).toArray();
+```
+
+---
+
+## Comparison Operators
+
+Compare values and return boolean results. These are used within expressions (different from query operators).
+
+### $eq
+
+Returns `true` if values are equal.
+
+**Syntax:**
+```typescript
+{ $eq: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 = expr2)`
+
+**Examples:**
+```typescript
+// Check equality
+{ isAdmin: { $eq: ['$role', 'admin'] } }
+
+// Compare fields
+{ isSameAddress: { $eq: ['$shippingAddress', '$billingAddress'] } }
+```
+
+---
+
+### $ne
+
+Returns `true` if values are not equal.
+
+**Syntax:**
+```typescript
+{ $ne: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 != expr2)`
+
+**Examples:**
+```typescript
+// Check inequality
+{ needsReview: { $ne: ['$status', 'approved'] } }
+
+// Filter in conditions
+{ hasDiscount: { $ne: ['$discount', 0] } }
+```
+
+---
+
+### $gt
+
+Returns `true` if first value is greater than second.
+
+**Syntax:**
+```typescript
+{ $gt: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 > expr2)`
+
+**Examples:**
+```typescript
+{ isExpensive: { $gt: ['$price', 100] } }
+{ hasProfit: { $gt: ['$revenue', '$cost'] } }
+```
+
+---
+
+### $gte
+
+Returns `true` if first value is greater than or equal to second.
+
+**Syntax:**
+```typescript
+{ $gte: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 >= expr2)`
+
+**Examples:**
+```typescript
+{ isAdult: { $gte: ['$age', 18] } }
+{ meetsThreshold: { $gte: ['$score', '$requiredScore'] } }
+```
+
+---
+
+### $lt
+
+Returns `true` if first value is less than second.
+
+**Syntax:**
+```typescript
+{ $lt: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 < expr2)`
+
+**Examples:**
+```typescript
+{ isCheap: { $lt: ['$price', 20] } }
+{ underBudget: { $lt: ['$spent', '$budget'] } }
+```
+
+---
+
+### $lte
+
+Returns `true` if first value is less than or equal to second.
+
+**Syntax:**
+```typescript
+{ $lte: [<expression1>, <expression2>] }
+```
+
+**SQL Translation:** `(expr1 <= expr2)`
+
+**Examples:**
+```typescript
+{ inStock: { $lte: ['$ordered', '$available'] } }
+{ onBudget: { $lte: ['$cost', '$limit'] } }
+```
+
+---
+
+## Logical Operators
+
+Combine boolean expressions.
+
+### $and
+
+Returns `true` if all expressions are true.
+
+**Syntax:**
+```typescript
+{ $and: [<expression1>, <expression2>, ...] }
+```
+
+**SQL Translation:** `(expr1 AND expr2 AND ...)`
+
+**Examples:**
+```typescript
+// Multiple conditions
+{ isEligible: {
+  $and: [
+    { $gte: ['$age', 18] },
+    { $eq: ['$verified', true] },
+    { $ne: ['$banned', true] }
+  ]
+} }
+
+// In conditional
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    canPurchase: {
+      $and: [
+        { $gte: ['$balance', '$price'] },
+        { $eq: ['$accountStatus', 'active'] }
+      ]
+    }
+  } }
+]).toArray();
+```
+
+---
+
+### $or
+
+Returns `true` if any expression is true.
+
+**Syntax:**
+```typescript
+{ $or: [<expression1>, <expression2>, ...] }
+```
+
+**SQL Translation:** `(expr1 OR expr2 OR ...)`
+
+**Examples:**
+```typescript
+// Check multiple conditions
+{ hasAccess: {
+  $or: [
+    { $eq: ['$role', 'admin'] },
+    { $eq: ['$role', 'manager'] },
+    { $eq: ['$ownerId', '$$currentUser'] }
+  ]
+} }
+
+// Combine with $and
+{ specialOffer: {
+  $or: [
+    { $and: [{ $eq: ['$isPremium', true] }, { $gte: ['$orderCount', 5] }] },
+    { $gte: ['$totalSpent', 1000] }
+  ]
+} }
+```
+
+---
+
+### $not
+
+Negates a boolean expression.
+
+**Syntax:**
+```typescript
+{ $not: <expression> }
+```
+
+**SQL Translation:** `NOT (expression)`
+
+**Examples:**
+```typescript
+// Negate condition
+{ isNotExpired: { $not: { $lt: ['$expiryDate', '$$NOW'] } } }
+
+// Invert boolean
+{ notVerified: { $not: '$isVerified' } }
+```
+
+---
+
+## Accumulator Operators
+
+These operators are used exclusively within `$group` stages to compute aggregate values across documents.
+
+### $sum
+
+Calculates the sum of numeric values.
+
+**Syntax:**
+```typescript
+{ $sum: <expression> }
+{ $sum: 1 }  // Count documents
+```
+
+**SQL Translation:** `SUM(expression)`
+
+**Examples:**
+```typescript
+// Sum field values
+{ $group: {
+  _id: '$category',
+  totalRevenue: { $sum: '$amount' }
+} }
+
+// Count documents
+{ $group: {
+  _id: '$status',
+  count: { $sum: 1 }
+} }
+
+// Conditional sum
+{ $group: {
+  _id: '$region',
+  highValueOrders: {
+    $sum: { $cond: [{ $gte: ['$amount', 1000] }, 1, 0] }
+  }
+} }
+```
+
+---
+
+### $avg
+
+Calculates the average of numeric values.
+
+**Syntax:**
+```typescript
+{ $avg: <expression> }
+```
+
+**SQL Translation:** `AVG(expression)`
+
+**Examples:**
+```typescript
+{ $group: {
+  _id: '$department',
+  averageSalary: { $avg: '$salary' },
+  avgPerformance: { $avg: '$performanceScore' }
+} }
+```
+
+---
+
+### $min
+
+Returns the minimum value.
+
+**Syntax:**
+```typescript
+{ $min: <expression> }
+```
+
+**SQL Translation:** `MIN(expression)`
+
+**Examples:**
+```typescript
+{ $group: {
+  _id: '$category',
+  lowestPrice: { $min: '$price' },
+  earliestOrder: { $min: '$orderDate' }
+} }
+```
+
+---
+
+### $max
+
+Returns the maximum value.
+
+**Syntax:**
+```typescript
+{ $max: <expression> }
+```
+
+**SQL Translation:** `MAX(expression)`
+
+**Examples:**
+```typescript
+{ $group: {
+  _id: '$category',
+  highestPrice: { $max: '$price' },
+  latestOrder: { $max: '$orderDate' }
+} }
+```
+
+---
+
+### $first
+
+Returns the first value in the group.
+
+**Syntax:**
+```typescript
+{ $first: <expression> }
+```
+
+**SQL Translation:** Subquery with `LIMIT 1`
+
+**Note:** The first value depends on document order. Consider using `$sort` before `$group` for predictable results.
+
+**Examples:**
+```typescript
+// First entry per group
+{ $group: {
+  _id: '$customerId',
+  firstOrderDate: { $first: '$orderDate' },
+  firstProduct: { $first: '$productName' }
+} }
+
+// With pre-sorting
+await collection.aggregate([
+  { $sort: { orderDate: 1 } },
+  { $group: {
+    _id: '$customerId',
+    firstOrder: { $first: '$orderId' }
+  } }
+]).toArray();
+```
+
+---
+
+### $last
+
+Returns the last value in the group.
+
+**Syntax:**
+```typescript
+{ $last: <expression> }
+```
+
+**SQL Translation:** Subquery with `ORDER BY ... DESC LIMIT 1`
+
+**Examples:**
+```typescript
+// Last entry per group
+{ $group: {
+  _id: '$userId',
+  lastLogin: { $last: '$loginTime' },
+  lastActivity: { $last: '$activityType' }
+} }
+```
+
+---
+
+### $push
+
+Collects all values into an array.
+
+**Syntax:**
+```typescript
+{ $push: <expression> }
+```
+
+**SQL Translation:** `json_group_array(expression)`
+
+**Examples:**
+```typescript
+// Collect all values
+{ $group: {
+  _id: '$department',
+  employees: { $push: '$name' },
+  salaries: { $push: '$salary' }
+} }
+
+// Push objects
+{ $group: {
+  _id: '$category',
+  products: { $push: { name: '$name', price: '$price' } }
+} }
+```
+
+---
+
+### $addToSet
+
+Collects unique values into an array (no duplicates).
+
+**Syntax:**
+```typescript
+{ $addToSet: <expression> }
+```
+
+**SQL Translation:** `json_group_array(DISTINCT expression)`
+
+**Examples:**
+```typescript
+// Unique values only
+{ $group: {
+  _id: '$department',
+  uniqueRoles: { $addToSet: '$role' },
+  uniqueLocations: { $addToSet: '$location' }
+} }
+```
+
+---
+
+### $count
+
+Counts the number of documents in the group.
+
+**Syntax:**
+```typescript
+{ $count: {} }
+```
+
+**SQL Translation:** `COUNT(*)`
+
+**Examples:**
+```typescript
+{ $group: {
+  _id: '$status',
+  documentCount: { $count: {} }
+} }
+```
+
+---
+
+## $function Operator
+
+Executes custom JavaScript functions for complex transformations not expressible with built-in operators.
+
+**Syntax:**
+```typescript
+{
+  $function: {
+    body: <string or function>,
+    args: [<expression>, ...],
+    lang: 'js'
+  }
+}
+```
+
+**Requirements:**
+- Requires the `LOADER` binding for secure sandboxed execution
+- Only `lang: 'js'` is supported
+- Functions execute in isolated Workers for security
+
+**Examples:**
+```typescript
+// Custom calculation
+{ customScore: {
+  $function: {
+    body: function(price, quantity) {
+      return price * quantity * 1.1;
+    },
+    args: ['$price', '$quantity'],
+    lang: 'js'
+  }
+} }
+
+// String manipulation
+{ formattedName: {
+  $function: {
+    body: `function(first, last) {
+      return last.toUpperCase() + ', ' + first;
+    }`,
+    args: ['$firstName', '$lastName'],
+    lang: 'js'
+  }
+} }
+
+// Complex logic
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    priceCategory: {
+      $function: {
+        body: function(price, category) {
+          const multiplier = category === 'luxury' ? 2 : 1;
+          const adjusted = price * multiplier;
+          if (adjusted >= 1000) return 'premium';
+          if (adjusted >= 100) return 'standard';
+          return 'budget';
+        },
+        args: ['$price', '$category'],
+        lang: 'js'
+      }
+    }
+  } }
+]).toArray();
+```
+
+**Security Note:** The `$function` operator requires the Cloudflare `worker_loaders` binding for secure sandboxed execution. Without this binding, `$function` will throw an error. This prevents arbitrary code execution in untrusted environments.
+
+---
+
+## Field References
+
+Access document fields using the `$` prefix.
+
+### Simple Field Reference
+
+```typescript
+{ $fieldName: 1 }           // Include field
+{ newName: '$oldName' }     // Rename/copy field
+{ calc: { $add: ['$a', '$b'] } }  // Use in expressions
+```
+
+### Nested Field Reference
+
+```typescript
+{ city: '$address.city' }
+{ zip: '$address.postal.code' }
+```
+
+### Array Index Reference
+
+```typescript
+{ firstTag: '$tags.0' }
+{ secondItem: '$items.1.name' }
+```
+
+---
+
+## Literal Values
+
+Use literal values directly in expressions:
+
+```typescript
+// String literals
+{ status: 'active' }
+
+// Number literals
+{ taxRate: 0.08 }
+{ discount: { $multiply: ['$price', 0.1] } }
+
+// Boolean literals
+{ isActive: true }
+
+// Null
+{ deletedAt: null }
+```
+
+---
+
+## Expression Contexts
+
+### In $project
+
+```typescript
+await collection.aggregate([
+  { $project: {
+    // Include existing field
+    name: 1,
+    // Exclude field
+    password: 0,
+    // Rename
+    username: '$name',
+    // Compute
+    total: { $multiply: ['$price', '$qty'] },
+    // Conditional
+    status: { $cond: [{ $gt: ['$qty', 0] }, 'in-stock', 'sold-out'] }
+  } }
+]).toArray();
+```
+
+### In $addFields
+
+```typescript
+await collection.aggregate([
+  { $addFields: {
+    fullName: { $concat: ['$first', ' ', '$last'] },
+    totalPrice: { $multiply: ['$price', '$quantity'] }
+  } }
+]).toArray();
+```
+
+### In $group
+
+```typescript
+await collection.aggregate([
+  { $group: {
+    _id: '$category',
+    total: { $sum: '$amount' },
+    avg: { $avg: '$amount' },
+    items: { $push: '$name' }
+  } }
+]).toArray();
+```
+
+### In $bucket
+
+```typescript
+await collection.aggregate([
+  { $bucket: {
+    groupBy: '$price',
+    boundaries: [0, 50, 100, 500],
+    output: {
+      count: { $sum: 1 },
+      avgPrice: { $avg: '$price' },
+      products: { $push: '$name' }
+    }
+  } }
+]).toArray();
+```
+
+---
+
+## SQL Translation Reference
+
+Quick reference for how operators translate to SQL:
+
+| MongoDB Operator | SQL Translation |
+|------------------|-----------------|
+| `$add` | `+` |
+| `$subtract` | `-` |
+| `$multiply` | `*` |
+| `$divide` | `/` |
+| `$mod` | `%` |
+| `$concat` | `\|\|` |
+| `$substr` | `SUBSTR()` |
+| `$toLower` | `LOWER()` |
+| `$toUpper` | `UPPER()` |
+| `$cond` | `CASE WHEN ... THEN ... ELSE ... END` |
+| `$ifNull` | `COALESCE()` |
+| `$switch` | `CASE WHEN ... END` |
+| `$eq` | `=` |
+| `$ne` | `!=` |
+| `$gt` | `>` |
+| `$gte` | `>=` |
+| `$lt` | `<` |
+| `$lte` | `<=` |
+| `$and` | `AND` |
+| `$or` | `OR` |
+| `$not` | `NOT` |
+| `$sum` | `SUM()` |
+| `$avg` | `AVG()` |
+| `$min` | `MIN()` |
+| `$max` | `MAX()` |
+| `$push` | `json_group_array()` |
+| `$addToSet` | `json_group_array(DISTINCT ...)` |
+| `$count` | `COUNT(*)` |
+| Field reference `$field` | `json_extract(data, '$.field')` |
+
+---
+
+## Next Steps
+
+- [Aggregation Pipeline Guide](/docs/guides/aggregation) - Pipeline stages and patterns
+- [Custom Functions](/docs/guides/functions) - Deep dive into $function
+- [Query Operators](/docs/guides/queries) - Operators for find() and $match
