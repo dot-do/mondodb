@@ -29,10 +29,32 @@ export interface ExecutionContext {
 }
 
 /**
+ * Worker Loader interface for dynamic worker creation
+ * (Closed beta feature for $function operator support)
+ */
+export interface WorkerLoader {
+  get(id: string, getCode: () => Promise<WorkerCode>): WorkerStub;
+}
+
+export interface WorkerCode {
+  compatibilityDate: string;
+  mainModule: string;
+  modules: Record<string, string | { js: string } | { text: string }>;
+  globalOutbound?: null;
+  env?: Record<string, unknown>;
+}
+
+export interface WorkerStub {
+  fetch(request: Request): Promise<Response>;
+}
+
+/**
  * Mondo environment bindings interface
  */
 export interface MondoEnv {
   MONDO_DATABASE: DurableObjectNamespace;
+  /** Optional Worker Loader for $function support (closed beta) */
+  LOADER?: WorkerLoader;
 }
 
 /**
@@ -176,6 +198,19 @@ export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
     // Health check endpoint
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({ status: 'healthy' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Bindings check endpoint (for diagnostics)
+    if (url.pathname === '/bindings') {
+      const bindings = {
+        MONDO_DATABASE: !!this.env.MONDO_DATABASE,
+        LOADER: !!this.env.LOADER,
+        LOADER_type: this.env.LOADER ? typeof this.env.LOADER : 'undefined',
+        LOADER_keys: this.env.LOADER ? Object.keys(this.env.LOADER as object) : [],
+      };
+      return new Response(JSON.stringify(bindings, null, 2), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
