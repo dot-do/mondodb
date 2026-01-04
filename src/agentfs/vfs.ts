@@ -3,30 +3,60 @@
  *
  * Virtual filesystem stored in MondoDB collections.
  * Provides a file-system-like interface backed by MongoDB/MondoDB.
+ *
+ * @module agentfs/vfs
+ *
+ * @example
+ * ```typescript
+ * import { AgentFilesystem } from './vfs'
+ *
+ * const fs = new AgentFilesystem(database)
+ *
+ * // Write and read files
+ * await fs.writeFile('/config.json', '{"key": "value"}')
+ * const content = await fs.readFile('/config.json')
+ *
+ * // Directory operations
+ * await fs.mkdir('/src')
+ * const files = await fs.readdir('/src')
+ *
+ * // Glob pattern matching
+ * const tsFiles = await fs.glob('**\/*.ts')
+ * ```
  */
 
 import type { FileSystem, FileStat, FileType } from './types'
 
 /**
- * Database interface for AgentFilesystem
- * Methods take collection name as first parameter
+ * Database interface for AgentFilesystem operations.
+ *
+ * This interface abstracts the underlying MongoDB-compatible database,
+ * allowing the filesystem to work with any compatible backend.
+ * Methods take the collection name as the first parameter.
  */
 export interface AgentFSDatabase {
+  /** Find a single document matching the query */
   findOne(collection: string, query: Record<string, unknown>): Promise<Record<string, unknown> | null>
+  /** Find all documents matching the query */
   find(collection: string, query: Record<string, unknown>): Promise<Record<string, unknown>[]>
+  /** Insert a new document */
   insertOne(collection: string, document: Record<string, unknown>): Promise<{ insertedId: string }>
+  /** Update a single document matching the filter */
   updateOne(
     collection: string,
     filter: Record<string, unknown>,
     update: { $set?: Record<string, unknown>; $setOnInsert?: Record<string, unknown> },
     options?: { upsert?: boolean }
   ): Promise<{ matchedCount: number; modifiedCount: number; upsertedId?: string }>
+  /** Delete a single document matching the filter */
   deleteOne(collection: string, filter: Record<string, unknown>): Promise<{ deletedCount: number }>
+  /** Delete all documents matching the filter */
   deleteMany(collection: string, filter: Record<string, unknown>): Promise<{ deletedCount: number }>
 }
 
 /**
- * Internal file document structure
+ * Internal file document structure stored in the database.
+ * @internal
  */
 interface FileDocument {
   _id: string
@@ -40,23 +70,62 @@ interface FileDocument {
 /**
  * AgentFilesystem - Virtual filesystem backed by MondoDB
  *
- * Uses MongoDB collection with path as key for O(1) lookups.
- * Supports files and directories with proper upsert semantics.
+ * Implements the FileSystem interface using a MongoDB-compatible database.
+ * Uses the file path as the document _id for O(1) lookups.
+ *
+ * Features:
+ * - Files and directories with proper POSIX-like semantics
+ * - Implicit parent directory creation
+ * - Path normalization (removes duplicate slashes, resolves . and ..)
+ * - Glob pattern matching for file discovery
+ *
+ * Error codes follow POSIX conventions:
+ * - ENOENT: File or directory does not exist
+ * - EISDIR: Illegal operation on a directory
+ * - ENOTDIR: Not a directory
+ * - EEXIST: File already exists
+ * - ENOTEMPTY: Directory not empty
+ * - EPERM: Operation not permitted
+ *
+ * @example
+ * ```typescript
+ * const fs = new AgentFilesystem(database)
+ *
+ * // Create and read files
+ * await fs.writeFile('/data/config.json', '{}')
+ * const content = await fs.readFile('/data/config.json')
+ *
+ * // Directories are created implicitly
+ * const stat = await fs.stat('/data')
+ * // stat.type === 'directory'
+ * ```
  */
 export class AgentFilesystem implements FileSystem {
   private db: AgentFSDatabase
   private collection = '__agentfs.files'
 
+  /**
+   * Create a new AgentFilesystem instance.
+   *
+   * @param db - Database backend implementing AgentFSDatabase interface
+   */
   constructor(db: AgentFSDatabase) {
     this.db = db
   }
 
   /**
-   * Normalize a path to ensure consistency
+   * Normalize a path to ensure consistency.
+   *
+   * Normalization rules:
    * - Always starts with /
-   * - No duplicate slashes
+   * - No duplicate slashes (// becomes /)
    * - No trailing slash (except for root)
-   * - Resolves . and .. components
+   * - Resolves . (current directory) components
+   * - Resolves .. (parent directory) components
+   *
+   * @param path - Path to normalize
+   * @returns Normalized absolute path
+   * @internal
    */
   private normalizePath(path: string): string {
     // Handle empty path
@@ -97,7 +166,11 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Get the basename (file/directory name) from a path
+   * Get the basename (final component) from a path.
+   *
+   * @param path - Path to extract basename from
+   * @returns The basename, or empty string for root
+   * @internal
    */
   private getBasename(path: string): string {
     const normalized = this.normalizePath(path)
@@ -107,15 +180,23 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Escape special regex characters in a string
+   * Escape special regex characters in a string.
+   *
+   * @param str - String to escape
+   * @returns String with regex special characters escaped
+   * @internal
    */
   private escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   }
 
   /**
-   * Read file content at path
-   * @throws Error if file does not exist or is a directory
+   * Read file content at the specified path.
+   *
+   * @param path - Absolute path to the file
+   * @returns Promise resolving to the file content as a string
+   * @throws {Error} ENOENT if file does not exist
+   * @throws {Error} EISDIR if path is a directory
    */
   async readFile(path: string): Promise<string> {
     const normalizedPath = this.normalizePath(path)
@@ -134,9 +215,15 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Write content to file at path
-   * Creates parent directories implicitly
-   * Uses upsert - creates new file or updates existing
+   * Write content to a file at the specified path.
+   *
+   * Creates parent directories implicitly if they don't exist.
+   * If the file exists, it updates the content and updatedAt timestamp.
+   * If the file doesn't exist, it creates a new file with createdAt set.
+   *
+   * @param path - Absolute path to the file
+   * @param content - Content to write to the file
+   * @throws {Error} EISDIR if path is a directory
    */
   async writeFile(path: string, content: string): Promise<void> {
     const normalizedPath = this.normalizePath(path)
@@ -177,7 +264,12 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Create implicit parent directories for a file path
+   * Create implicit parent directories for a file path.
+   *
+   * Traverses up the path and creates any missing directory entries.
+   *
+   * @param filePath - Absolute path to the file (not the directory)
+   * @internal
    */
   private async createImplicitDirs(filePath: string): Promise<void> {
     const parts = filePath.split('/').filter(Boolean)
@@ -203,8 +295,11 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Delete file at path
-   * @throws Error if file does not exist or is a directory
+   * Delete a file at the specified path.
+   *
+   * @param path - Absolute path to the file to delete
+   * @throws {Error} ENOENT if file does not exist
+   * @throws {Error} EISDIR if path is a directory (use rmdir instead)
    */
   async deleteFile(path: string): Promise<void> {
     const normalizedPath = this.normalizePath(path)
@@ -223,9 +318,15 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * List entries in directory
-   * Returns only direct children (not nested)
-   * @throws Error if path does not exist or is not a directory
+   * List entries in a directory.
+   *
+   * Returns only direct children (not recursively nested).
+   * Results are sorted alphabetically.
+   *
+   * @param path - Absolute path to the directory
+   * @returns Promise resolving to array of entry names (not full paths)
+   * @throws {Error} ENOENT if directory does not exist
+   * @throws {Error} ENOTDIR if path is a file, not a directory
    */
   async readdir(path: string): Promise<string[]> {
     const normalizedPath = this.normalizePath(path)
@@ -269,9 +370,13 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Create directory at path
-   * Creates parent directories implicitly (recursive by default)
-   * Idempotent - does not throw if directory already exists
+   * Create a directory at the specified path.
+   *
+   * Creates parent directories implicitly (behaves like mkdir -p).
+   * Idempotent - does not throw if directory already exists.
+   *
+   * @param path - Absolute path to the directory to create
+   * @throws {Error} EEXIST if a file (not directory) already exists at path
    */
   async mkdir(path: string): Promise<void> {
     const normalizedPath = this.normalizePath(path)
@@ -312,8 +417,16 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Remove directory at path
-   * @throws Error if directory does not exist, is not empty, or is a file
+   * Remove an empty directory at the specified path.
+   *
+   * The directory must be empty (no files or subdirectories).
+   * Cannot remove the root directory.
+   *
+   * @param path - Absolute path to the directory to remove
+   * @throws {Error} ENOENT if directory does not exist
+   * @throws {Error} ENOTDIR if path is a file, not a directory
+   * @throws {Error} ENOTEMPTY if directory contains entries
+   * @throws {Error} EPERM if attempting to remove root directory
    */
   async rmdir(path: string): Promise<void> {
     const normalizedPath = this.normalizePath(path)
@@ -348,8 +461,15 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Get file/directory statistics
-   * @throws Error if path does not exist
+   * Get file or directory statistics.
+   *
+   * Returns type, size, and timestamps for the entry.
+   * For directories, size is always 0.
+   * Supports implicit directories (directories inferred from file paths).
+   *
+   * @param path - Absolute path to the file or directory
+   * @returns Promise resolving to FileStat with type, size, createdAt, updatedAt
+   * @throws {Error} ENOENT if path does not exist
    */
   async stat(path: string): Promise<FileStat> {
     const normalizedPath = this.normalizePath(path)
@@ -386,7 +506,12 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Check if path exists
+   * Check if a file or directory exists at the specified path.
+   *
+   * Does not throw errors for non-existent paths.
+   *
+   * @param path - Absolute path to check
+   * @returns Promise resolving to true if path exists, false otherwise
    */
   async exists(path: string): Promise<boolean> {
     try {
@@ -398,8 +523,24 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Find files matching glob pattern
-   * Supports basic glob patterns: *, **, ?
+   * Find files matching a glob pattern.
+   *
+   * Supports basic glob patterns:
+   * - `*` matches any characters except /
+   * - `**` matches any characters including /
+   * - `?` matches any single character except /
+   *
+   * Returns only files, not directories.
+   * Results are sorted alphabetically.
+   *
+   * @param pattern - Glob pattern to match against file paths
+   * @returns Promise resolving to array of matching file paths
+   *
+   * @example
+   * ```typescript
+   * const tsFiles = await fs.glob('**\/*.ts')
+   * const srcFiles = await fs.glob('/src/*.js')
+   * ```
    */
   async glob(pattern: string): Promise<string[]> {
     // Convert glob pattern to regex
