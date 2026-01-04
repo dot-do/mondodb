@@ -1,11 +1,11 @@
 ---
 title: Aggregation Pipeline
-description: Learn how to use MongoDB-style aggregation pipelines in MondoDB
+description: Comprehensive guide to MongoDB-style aggregation pipelines in MondoDB
 ---
 
 # Aggregation Pipeline
 
-MondoDB supports MongoDB's aggregation pipeline framework, allowing you to process and transform documents through a series of stages. Aggregation pipelines are powerful tools for data analysis, reporting, and complex transformations.
+MondoDB supports MongoDB's aggregation pipeline framework, allowing you to process and transform documents through a series of stages. The aggregation framework translates MongoDB pipeline syntax to optimized SQL queries executed against SQLite, providing familiar MongoDB semantics with the reliability of SQL.
 
 ## Basic Usage
 
@@ -50,7 +50,7 @@ MondoDB supports the following aggregation pipeline stages:
 
 ## $match
 
-Filters documents to pass only those that match the specified condition(s).
+Filters documents to pass only those that match the specified condition(s). This stage translates to a SQL `WHERE` clause.
 
 ```typescript
 // Simple match
@@ -79,59 +79,140 @@ await collection.aggregate([
 ### Supported Query Operators in $match
 
 **Comparison Operators:**
-- `$eq`, `$ne` - Equal, not equal
-- `$gt`, `$gte`, `$lt`, `$lte` - Greater/less than comparisons
-- `$in`, `$nin` - Match any value in/not in array
-- `$regex` - Regular expression matching
-- `$mod` - Modulo operation
+| Operator | Description | SQL Translation |
+|----------|-------------|-----------------|
+| `$eq` | Equal | `=` |
+| `$ne` | Not equal | `!=` |
+| `$gt` | Greater than | `>` |
+| `$gte` | Greater than or equal | `>=` |
+| `$lt` | Less than | `<` |
+| `$lte` | Less than or equal | `<=` |
+| `$in` | Match any value in array | `IN (...)` |
+| `$nin` | Match none in array | `NOT IN (...)` |
+| `$regex` | Regular expression matching | `LIKE` pattern |
+| `$mod` | Modulo operation | `% operator` |
 
 **Logical Operators:**
-- `$and`, `$or`, `$nor`, `$not`
+| Operator | Description | SQL Translation |
+|----------|-------------|-----------------|
+| `$and` | Logical AND | `AND` |
+| `$or` | Logical OR | `OR` |
+| `$nor` | Logical NOR | `NOT (... OR ...)` |
+| `$not` | Logical NOT | `NOT (...)` |
 
 **Element Operators:**
-- `$exists` - Check if field exists
-- `$type` - Check field type
+| Operator | Description | SQL Translation |
+|----------|-------------|-----------------|
+| `$exists` | Check if field exists | `json_type(...) IS [NOT] NULL` |
+| `$type` | Check field type | `json_type(...) = 'type'` |
 
 **Array Operators:**
-- `$all` - Match arrays containing all specified elements
-- `$elemMatch` - Match arrays where at least one element matches conditions
-- `$size` - Match arrays of a specific size
+| Operator | Description | SQL Translation |
+|----------|-------------|-----------------|
+| `$all` | Match arrays containing all elements | `EXISTS` with `json_each` |
+| `$elemMatch` | Match arrays with element conditions | `EXISTS` subquery |
+| `$size` | Match arrays of specific size | `json_array_length(...)` |
+
+### $match Examples
+
+```typescript
+// Complex query with multiple conditions
+await collection.aggregate([
+  {
+    $match: {
+      $and: [
+        { category: { $in: ['electronics', 'books'] } },
+        { price: { $gte: 10, $lte: 100 } },
+        { inStock: { $exists: true } },
+        { tags: { $all: ['sale', 'featured'] } }
+      ]
+    }
+  }
+]).toArray();
+
+// Regex matching (case-insensitive)
+await collection.aggregate([
+  {
+    $match: {
+      name: { $regex: '^john', $options: 'i' }
+    }
+  }
+]).toArray();
+
+// Array element matching
+await collection.aggregate([
+  {
+    $match: {
+      scores: {
+        $elemMatch: { $gte: 80, $lte: 100 }
+      }
+    }
+  }
+]).toArray();
+```
 
 ---
 
 ## $project
 
-Reshapes documents by including, excluding, or computing new fields.
+Reshapes documents by including, excluding, or computing new fields. Translates to SQL `SELECT` with `json_object()` or `json_remove()`.
+
+### Inclusion Projection
+
+Include specific fields (value of `1`):
 
 ```typescript
-// Include specific fields
 await collection.aggregate([
   { $project: { name: 1, email: 1, _id: 0 } }
 ]).toArray();
+```
 
-// Exclude specific fields
+### Exclusion Projection
+
+Exclude specific fields (value of `0`):
+
+```typescript
 await collection.aggregate([
   { $project: { password: 0, sensitiveData: 0 } }
 ]).toArray();
+```
 
-// Rename fields
+Note: You cannot mix inclusion and exclusion in the same projection (except for `_id`).
+
+### Field Renaming
+
+Use field references (starting with `$`) to rename fields:
+
+```typescript
 await collection.aggregate([
   { $project: {
     username: '$name',
-    userEmail: '$email'
+    userEmail: '$email',
+    address: '$contact.address'  // Nested field reference
   } }
 ]).toArray();
+```
 
-// Computed fields
+### Computed Fields
+
+Use expression operators to compute new field values:
+
+```typescript
 await collection.aggregate([
   { $project: {
     name: 1,
     totalPrice: { $multiply: ['$price', '$quantity'] },
-    discountedPrice: { $subtract: ['$price', '$discount'] }
+    discountedPrice: { $subtract: ['$price', '$discount'] },
+    fullName: { $concat: ['$firstName', ' ', '$lastName'] }
   } }
 ]).toArray();
+```
 
-// Conditional fields
+### Conditional Fields
+
+Use `$cond` for if/then/else logic:
+
+```typescript
 await collection.aggregate([
   { $project: {
     name: 1,
@@ -141,7 +222,9 @@ await collection.aggregate([
         then: 'pass',
         else: 'fail'
       }
-    }
+    },
+    // Array shorthand: [condition, trueValue, falseValue]
+    grade: { $cond: [{ $gte: ['$score', 90] }, 'A', 'B'] }
   } }
 ]).toArray();
 ```
@@ -150,10 +233,11 @@ await collection.aggregate([
 
 ## $group
 
-Groups documents by a specified expression and applies accumulator expressions.
+Groups documents by a specified expression and applies accumulator expressions. Translates to SQL `GROUP BY` with aggregate functions.
+
+### Group by Single Field
 
 ```typescript
-// Group by a single field
 await collection.aggregate([
   { $group: {
     _id: '$category',
@@ -161,44 +245,57 @@ await collection.aggregate([
     totalRevenue: { $sum: '$price' }
   } }
 ]).toArray();
+```
 
-// Group by multiple fields (compound _id)
+### Group by Multiple Fields (Compound _id)
+
+```typescript
 await collection.aggregate([
   { $group: {
     _id: {
       year: '$year',
-      month: '$month'
+      month: '$month',
+      region: '$region'
     },
-    totalSales: { $sum: '$amount' }
+    totalSales: { $sum: '$amount' },
+    averageOrder: { $avg: '$amount' }
   } }
 ]).toArray();
+```
 
-// Total aggregation (null _id)
+### Total Aggregation (null _id)
+
+Use `null` as `_id` to aggregate across all documents:
+
+```typescript
 await collection.aggregate([
   { $group: {
     _id: null,
     totalDocuments: { $sum: 1 },
-    averagePrice: { $avg: '$price' }
+    averagePrice: { $avg: '$price' },
+    minPrice: { $min: '$price' },
+    maxPrice: { $max: '$price' }
   } }
 ]).toArray();
 ```
 
 ### Supported Accumulator Operators
 
-| Operator | Description |
-|----------|-------------|
-| `$sum` | Sums numeric values or counts documents with `$sum: 1` |
-| `$avg` | Calculates the average of numeric values |
-| `$min` | Returns the minimum value |
-| `$max` | Returns the maximum value |
-| `$first` | Returns the first value in the group |
-| `$last` | Returns the last value in the group |
-| `$push` | Returns an array of all values |
-| `$addToSet` | Returns an array of unique values |
-| `$count` | Counts the number of documents |
+| Operator | Description | SQL Translation |
+|----------|-------------|-----------------|
+| `$sum` | Sum values or count with `$sum: 1` | `SUM()` |
+| `$avg` | Calculate average | `AVG()` |
+| `$min` | Find minimum value | `MIN()` |
+| `$max` | Find maximum value | `MAX()` |
+| `$first` | First value in group | Subquery with `LIMIT 1` |
+| `$last` | Last value in group | Subquery with `ORDER BY ... DESC LIMIT 1` |
+| `$push` | Collect all values into array | `json_group_array()` |
+| `$addToSet` | Collect unique values into array | `json_group_array(DISTINCT ...)` |
+| `$count` | Count documents | `COUNT(*)` |
+
+### Using Multiple Accumulators
 
 ```typescript
-// Using various accumulators
 await collection.aggregate([
   { $group: {
     _id: '$department',
@@ -206,8 +303,11 @@ await collection.aggregate([
     avgSalary: { $avg: '$salary' },
     minSalary: { $min: '$salary' },
     maxSalary: { $max: '$salary' },
+    totalPayroll: { $sum: '$salary' },
     employees: { $push: '$name' },
-    uniqueRoles: { $addToSet: '$role' }
+    uniqueRoles: { $addToSet: '$role' },
+    firstHired: { $first: '$hireDate' },
+    lastHired: { $last: '$hireDate' }
   } }
 ]).toArray();
 ```
@@ -216,22 +316,30 @@ await collection.aggregate([
 
 ## $sort
 
-Sorts documents by the specified field(s).
+Sorts documents by the specified field(s). Translates to SQL `ORDER BY`.
 
 ```typescript
-// Ascending sort
+// Ascending sort (1)
 await collection.aggregate([
   { $sort: { name: 1 } }
 ]).toArray();
 
-// Descending sort
+// Descending sort (-1)
 await collection.aggregate([
   { $sort: { createdAt: -1 } }
 ]).toArray();
 
-// Multiple sort fields
+// Multiple sort fields (applied in order)
 await collection.aggregate([
-  { $sort: { category: 1, price: -1 } }
+  { $sort: { category: 1, price: -1, name: 1 } }
+]).toArray();
+```
+
+### Sort with Nested Fields
+
+```typescript
+await collection.aggregate([
+  { $sort: { 'address.city': 1, 'address.street': 1 } }
 ]).toArray();
 ```
 
@@ -239,7 +347,7 @@ await collection.aggregate([
 
 ## $limit
 
-Limits the number of documents passed to the next stage.
+Limits the number of documents passed to the next stage. Translates to SQL `LIMIT`.
 
 ```typescript
 // Get top 10 documents
@@ -253,14 +361,23 @@ await collection.aggregate([
 
 ## $skip
 
-Skips the specified number of documents.
+Skips the specified number of documents. Translates to SQL `OFFSET`.
 
 ```typescript
-// Pagination example
+// Skip first 20 documents
+await collection.aggregate([
+  { $skip: 20 }
+]).toArray();
+```
+
+### Pagination Pattern
+
+```typescript
 const page = 2;
 const pageSize = 10;
 
 await collection.aggregate([
+  { $match: { status: 'published' } },
   { $sort: { createdAt: -1 } },
   { $skip: (page - 1) * pageSize },
   { $limit: pageSize }
@@ -285,22 +402,51 @@ const result = await collection.aggregate([
 
 ## $addFields
 
-Adds new fields to documents. The `$set` stage is an alias for `$addFields`.
+Adds new fields to documents without removing existing fields. The `$set` stage is an alias for `$addFields`. Uses SQL `json_set()` for the transformation.
 
 ```typescript
 // Add computed fields
 await collection.aggregate([
   { $addFields: {
     fullName: { $concat: ['$firstName', ' ', '$lastName'] },
-    totalValue: { $multiply: ['$price', '$quantity'] }
+    totalValue: { $multiply: ['$price', '$quantity'] },
+    isExpensive: { $gte: ['$price', 100] }
   } }
 ]).toArray();
 
-// Using $set (alias)
+// Using $set (alias for $addFields)
 await collection.aggregate([
   { $set: {
-    lastModified: new Date(),
-    isActive: true
+    lastModified: new Date().toISOString(),
+    isActive: true,
+    score: { $add: ['$baseScore', '$bonusPoints'] }
+  } }
+]).toArray();
+```
+
+### Overwrite Existing Fields
+
+```typescript
+await collection.aggregate([
+  { $addFields: {
+    // Overwrite price with discounted price
+    price: { $multiply: ['$price', 0.9] },
+    // Add new field
+    hasDiscount: true
+  } }
+]).toArray();
+```
+
+### Add Literal Values
+
+```typescript
+await collection.aggregate([
+  { $addFields: {
+    stringField: 'literal string',
+    numberField: 42,
+    booleanField: true,
+    arrayField: [1, 2, 3],
+    nullField: null
   } }
 ]).toArray();
 ```
@@ -309,20 +455,43 @@ await collection.aggregate([
 
 ## $lookup
 
-Performs a left outer join with another collection.
+Performs a left outer join with another collection. Supports both simple and pipeline-based lookups.
+
+### Simple Lookup
+
+Join collections using matching field values:
 
 ```typescript
-// Simple lookup
 await collection.aggregate([
   { $lookup: {
-    from: 'orders',
-    localField: 'customerId',
-    foreignField: 'customerId',
-    as: 'customerOrders'
+    from: 'orders',           // Foreign collection
+    localField: 'customerId', // Field in current collection
+    foreignField: 'customerId', // Field in foreign collection
+    as: 'customerOrders'      // Output array field name
   } }
 ]).toArray();
+```
 
-// Pipeline lookup (advanced)
+This translates to a SQL subquery using `json_group_array()`:
+
+```sql
+SELECT
+  documents.data,
+  COALESCE(
+    (SELECT json_group_array(orders.data)
+     FROM orders
+     WHERE json_extract(orders.data, '$.customerId') =
+           json_extract(documents.data, '$.customerId')),
+    '[]'
+  ) AS lookup_result
+FROM documents
+```
+
+### Pipeline Lookup (Advanced)
+
+Use a sub-pipeline for more complex joins with variable binding:
+
+```typescript
 await collection.aggregate([
   { $lookup: {
     from: 'orders',
@@ -335,44 +504,84 @@ await collection.aggregate([
 ]).toArray();
 ```
 
+### Lookup with Unwind
+
+Common pattern to flatten lookup results:
+
+```typescript
+await collection.aggregate([
+  { $lookup: {
+    from: 'authors',
+    localField: 'authorId',
+    foreignField: '_id',
+    as: 'author'
+  } },
+  { $unwind: '$author' },
+  { $project: {
+    title: 1,
+    authorName: '$author.name'
+  } }
+]).toArray();
+```
+
 ---
 
 ## $unwind
 
-Deconstructs an array field, outputting one document for each element.
+Deconstructs an array field, outputting one document for each element. Uses SQL `json_each()` for array expansion.
+
+### Basic Unwind
 
 ```typescript
-// Basic unwind
+// Input: { name: 'Product', tags: ['sale', 'new', 'featured'] }
 await collection.aggregate([
   { $unwind: '$tags' }
 ]).toArray();
+// Output: 3 documents, each with a single tag value
+```
 
-// With options
+### Unwind with Options
+
+```typescript
 await collection.aggregate([
   { $unwind: {
     path: '$items',
-    includeArrayIndex: 'itemIndex',
-    preserveNullAndEmptyArrays: true
+    includeArrayIndex: 'itemIndex',      // Add index as field
+    preserveNullAndEmptyArrays: true     // Keep docs with null/empty arrays
   } }
 ]).toArray();
 ```
 
 ### Unwind Options
 
-| Option | Description |
-|--------|-------------|
-| `path` | The array field path to unwind (required) |
-| `includeArrayIndex` | Name of a field to store the array index |
-| `preserveNullAndEmptyArrays` | If true, output document even if array is null/empty |
+| Option | Type | Description |
+|--------|------|-------------|
+| `path` | string | The array field path to unwind (required, starts with `$`) |
+| `includeArrayIndex` | string | Field name to store the array element index |
+| `preserveNullAndEmptyArrays` | boolean | If `true`, output document even if array is null/empty/missing |
+
+### Unwind for Aggregation
+
+```typescript
+// Count occurrences of each tag
+await collection.aggregate([
+  { $unwind: '$tags' },
+  { $group: {
+    _id: '$tags',
+    count: { $sum: 1 }
+  } },
+  { $sort: { count: -1 } }
+]).toArray();
+```
 
 ---
 
 ## $bucket
 
-Categorizes documents into groups (buckets) based on a specified expression and boundaries.
+Categorizes documents into groups (buckets) based on a specified expression and boundaries. Uses SQL `CASE WHEN` for bucket assignment.
 
 ```typescript
-// Bucket by price ranges
+// Bucket products by price ranges
 await collection.aggregate([
   { $bucket: {
     groupBy: '$price',
@@ -380,26 +589,51 @@ await collection.aggregate([
     default: 'Other',
     output: {
       count: { $sum: 1 },
-      products: { $push: '$name' }
+      products: { $push: '$name' },
+      avgPrice: { $avg: '$price' }
     }
   } }
 ]).toArray();
 // Returns buckets: 0-50, 50-100, 100-200, 200-500, Other
 ```
 
+### Bucket Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `groupBy` | string | Field path or expression to group on |
+| `boundaries` | number[] | Array of boundary values (must be sorted) |
+| `default` | string | Bucket name for values outside boundaries |
+| `output` | object | Accumulator expressions for each bucket |
+
+### Bucket Output Accumulators
+
+The `output` option supports these accumulators:
+
+| Accumulator | Description |
+|-------------|-------------|
+| `$sum` | Sum values or count documents |
+| `$avg` | Calculate average |
+| `$min` | Find minimum |
+| `$max` | Find maximum |
+| `$push` | Collect values into array |
+| `$count` | Count documents |
+
 ---
 
 ## $facet
 
-Processes multiple aggregation pipelines within a single stage, returning a document where each field contains the results of a different pipeline.
+Processes multiple aggregation pipelines within a single stage. Each sub-pipeline operates independently on the same input documents.
 
 ```typescript
 await collection.aggregate([
   { $facet: {
+    // Count by category
     categoryCounts: [
       { $group: { _id: '$category', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ],
+    // Calculate price statistics
     priceStats: [
       { $group: {
         _id: null,
@@ -408,6 +642,7 @@ await collection.aggregate([
         maxPrice: { $max: '$price' }
       } }
     ],
+    // Get top 5 products
     topProducts: [
       { $sort: { sales: -1 } },
       { $limit: 5 },
@@ -415,16 +650,24 @@ await collection.aggregate([
     ]
   } }
 ]).toArray();
+// Returns: [{ categoryCounts: [...], priceStats: [...], topProducts: [...] }]
 ```
+
+### Facet Use Cases
+
+- **Dashboard data**: Fetch multiple metrics in one query
+- **Search with filters**: Return results and facet counts together
+- **Statistics**: Calculate different aggregations on the same data
 
 ---
 
 ## $search
 
-Performs full-text search using FTS5. Must be the first stage in a pipeline.
+Performs full-text search using SQLite FTS5. Must be the first stage in a pipeline.
+
+### Text Search
 
 ```typescript
-// Text search
 await collection.aggregate([
   { $search: {
     text: {
@@ -433,8 +676,11 @@ await collection.aggregate([
     }
   } }
 ]).toArray();
+```
 
-// Phrase search
+### Phrase Search
+
+```typescript
 await collection.aggregate([
   { $search: {
     phrase: {
@@ -443,8 +689,40 @@ await collection.aggregate([
     }
   } }
 ]).toArray();
+```
 
-// Compound search
+### Wildcard Search
+
+```typescript
+await collection.aggregate([
+  { $search: {
+    wildcard: {
+      query: 'data*',
+      path: 'content'
+    }
+  } }
+]).toArray();
+```
+
+### Autocomplete Search
+
+```typescript
+await collection.aggregate([
+  { $search: {
+    autocomplete: {
+      query: 'mach',
+      path: 'title',
+      tokenOrder: 'sequential'  // or 'any'
+    }
+  } }
+]).toArray();
+```
+
+### Compound Search
+
+Combine multiple search conditions:
+
+```typescript
 await collection.aggregate([
   { $search: {
     compound: {
@@ -456,17 +734,30 @@ await collection.aggregate([
       ],
       mustNot: [
         { text: { query: 'excluded', path: 'tags' } }
+      ],
+      filter: [
+        { text: { query: 'category filter', path: 'category' } }
       ]
     }
   } }
 ]).toArray();
 ```
 
+### Search Operators
+
+| Operator | Description |
+|----------|-------------|
+| `text` | Full-text search on specified fields |
+| `phrase` | Exact phrase matching |
+| `wildcard` | Wildcard pattern matching (suffix `*`) |
+| `autocomplete` | Prefix matching for autocomplete |
+| `compound` | Boolean combinations (must, should, mustNot, filter) |
+
 ---
 
 ## $vectorSearch
 
-Performs vector similarity search. Must be the first stage in a pipeline.
+Performs vector similarity search using Cloudflare Vectorize. Must be the first stage in a pipeline.
 
 ```typescript
 await collection.aggregate([
@@ -480,114 +771,93 @@ await collection.aggregate([
 ]).toArray();
 ```
 
+### Vector Search with Filter
+
+```typescript
+await collection.aggregate([
+  { $vectorSearch: {
+    index: 'vector_index',
+    path: 'embedding',
+    queryVector: queryEmbedding,
+    numCandidates: 200,
+    limit: 20,
+    filter: { category: 'technology' }
+  } },
+  { $project: {
+    title: 1,
+    score: { $meta: 'vectorSearchScore' }
+  } }
+]).toArray();
+```
+
 ### Vector Search Options
 
-| Option | Description |
-|--------|-------------|
-| `index` | Name of the vector search index |
-| `path` | Path to the vector field in documents |
-| `queryVector` | The query vector to search for |
-| `numCandidates` | Number of candidates to consider (default: limit * 10) |
-| `limit` | Maximum number of results to return |
-| `filter` | Optional pre-filter before vector search |
-| `exact` | If true, performs exact search (slower but more accurate) |
+| Option | Type | Description |
+|--------|------|-------------|
+| `index` | string | Name of the vector search index |
+| `path` | string | Path to the vector field in documents |
+| `queryVector` | number[] | The query vector for similarity search |
+| `numCandidates` | number | Number of candidates to consider (default: limit * 10) |
+| `limit` | number | Maximum number of results to return |
+| `filter` | object | Optional pre-filter before vector search |
+| `exact` | boolean | If true, performs exact search (slower but more accurate) |
+| `scoreField` | string | Field name to store similarity score (default: 'score') |
 
 ---
 
 ## Expression Operators
 
-Expression operators can be used within stages like `$project`, `$addFields`, and `$group`.
+Expression operators can be used within stages like `$project`, `$addFields`, `$group`, and `$bucket`. See the [Aggregation Operators Reference](/docs/reference/aggregation-operators) for complete documentation.
 
-### Arithmetic Operators
+### Quick Reference
 
+**Arithmetic:**
 ```typescript
-{
-  sum: { $add: ['$price', '$tax'] },
-  difference: { $subtract: ['$total', '$discount'] },
-  product: { $multiply: ['$quantity', '$unitPrice'] },
-  quotient: { $divide: ['$total', '$count'] },
-  remainder: { $mod: ['$value', 10] }
-}
+{ $add: ['$a', '$b'] }           // a + b
+{ $subtract: ['$a', '$b'] }      // a - b
+{ $multiply: ['$a', '$b'] }      // a * b
+{ $divide: ['$a', '$b'] }        // a / b
+{ $mod: ['$a', '$b'] }           // a % b
 ```
 
-### String Operators
-
+**String:**
 ```typescript
-{
-  fullName: { $concat: ['$firstName', ' ', '$lastName'] },
-  excerpt: { $substr: ['$content', 0, 100] },
-  lowercase: { $toLower: '$email' },
-  uppercase: { $toUpper: '$code' }
-}
+{ $concat: ['$first', ' ', '$last'] }  // Concatenation
+{ $substr: ['$str', 0, 10] }           // Substring
+{ $toLower: '$email' }                  // Lowercase
+{ $toUpper: '$code' }                   // Uppercase
 ```
 
-### Conditional Operators
-
+**Conditional:**
 ```typescript
-// $cond - if/then/else
-{
-  status: {
-    $cond: {
-      if: { $gte: ['$score', 70] },
-      then: 'pass',
-      else: 'fail'
-    }
-  }
-}
-
-// $cond - array form [condition, trueValue, falseValue]
-{
-  status: { $cond: [{ $gte: ['$score', 70] }, 'pass', 'fail'] }
-}
-
-// $ifNull - default value for null
-{
-  displayName: { $ifNull: ['$nickname', '$name'] }
-}
-
-// $switch - multiple conditions
-{
-  grade: {
-    $switch: {
-      branches: [
-        { case: { $gte: ['$score', 90] }, then: 'A' },
-        { case: { $gte: ['$score', 80] }, then: 'B' },
-        { case: { $gte: ['$score', 70] }, then: 'C' }
-      ],
-      default: 'F'
-    }
-  }
-}
+{ $cond: { if: expr, then: val1, else: val2 } }
+{ $cond: [expr, val1, val2] }  // Array shorthand
+{ $ifNull: ['$field', 'default'] }
+{ $switch: { branches: [...], default: val } }
 ```
 
-### Comparison Operators (in expressions)
-
+**Comparison (in expressions):**
 ```typescript
-{
-  isEqual: { $eq: ['$field1', '$field2'] },
-  isNotEqual: { $ne: ['$status', 'inactive'] },
-  isGreater: { $gt: ['$score', 100] },
-  isGreaterOrEqual: { $gte: ['$age', 18] },
-  isLess: { $lt: ['$price', 50] },
-  isLessOrEqual: { $lte: ['$quantity', 0] }
-}
+{ $eq: ['$a', '$b'] }   // a == b
+{ $ne: ['$a', '$b'] }   // a != b
+{ $gt: ['$a', 10] }     // a > 10
+{ $gte: ['$a', 10] }    // a >= 10
+{ $lt: ['$a', 10] }     // a < 10
+{ $lte: ['$a', 10] }    // a <= 10
 ```
 
-### Logical Operators (in expressions)
-
+**Logical (in expressions):**
 ```typescript
-{
-  bothTrue: { $and: [{ $gte: ['$age', 18] }, { $eq: ['$status', 'active'] }] },
-  eitherTrue: { $or: [{ $eq: ['$role', 'admin'] }, { $eq: ['$role', 'manager'] }] },
-  isNotTrue: { $not: { $eq: ['$deleted', true] } }
-}
+{ $and: [expr1, expr2] }
+{ $or: [expr1, expr2] }
+{ $not: expr }
 ```
 
 ---
 
 ## Common Patterns
 
-### Pagination
+### Pagination with Total Count
 
 ```typescript
 const page = 1;
@@ -595,21 +865,34 @@ const pageSize = 20;
 
 const results = await collection.aggregate([
   { $match: { status: 'published' } },
-  { $sort: { createdAt: -1 } },
-  { $skip: (page - 1) * pageSize },
-  { $limit: pageSize }
+  { $facet: {
+    // Get paginated data
+    data: [
+      { $sort: { createdAt: -1 } },
+      { $skip: (page - 1) * pageSize },
+      { $limit: pageSize }
+    ],
+    // Get total count
+    totalCount: [
+      { $count: 'count' }
+    ]
+  } }
 ]).toArray();
+
+const { data, totalCount } = results[0];
+const total = totalCount[0]?.count || 0;
 ```
 
 ### Group by Date Parts
 
 ```typescript
 await collection.aggregate([
+  { $addFields: {
+    year: { $substr: ['$createdAt', 0, 4] },
+    month: { $substr: ['$createdAt', 5, 2] }
+  } },
   { $group: {
-    _id: {
-      year: '$year',
-      month: '$month'
-    },
+    _id: { year: '$year', month: '$month' },
     count: { $sum: 1 },
     totalRevenue: { $sum: '$amount' }
   } },
@@ -638,13 +921,24 @@ await collection.aggregate([
 
 ```typescript
 await collection.aggregate([
+  { $match: { orderDate: { $gte: startOfMonth } } },
   { $group: {
     _id: null,
     totalOrders: { $sum: 1 },
     totalRevenue: { $sum: '$amount' },
     averageOrderValue: { $avg: '$amount' },
     minOrder: { $min: '$amount' },
-    maxOrder: { $max: '$amount' }
+    maxOrder: { $max: '$amount' },
+    uniqueCustomers: { $addToSet: '$customerId' }
+  } },
+  { $project: {
+    _id: 0,
+    totalOrders: 1,
+    totalRevenue: 1,
+    averageOrderValue: 1,
+    minOrder: 1,
+    maxOrder: 1,
+    customerCount: { $size: '$uniqueCustomers' }
   } }
 ]).toArray();
 ```
@@ -664,14 +958,45 @@ await collection.aggregate([
     foreignField: '_id',
     as: 'customer'
   } },
-  // Unwind the customer array (lookup returns array)
+  // Unwind the customer array
   { $unwind: '$customer' },
-  // Project only needed fields
+  // Join with product details
+  { $lookup: {
+    from: 'products',
+    localField: 'productId',
+    foreignField: '_id',
+    as: 'product'
+  } },
+  { $unwind: '$product' },
+  // Project final shape
   { $project: {
-    orderId: 1,
+    orderId: '$_id',
     amount: 1,
+    orderDate: 1,
     customerName: '$customer.name',
-    customerEmail: '$customer.email'
+    customerEmail: '$customer.email',
+    productName: '$product.name',
+    productCategory: '$product.category'
+  } }
+]).toArray();
+```
+
+### Conditional Aggregation
+
+```typescript
+await collection.aggregate([
+  { $group: {
+    _id: '$category',
+    total: { $sum: 1 },
+    activeCount: {
+      $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] }
+    },
+    inactiveCount: {
+      $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] }
+    },
+    highValueSum: {
+      $sum: { $cond: [{ $gte: ['$value', 1000] }, '$value', 0] }
+    }
   } }
 ]).toArray();
 ```
@@ -680,37 +1005,61 @@ await collection.aggregate([
 
 ## Performance Tips
 
-1. **Place $match early**: Filter documents as early as possible to reduce the data processed by subsequent stages.
+1. **Place $match early**: Filter documents as early as possible to reduce data processed by subsequent stages.
 
-2. **Use indexes**: Ensure fields used in `$match` and `$sort` are indexed.
+2. **Use indexes**: Ensure fields used in `$match` and `$sort` are indexed for optimal performance.
 
-3. **Limit fields with $project**: Project only the fields you need to reduce memory usage.
+3. **Limit fields with $project**: Project only needed fields early to reduce memory usage.
 
 4. **Combine stages when possible**: Multiple `$match` stages can often be combined.
 
 5. **Use $limit for exploratory queries**: When testing, add `$limit` to avoid processing all documents.
 
+6. **Order stages optimally**: Generally: $match -> $project -> $group -> $sort -> $limit
+
 ```typescript
-// Good: $match early, only needed fields
+// Optimized: $match early, project before group
 await collection.aggregate([
-  { $match: { status: 'active' } },      // Filter first
-  { $project: { name: 1, email: 1 } },   // Only needed fields
-  { $sort: { name: 1 } },
-  { $limit: 100 }
+  { $match: { status: 'active', createdAt: { $gte: lastMonth } } },
+  { $project: { category: 1, amount: 1 } },
+  { $group: { _id: '$category', total: { $sum: '$amount' } } },
+  { $sort: { total: -1 } },
+  { $limit: 10 }
 ]).toArray();
 
-// Less efficient: processing all documents before filtering
+// Less efficient: filtering after processing
 await collection.aggregate([
-  { $project: { name: 1, email: 1, status: 1 } },
-  { $sort: { name: 1 } },
-  { $match: { status: 'active' } }  // Filter too late
+  { $group: { _id: '$category', total: { $sum: '$amount' } } },
+  { $match: { total: { $gte: 1000 } } },  // Filter too late
+  { $sort: { total: -1 } }
 ]).toArray();
 ```
 
 ---
 
+## Limitations vs MongoDB
+
+While MondoDB supports most common aggregation operations, there are some differences from MongoDB:
+
+| Feature | MondoDB Support | Notes |
+|---------|-----------------|-------|
+| Core stages ($match, $group, etc.) | Full | Translated to optimized SQL |
+| Accumulator operators | Most | $first/$last use subqueries |
+| Expression operators | Common ones | See operators reference |
+| $lookup pipeline | Basic | Variable binding limited |
+| $graphLookup | Not supported | Graph traversal not available |
+| $merge / $out | Not supported | Use separate write operations |
+| $geoNear | Not supported | Use separate geo queries |
+| $sample | Not supported | Use random sorting workaround |
+| Window functions ($setWindowFields) | Not supported | Coming in future version |
+| Array expressions ($map, $filter) | Limited | Some array ops in JS functions |
+
+---
+
 ## Next Steps
 
+- [Aggregation Operators Reference](/docs/reference/aggregation-operators) - Complete operator documentation
 - [CRUD Operations](/docs/guides/crud) - Basic document operations
 - [Indexing](/docs/guides/indexing) - Create indexes for better performance
+- [Full-Text Search](/docs/guides/full-text-search) - Deep dive into FTS5
 - [Vector Search](/docs/guides/vector-search) - Semantic similarity search

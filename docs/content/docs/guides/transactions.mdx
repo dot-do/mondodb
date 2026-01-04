@@ -9,11 +9,22 @@ MondoDB supports multi-document transactions, providing ACID guarantees for oper
 
 ## Overview
 
-Transactions in MondoDB work through sessions. A session tracks the state of a transaction and ensures that all operations within the transaction are executed atomically. Under the hood, MondoDB maps MongoDB transaction semantics to SQLite transactions:
+Transactions in MondoDB work through sessions. A session tracks the state of a transaction and ensures that all operations within the transaction are executed atomically.
 
-- `startTransaction()` maps to `BEGIN TRANSACTION`
-- `commitTransaction()` maps to `COMMIT`
-- `abortTransaction()` maps to `ROLLBACK`
+### How Transactions Work in MondoDB
+
+MondoDB maps MongoDB transaction semantics to SQLite transactions:
+
+| MongoDB Operation | SQLite Equivalent |
+|------------------|-------------------|
+| `startTransaction()` | `BEGIN IMMEDIATE TRANSACTION` |
+| `commitTransaction()` | `COMMIT` |
+| `abortTransaction()` | `ROLLBACK` |
+
+**Key architectural details:**
+- In Durable Objects mode, transactions use SQLite's native transaction support via `transactionSync()`
+- In URI/in-memory mode, transactions use snapshot-based rollback for data consistency
+- Sessions generate unique IDs using ObjectId for tracking and debugging
 
 ## Starting a Session
 
@@ -44,8 +55,27 @@ const session = client.startSession({
     readConcern: { level: 'majority' },
     writeConcern: { w: 'majority' },
     maxCommitTimeMS: 5000
-  }
+  },
+  // Enable causal consistency (for ordering guarantees)
+  causalConsistency: true,
+  // Enable snapshot reads
+  snapshot: false
 })
+```
+
+### ClientSessionOptions Interface
+
+```typescript
+interface ClientSessionOptions {
+  /** Default options for transactions started in this session */
+  defaultTransactionOptions?: TransactionOptions
+
+  /** Enable causal consistency */
+  causalConsistency?: boolean
+
+  /** Enable snapshot reads */
+  snapshot?: boolean
+}
 ```
 
 ## Transaction Lifecycle
@@ -60,7 +90,14 @@ A transaction goes through several states during its lifecycle:
 | `committed` | Transaction successfully committed |
 | `aborted` | Transaction was rolled back |
 
-### Manual Transaction Control
+```
+none -> starting -> in_progress -> committed
+                               \-> aborted
+```
+
+When the first operation is executed within a transaction, the state automatically transitions from `starting` to `in_progress`.
+
+## Manual Transaction Control
 
 For full control over transaction behavior, use manual transaction management:
 
@@ -104,10 +141,15 @@ if (session.inTransaction) {
 }
 
 // Get the current transaction state
-console.log(session.transactionState) // 'none' | 'starting' | 'in_progress' | 'committed' | 'aborted'
+console.log(session.transactionState)
+// 'none' | 'starting' | 'in_progress' | 'committed' | 'aborted'
 
-// Get the current transaction number
-console.log(session.transactionNumber)
+// Get the current transaction options
+const options = session.transactionOptions
+// { readConcern, writeConcern, maxCommitTimeMS }
+
+// Get the current transaction number (increments with each new transaction)
+console.log(session.transactionNumber) // 1, 2, 3...
 
 // Check if session has ended
 if (session.hasEnded) {
@@ -115,7 +157,29 @@ if (session.hasEnded) {
 }
 
 // Get the unique session ID
-console.log(session.id.toHexString())
+console.log(session.id.toHexString()) // e.g., "507f1f77bcf86cd799439011"
+```
+
+### Session Methods
+
+```typescript
+// Start a new transaction
+session.startTransaction(options?: TransactionOptions): void
+
+// Commit the current transaction
+await session.commitTransaction(): Promise<void>
+
+// Abort (rollback) the current transaction
+await session.abortTransaction(): Promise<void>
+
+// End the session (aborts any active transaction)
+await session.endSession(): Promise<void>
+
+// Execute callback with automatic commit/abort
+await session.withTransaction<T>(
+  callback: (session) => Promise<T>,
+  options?: TransactionOptions
+): Promise<T>
 ```
 
 ## Using withTransaction Helper
@@ -154,12 +218,13 @@ try {
 
 ### Automatic Retry Logic
 
-`withTransaction()` automatically retries on transient transaction errors. When an error has the `TransientTransactionError` label, the helper will:
+`withTransaction()` automatically retries on transient transaction errors. The retry behavior:
 
-1. Abort the current transaction attempt
-2. Wait briefly before retrying
-3. Start a new transaction and re-execute the callback
-4. Continue retrying up to the maximum retry limit (120 attempts by default)
+1. **Detection**: Checks if the error has the `TransientTransactionError` label
+2. **Abort**: Aborts the current transaction attempt
+3. **Wait**: Pauses for 100ms before retrying
+4. **Retry**: Starts a new transaction and re-executes the callback
+5. **Limit**: Continues retrying up to 120 attempts (matching MongoDB's default)
 
 ```typescript
 await session.withTransaction(async (sess) => {
@@ -171,6 +236,21 @@ await session.withTransaction(async (sess) => {
     { session: sess }
   )
 })
+```
+
+### withTransaction Options
+
+```typescript
+await session.withTransaction(
+  async (sess) => {
+    // ... operations
+  },
+  {
+    readConcern: { level: 'snapshot' },
+    writeConcern: { w: 'majority' },
+    maxCommitTimeMS: 10000
+  }
+)
 ```
 
 ## Transaction Options
@@ -233,7 +313,65 @@ session.startTransaction({
 })
 ```
 
-## Code Examples
+## Transaction Scope in Durable Objects
+
+Understanding transaction scope is important when using MondoDB with Cloudflare Durable Objects:
+
+### Single Durable Object Scope
+
+Transactions are scoped to a **single Durable Object instance**:
+
+```typescript
+// This works - same database (same Durable Object)
+await session.withTransaction(async (sess) => {
+  const users = db.collection('users')
+  const orders = db.collection('orders')
+
+  // Both collections are in the same database/Durable Object
+  await users.updateOne({ _id: userId }, { $inc: { orderCount: 1 } }, { session: sess })
+  await orders.insertOne({ userId, items: [...] }, { session: sess })
+})
+```
+
+### Cross-Database Limitations
+
+Cross-database transactions are **not supported** because different databases map to different Durable Objects:
+
+```typescript
+// This will NOT work as expected
+await session.withTransaction(async (sess) => {
+  const db1 = client.db('database1')
+  const db2 = client.db('database2')  // Different Durable Object!
+
+  // These operations are NOT atomic together
+  await db1.collection('users').updateOne({...}, {...}, { session: sess })
+  await db2.collection('logs').insertOne({...}, { session: sess })
+})
+```
+
+### SQLite Transaction Behavior
+
+In Durable Objects mode, MondoDB uses SQLite's `transactionSync()`:
+
+```typescript
+// Internally, bulk operations use transactionSync
+const insertedIds = this.state.storage.transactionSync(() => {
+  const ids: string[] = []
+  for (const document of documents) {
+    // ... insert each document
+    ids.push(docId)
+  }
+  return ids
+})
+// If any insert fails, all are rolled back
+```
+
+The SQL transaction mode used is `BEGIN IMMEDIATE TRANSACTION`, which:
+- Acquires a write lock immediately
+- Prevents other writers from modifying data during the transaction
+- Provides serializable isolation
+
+## Practical Examples
 
 ### Bank Transfer
 
@@ -244,20 +382,31 @@ interface Account {
   _id?: ObjectId
   userId: string
   balance: number
+  currency: string
+}
+
+interface TransferLog {
+  _id?: ObjectId
+  from: string
+  to: string
+  amount: number
+  timestamp: Date
+  status: 'completed' | 'failed'
 }
 
 async function transferFunds(
   fromUserId: string,
   toUserId: string,
   amount: number
-): Promise<void> {
+): Promise<{ success: boolean; transferId?: string }> {
   const session = client.startSession()
 
   try {
-    await session.withTransaction(async (sess) => {
+    const result = await session.withTransaction(async (sess) => {
       const accounts = db.collection<Account>('accounts')
+      const transfers = db.collection<TransferLog>('transfers')
 
-      // Verify source account has sufficient funds
+      // Step 1: Verify source account has sufficient funds
       const sourceAccount = await accounts.findOne(
         { userId: fromUserId },
         { session: sess }
@@ -273,68 +422,100 @@ async function transferFunds(
         )
       }
 
-      // Debit source account
+      // Step 2: Verify destination account exists
+      const destAccount = await accounts.findOne(
+        { userId: toUserId },
+        { session: sess }
+      )
+
+      if (!destAccount) {
+        throw new Error(`Destination account not found: ${toUserId}`)
+      }
+
+      // Step 3: Debit source account
       await accounts.updateOne(
         { userId: fromUserId },
-        { $inc: { balance: -amount } },
+        {
+          $inc: { balance: -amount },
+          $set: { lastModified: new Date() }
+        },
         { session: sess }
       )
 
-      // Credit destination account
+      // Step 4: Credit destination account
       await accounts.updateOne(
         { userId: toUserId },
-        { $inc: { balance: amount } },
+        {
+          $inc: { balance: amount },
+          $set: { lastModified: new Date() }
+        },
         { session: sess }
       )
 
-      // Record the transaction in an audit log
-      await db.collection('transfers').insertOne({
+      // Step 5: Record the transfer in audit log
+      const transferResult = await transfers.insertOne({
         from: fromUserId,
         to: toUserId,
         amount,
         timestamp: new Date(),
         status: 'completed'
       }, { session: sess })
+
+      return { transferId: transferResult.insertedId }
     })
 
     console.log(`Transferred $${amount} from ${fromUserId} to ${toUserId}`)
+    return { success: true, transferId: result.transferId }
+  } catch (error) {
+    console.error('Transfer failed:', error)
+    return { success: false }
   } finally {
     await session.endSession()
   }
 }
 ```
 
-### Inventory Management
+### Order Processing with Inventory
 
-Managing inventory across orders requires atomic operations:
+Managing inventory across orders requires atomic operations to prevent overselling:
 
 ```typescript
 interface Product {
   _id?: ObjectId
   sku: string
   name: string
-  quantity: number
-  reserved: number
+  price: number
+  quantity: number      // Available stock
+  reserved: number      // Reserved for pending orders
 }
 
 interface Order {
   _id?: ObjectId
   orderId: string
-  items: Array<{ sku: string; quantity: number }>
-  status: string
+  customerId: string
+  items: Array<{ sku: string; quantity: number; price: number }>
+  status: 'pending' | 'reserved' | 'fulfilled' | 'cancelled'
+  total: number
   createdAt: Date
+  updatedAt: Date
 }
 
-async function reserveInventory(order: Order): Promise<void> {
+async function createOrder(
+  customerId: string,
+  items: Array<{ sku: string; quantity: number }>
+): Promise<Order> {
   const session = client.startSession()
 
   try {
-    await session.withTransaction(async (sess) => {
+    const order = await session.withTransaction(async (sess) => {
       const inventory = db.collection<Product>('inventory')
       const orders = db.collection<Order>('orders')
 
-      // Check and reserve inventory for each item
-      for (const item of order.items) {
+      const orderItems: Order['items'] = []
+      let total = 0
+
+      // Step 1: Validate and reserve inventory for each item
+      for (const item of items) {
         const product = await inventory.findOne(
           { sku: item.sku },
           { session: sess }
@@ -347,7 +528,8 @@ async function reserveInventory(order: Order): Promise<void> {
         const available = product.quantity - product.reserved
         if (available < item.quantity) {
           throw new Error(
-            `Insufficient inventory for ${item.sku}: ${available} available, ${item.quantity} requested`
+            `Insufficient inventory for ${item.sku}: ` +
+            `${available} available, ${item.quantity} requested`
           )
         }
 
@@ -357,15 +539,33 @@ async function reserveInventory(order: Order): Promise<void> {
           { $inc: { reserved: item.quantity } },
           { session: sess }
         )
+
+        orderItems.push({
+          sku: item.sku,
+          quantity: item.quantity,
+          price: product.price
+        })
+        total += product.price * item.quantity
       }
 
-      // Create the order
-      await orders.insertOne({
-        ...order,
+      // Step 2: Create the order
+      const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const newOrder: Order = {
+        orderId,
+        customerId,
+        items: orderItems,
         status: 'reserved',
-        createdAt: new Date()
-      }, { session: sess })
+        total,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+
+      await orders.insertOne(newOrder, { session: sess })
+
+      return newOrder
     })
+
+    return order
   } finally {
     await session.endSession()
   }
@@ -379,6 +579,7 @@ async function fulfillOrder(orderId: string): Promise<void> {
       const inventory = db.collection<Product>('inventory')
       const orders = db.collection<Order>('orders')
 
+      // Find the order
       const order = await orders.findOne(
         { orderId, status: 'reserved' },
         { session: sess }
@@ -394,8 +595,8 @@ async function fulfillOrder(orderId: string): Promise<void> {
           { sku: item.sku },
           {
             $inc: {
-              quantity: -item.quantity,
-              reserved: -item.quantity
+              quantity: -item.quantity,   // Reduce actual stock
+              reserved: -item.quantity    // Clear reservation
             }
           },
           { session: sess }
@@ -405,7 +606,55 @@ async function fulfillOrder(orderId: string): Promise<void> {
       // Update order status
       await orders.updateOne(
         { orderId },
-        { $set: { status: 'fulfilled', fulfilledAt: new Date() } },
+        {
+          $set: {
+            status: 'fulfilled',
+            updatedAt: new Date()
+          }
+        },
+        { session: sess }
+      )
+    })
+  } finally {
+    await session.endSession()
+  }
+}
+
+async function cancelOrder(orderId: string): Promise<void> {
+  const session = client.startSession()
+
+  try {
+    await session.withTransaction(async (sess) => {
+      const inventory = db.collection<Product>('inventory')
+      const orders = db.collection<Order>('orders')
+
+      const order = await orders.findOne(
+        { orderId, status: 'reserved' },
+        { session: sess }
+      )
+
+      if (!order) {
+        throw new Error(`Order not found or cannot be cancelled: ${orderId}`)
+      }
+
+      // Release reserved inventory
+      for (const item of order.items) {
+        await inventory.updateOne(
+          { sku: item.sku },
+          { $inc: { reserved: -item.quantity } },
+          { session: sess }
+        )
+      }
+
+      // Update order status
+      await orders.updateOne(
+        { orderId },
+        {
+          $set: {
+            status: 'cancelled',
+            updatedAt: new Date()
+          }
+        },
         { session: sess }
       )
     })
@@ -415,7 +664,7 @@ async function fulfillOrder(orderId: string): Promise<void> {
 }
 ```
 
-### Multi-Collection Updates
+### Multi-Collection User Profile Update
 
 Updating related documents across multiple collections atomically:
 
@@ -423,27 +672,35 @@ Updating related documents across multiple collections atomically:
 interface User {
   _id?: ObjectId
   email: string
-  profile: { name: string; bio: string }
+  profile: {
+    name: string
+    displayName: string
+    bio: string
+    avatar?: string
+  }
+  updatedAt: Date
 }
 
 interface Post {
   _id?: ObjectId
-  authorId: ObjectId
-  authorName: string
+  authorId: string
+  authorName: string      // Denormalized for display
+  authorAvatar?: string   // Denormalized for display
+  title: string
   content: string
 }
 
 interface Comment {
   _id?: ObjectId
-  authorId: ObjectId
-  authorName: string
+  authorId: string
+  authorName: string      // Denormalized for display
+  postId: string
   text: string
 }
 
 async function updateUserProfile(
-  userId: ObjectId,
-  newName: string,
-  newBio: string
+  userId: string,
+  updates: { name?: string; bio?: string; avatar?: string }
 ): Promise<void> {
   const session = client.startSession()
 
@@ -453,27 +710,46 @@ async function updateUserProfile(
       const posts = db.collection<Post>('posts')
       const comments = db.collection<Comment>('comments')
 
-      // Update the user profile
-      await users.updateOne(
+      // Build the update object
+      const userUpdate: Record<string, unknown> = {
+        updatedAt: new Date()
+      }
+      if (updates.name) userUpdate['profile.name'] = updates.name
+      if (updates.bio) userUpdate['profile.bio'] = updates.bio
+      if (updates.avatar) userUpdate['profile.avatar'] = updates.avatar
+
+      // Step 1: Update the user document
+      const result = await users.updateOne(
         { _id: userId },
-        { $set: { 'profile.name': newName, 'profile.bio': newBio } },
+        { $set: userUpdate },
         { session: sess }
       )
 
-      // Update denormalized author name in all posts
-      await posts.updateMany(
-        { authorId: userId },
-        { $set: { authorName: newName } },
-        { session: sess }
-      )
+      if (result.matchedCount === 0) {
+        throw new Error(`User not found: ${userId}`)
+      }
 
-      // Update denormalized author name in all comments
-      await comments.updateMany(
-        { authorId: userId },
-        { $set: { authorName: newName } },
-        { session: sess }
-      )
+      // Step 2: Update denormalized data in posts (if name changed)
+      if (updates.name) {
+        const postUpdate: Record<string, unknown> = { authorName: updates.name }
+        if (updates.avatar) postUpdate.authorAvatar = updates.avatar
+
+        await posts.updateMany(
+          { authorId: userId },
+          { $set: postUpdate },
+          { session: sess }
+        )
+
+        // Step 3: Update denormalized data in comments
+        await comments.updateMany(
+          { authorId: userId },
+          { $set: { authorName: updates.name } },
+          { session: sess }
+        )
+      }
     })
+
+    console.log(`Profile updated for user ${userId}`)
   } finally {
     await session.endSession()
   }
@@ -497,6 +773,8 @@ try {
     console.error('Business logic error:', error.message)
   } else if (error.hasErrorLabel?.('TransientTransactionError')) {
     console.error('Transient error - would have been retried:', error.message)
+  } else if (error.hasErrorLabel?.('UnknownTransactionCommitResult')) {
+    console.error('Commit result unknown - may need manual verification')
   } else {
     console.error('Transaction failed:', error)
   }
@@ -511,57 +789,208 @@ try {
 Certain operations are not allowed within transactions:
 
 ```typescript
+// Cannot start a transaction when one is already active
 const session = client.startSession()
-
-try {
-  session.startTransaction()
-
-  // This will throw - cannot start a new transaction while one is active
-  session.startTransaction() // Error: Transaction already in progress
-
-} catch (error) {
-  console.error(error.message)
-} finally {
-  await session.endSession()
-}
+session.startTransaction()
+session.startTransaction() // Error: Transaction already in progress
 ```
 
 ```typescript
+// Cannot commit without starting a transaction
 const session = client.startSession()
+await session.commitTransaction() // Error: No transaction started
+```
 
-try {
-  // This will throw - no transaction has been started
-  await session.commitTransaction() // Error: No transaction started
+```typescript
+// Cannot use an ended session
+const session = client.startSession()
+await session.endSession()
+session.startTransaction() // Error: Cannot start transaction on ended session
+```
 
-} catch (error) {
-  console.error(error.message)
-} finally {
-  await session.endSession()
+### Error Recovery Pattern
+
+```typescript
+async function robustTransaction<T>(
+  client: MongoClient,
+  operation: (session: ClientSession) => Promise<T>,
+  maxRetries: number = 3
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const session = client.startSession()
+
+    try {
+      const result = await session.withTransaction(async (sess) => {
+        return await operation(sess)
+      })
+      return result
+    } catch (error) {
+      lastError = error as Error
+      console.error(`Attempt ${attempt} failed:`, error)
+
+      // Don't retry business logic errors
+      if (error.message.includes('not found') ||
+          error.message.includes('insufficient')) {
+        throw error
+      }
+
+      // Wait before retrying (exponential backoff)
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 100))
+      }
+    } finally {
+      await session.endSession()
+    }
+  }
+
+  throw lastError
 }
+
+// Usage
+await robustTransaction(client, async (session) => {
+  await collection.updateOne(
+    { _id: 'doc1' },
+    { $set: { status: 'processed' } },
+    { session }
+  )
+})
 ```
 
 ## Best Practices
 
-1. **Keep transactions short** - Long-running transactions can impact performance and increase the chance of conflicts
+### 1. Keep Transactions Short
 
-2. **Handle errors gracefully** - Always use try/catch/finally to ensure proper cleanup
+Long-running transactions can impact performance and increase the chance of conflicts:
 
-3. **Use withTransaction()** - It handles retries and error handling automatically
+```typescript
+// Good: Short, focused transaction
+await session.withTransaction(async (sess) => {
+  await accounts.updateOne({ _id: from }, { $inc: { balance: -amount } }, { session: sess })
+  await accounts.updateOne({ _id: to }, { $inc: { balance: amount } }, { session: sess })
+})
 
-4. **Pass session to all operations** - Every operation within a transaction must include the session option
+// Bad: Long transaction with external calls
+await session.withTransaction(async (sess) => {
+  await accounts.updateOne({ _id: from }, { $inc: { balance: -amount } }, { session: sess })
+  await sendEmail(user.email)  // External call - can't be rolled back!
+  await accounts.updateOne({ _id: to }, { $inc: { balance: amount } }, { session: sess })
+})
+```
 
-5. **End sessions** - Always call `endSession()` in a finally block to release resources
+### 2. Always Use try/finally
 
-6. **Avoid side effects** - Don't perform external operations (API calls, file I/O) inside transactions since they cannot be rolled back
+Ensure proper cleanup even if errors occur:
 
-7. **Validate before modifying** - Check preconditions (like sufficient funds) before making changes
+```typescript
+const session = client.startSession()
+try {
+  await session.withTransaction(async (sess) => {
+    // ... operations
+  })
+} finally {
+  await session.endSession()  // Always called
+}
+```
+
+### 3. Pass Session to All Operations
+
+Every operation within a transaction must include the session option:
+
+```typescript
+await session.withTransaction(async (sess) => {
+  // Correct: session passed to all operations
+  await collection.findOne({ _id: 1 }, { session: sess })
+  await collection.updateOne({ _id: 1 }, { $set: { x: 1 } }, { session: sess })
+  await collection.insertOne({ _id: 2 }, { session: sess })
+
+  // Wrong: missing session - this operation won't be part of the transaction
+  // await collection.deleteOne({ _id: 3 })
+})
+```
+
+### 4. Validate Before Modifying
+
+Check preconditions before making changes:
+
+```typescript
+await session.withTransaction(async (sess) => {
+  // Validate first
+  const account = await accounts.findOne({ _id: userId }, { session: sess })
+  if (!account || account.balance < amount) {
+    throw new Error('Insufficient funds')
+  }
+
+  // Then modify
+  await accounts.updateOne(
+    { _id: userId },
+    { $inc: { balance: -amount } },
+    { session: sess }
+  )
+})
+```
+
+### 5. Avoid Side Effects
+
+Don't perform external operations inside transactions since they cannot be rolled back:
+
+```typescript
+// Bad: External operations in transaction
+await session.withTransaction(async (sess) => {
+  await orders.insertOne(order, { session: sess })
+  await sendConfirmationEmail(order)  // Can't rollback if commit fails!
+  await inventory.updateOne({...}, {...}, { session: sess })
+})
+
+// Good: External operations after commit
+await session.withTransaction(async (sess) => {
+  await orders.insertOne(order, { session: sess })
+  await inventory.updateOne({...}, {...}, { session: sess })
+})
+// Only send email after successful commit
+await sendConfirmationEmail(order)
+```
+
+### 6. Use withTransaction()
+
+Prefer `withTransaction()` over manual transaction management:
+
+```typescript
+// Recommended: withTransaction handles retries and cleanup
+await session.withTransaction(async (sess) => {
+  // ... operations
+})
+
+// Manual: More error-prone, no automatic retries
+session.startTransaction()
+try {
+  // ... operations
+  await session.commitTransaction()
+} catch (error) {
+  await session.abortTransaction()
+  throw error
+}
+```
 
 ## Limitations
 
-- Transactions in MondoDB are scoped to a single Durable Object instance
-- Cross-database transactions are not supported
-- Large transactions may have performance implications
-- Transactions have a maximum execution time
+### Current Limitations in MondoDB
+
+1. **Single Durable Object scope**: Transactions are scoped to a single Durable Object instance
+2. **Cross-database transactions not supported**: Different databases map to different Durable Objects
+3. **Maximum execution time**: Transactions have a timeout based on Durable Object limits
+4. **Read/write concern semantics**: While the API accepts read/write concerns, SQLite provides serializable isolation by default
+
+### Differences from MongoDB
+
+| Feature | MongoDB | MondoDB |
+|---------|---------|---------|
+| Multi-document transactions | Across replica sets | Single Durable Object |
+| Distributed transactions | Supported | Not supported |
+| Sharded transactions | Supported | N/A |
+| Read concern: linearizable | Supported | Maps to local |
+| Write concern: w > 1 | Supported | Maps to w: 1 |
 
 ## Session ID Uniqueness
 
@@ -571,12 +1000,13 @@ Each session is assigned a unique identifier that can be used for tracking and d
 const session1 = client.startSession()
 const session2 = client.startSession()
 
-// Each session has a unique ID
+// Each session has a unique ID (12-byte ObjectId as hex string)
 console.log(session1.id.toHexString()) // e.g., "507f1f77bcf86cd799439011"
 console.log(session2.id.toHexString()) // e.g., "507f1f77bcf86cd799439012"
 
-// IDs are guaranteed to be unique
-console.log(session1.id.toString() !== session2.id.toString()) // true
+// Useful for logging and debugging
+console.log(`[Session ${session1.id}] Starting transaction...`)
+console.log(`[Session ${session1.id}] Transaction #${session1.transactionNumber}`)
 ```
 
 ## Next Steps

@@ -7,6 +7,21 @@ description: Execute multiple write operations efficiently in a single batch wit
 
 Bulk write operations allow you to execute multiple insert, update, replace, and delete operations in a single request. This provides significant performance benefits when you need to perform many write operations, as it reduces the number of round trips to the database.
 
+## Why Use Bulk Write?
+
+| Single Operations | Bulk Write |
+|-------------------|------------|
+| N network round trips | 1 network round trip |
+| N separate transactions | 1 batched transaction |
+| Higher latency | Lower latency |
+| More overhead | Optimized throughput |
+
+**Use bulk write when:**
+- Inserting 10+ documents at once
+- Performing multiple updates on different documents
+- Mixing different operation types (insert + update + delete)
+- Synchronizing data from external sources
+
 ## Overview
 
 The `bulkWrite()` method accepts an array of write operations and executes them as a batch. Each operation in the array can be one of six types:
@@ -509,3 +524,193 @@ if (result.insertedCount !== expectedInserts) {
   console.warn(`Expected ${expectedInserts} inserts, got ${result.insertedCount}`)
 }
 ```
+
+---
+
+## TypeScript Type Definitions
+
+MondoDB provides full TypeScript support for bulk write operations.
+
+### Operation Types
+
+```typescript
+import type {
+  BulkWriteOperation,
+  InsertOneModel,
+  UpdateOneModel,
+  UpdateManyModel,
+  ReplaceOneModel,
+  DeleteOneModel,
+  DeleteManyModel
+} from 'mondodb'
+
+// InsertOneModel
+interface InsertOneModel<TDocument> {
+  insertOne: {
+    document: TDocument
+  }
+}
+
+// UpdateOneModel
+interface UpdateOneModel<TDocument> {
+  updateOne: {
+    filter: object
+    update: object
+    upsert?: boolean
+    arrayFilters?: object[]
+    hint?: string | object
+    collation?: object
+  }
+}
+
+// UpdateManyModel
+interface UpdateManyModel<TDocument> {
+  updateMany: {
+    filter: object
+    update: object
+    upsert?: boolean
+    arrayFilters?: object[]
+    hint?: string | object
+    collation?: object
+  }
+}
+
+// ReplaceOneModel
+interface ReplaceOneModel<TDocument> {
+  replaceOne: {
+    filter: object
+    replacement: TDocument
+    upsert?: boolean
+    hint?: string | object
+    collation?: object
+  }
+}
+
+// DeleteOneModel
+interface DeleteOneModel {
+  deleteOne: {
+    filter: object
+    hint?: string | object
+    collation?: object
+  }
+}
+
+// DeleteManyModel
+interface DeleteManyModel {
+  deleteMany: {
+    filter: object
+    hint?: string | object
+    collation?: object
+  }
+}
+
+// Union type of all operations
+type BulkWriteOperation<TDocument> =
+  | InsertOneModel<TDocument>
+  | UpdateOneModel<TDocument>
+  | UpdateManyModel<TDocument>
+  | ReplaceOneModel<TDocument>
+  | DeleteOneModel
+  | DeleteManyModel
+```
+
+### Options and Result Types
+
+```typescript
+// BulkWriteOptions
+interface BulkWriteOptions {
+  ordered?: boolean              // Execute in order (default: true)
+  bypassDocumentValidation?: boolean
+  comment?: string | object
+  let?: Document                 // Variables for use with $$var syntax
+}
+
+// BulkWriteResult
+interface BulkWriteResult {
+  acknowledged: boolean
+  insertedCount: number
+  matchedCount: number
+  modifiedCount: number
+  deletedCount: number
+  upsertedCount: number
+  insertedIds: Record<number, ObjectId | string>
+  upsertedIds: Record<number, ObjectId | string>
+}
+
+// BulkWriteError
+interface BulkWriteError {
+  index: number           // Index of failed operation
+  code: number            // Error code (e.g., 11000 for duplicate key)
+  errmsg: string          // Error message
+  op?: BulkWriteOperation // The failed operation
+}
+```
+
+### Type Guards
+
+MondoDB exports type guard functions for checking operation types:
+
+```typescript
+import {
+  isInsertOneModel,
+  isUpdateOneModel,
+  isUpdateManyModel,
+  isReplaceOneModel,
+  isDeleteOneModel,
+  isDeleteManyModel
+} from 'mondodb'
+
+const operation: BulkWriteOperation<User> = getOperation()
+
+if (isInsertOneModel(operation)) {
+  console.log('Inserting:', operation.insertOne.document)
+} else if (isUpdateOneModel(operation)) {
+  console.log('Updating with filter:', operation.updateOne.filter)
+} else if (isDeleteOneModel(operation)) {
+  console.log('Deleting with filter:', operation.deleteOne.filter)
+}
+```
+
+### Typed Bulk Operations
+
+```typescript
+interface User {
+  _id?: ObjectId
+  name: string
+  email: string
+  status: 'active' | 'inactive'
+}
+
+const users = db.collection<User>('users')
+
+// Type-safe operations array
+const operations: BulkWriteOperation<User>[] = [
+  {
+    insertOne: {
+      document: { name: 'Alice', email: 'alice@example.com', status: 'active' }
+    }
+  },
+  {
+    updateOne: {
+      filter: { email: 'bob@example.com' },
+      update: { $set: { status: 'inactive' } }
+    }
+  },
+  {
+    deleteOne: {
+      filter: { status: 'inactive' }
+    }
+  }
+]
+
+const result = await users.bulkWrite(operations)
+```
+
+---
+
+## Related Guides
+
+- [CRUD Operations](/docs/guides/crud) - Individual document operations
+- [Query & Filter Syntax](/docs/guides/queries) - Filter syntax for bulk updates/deletes
+- [Transactions](/docs/guides/transactions) - Multi-document transactions
+- [Error Handling](/docs/guides/error-handling) - Handling operation errors
