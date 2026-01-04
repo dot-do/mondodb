@@ -1,168 +1,727 @@
-import { useState, useCallback } from 'react'
-import { css } from '@leafygreen-ui/emotion'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { css, keyframes } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
-import { Body, Label } from '@leafygreen-ui/typography'
+import { Body, Description } from '@leafygreen-ui/typography'
 import Button from '@leafygreen-ui/button'
-import TextInput from '@leafygreen-ui/text-input'
+import IconButton from '@leafygreen-ui/icon-button'
 import Icon from '@leafygreen-ui/icon'
+import Tooltip from '@leafygreen-ui/tooltip'
+import Badge from '@leafygreen-ui/badge'
+import { EditorView, keymap, placeholder, lineNumbers, drawSelection, highlightActiveLine, highlightSpecialChars } from '@codemirror/view'
+import { EditorState, Compartment } from '@codemirror/state'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { json, jsonParseLinter } from '@codemirror/lang-json'
+import { linter, lintGutter } from '@codemirror/lint'
+import { bracketMatching, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
+import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { useQueryStore, QueryValidationError } from '@stores/query'
 
-const queryBarStyles = css`
+// Animations
+const pulseAnimation = keyframes`
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+`
+
+const spinAnimation = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`
+
+// Styles
+const containerStyles = css`
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: ${palette.gray.light3};
+  border: 1px solid ${palette.gray.light2};
   border-radius: 8px;
+  background: ${palette.white};
+  overflow: hidden;
 `
 
-const mainRowStyles = css`
+const containerErrorStyles = css`
+  border-color: ${palette.red.base};
+`
+
+const headerStyles = css`
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: ${palette.gray.light3};
+  border-bottom: 1px solid ${palette.gray.light2};
 `
 
-const filterInputStyles = css`
+const headerLeftStyles = css`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`
+
+const headerRightStyles = css`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`
+
+const editorContainerStyles = css`
+  position: relative;
+  min-height: 80px;
+  max-height: 300px;
+  overflow-y: auto;
+
+  .cm-editor {
+    height: 100%;
+    font-family: 'Source Code Pro', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 13px;
+  }
+
+  .cm-scroller {
+    overflow: auto;
+  }
+
+  .cm-content {
+    padding: 12px;
+  }
+
+  .cm-line {
+    padding: 0 2px;
+  }
+
+  .cm-focused {
+    outline: none;
+  }
+
+  .cm-editor.cm-focused {
+    outline: none;
+  }
+
+  .cm-gutters {
+    background: ${palette.gray.light3};
+    border-right: 1px solid ${palette.gray.light2};
+  }
+
+  .cm-gutter-lint {
+    width: 10px;
+  }
+
+  .cm-lint-marker-error {
+    content: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="%23CF4747"/></svg>');
+  }
+
+  .cm-placeholder {
+    color: ${palette.gray.base};
+    font-style: italic;
+  }
+`
+
+const footerStyles = css`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: ${palette.gray.light3};
+  border-top: 1px solid ${palette.gray.light2};
+  gap: 12px;
+`
+
+const footerLeftStyles = css`
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex: 1;
 `
 
-const optionsRowStyles = css`
+const footerRightStyles = css`
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  align-items: center;
+  gap: 8px;
 `
 
-const smallInputStyles = css`
-  width: 120px;
+const errorContainerStyles = css`
+  padding: 8px 12px;
+  background: ${palette.red.light3};
+  border-top: 1px solid ${palette.red.light2};
 `
 
-const toggleStyles = css`
+const errorTextStyles = css`
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: ${palette.red.dark2};
+  font-size: 13px;
+`
+
+const errorLocationStyles = css`
+  font-family: 'Source Code Pro', Menlo, Monaco, 'Courier New', monospace;
+  font-size: 11px;
+  color: ${palette.red.base};
+`
+
+const statsStyles = css`
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: ${palette.gray.dark1};
+`
+
+const statItemStyles = css`
   display: flex;
   align-items: center;
   gap: 4px;
+`
+
+const loadingStyles = css`
+  display: inline-flex;
+  animation: ${spinAnimation} 1s linear infinite;
+`
+
+const shortcutStyles = css`
+  font-size: 11px;
+  color: ${palette.gray.base};
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`
+
+const kbdStyles = css`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  font-family: 'Source Code Pro', Menlo, Monaco, 'Courier New', monospace;
+  font-size: 11px;
+  background: ${palette.gray.light2};
+  border: 1px solid ${palette.gray.light1};
+  border-radius: 4px;
   color: ${palette.gray.dark1};
+`
+
+const tabsContainerStyles = css`
+  display: flex;
+  gap: 2px;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid ${palette.gray.light2};
+  background: ${palette.gray.light3};
+`
+
+const tabButtonStyles = css`
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: ${palette.gray.dark1};
+  border-radius: 4px 4px 0 0;
   cursor: pointer;
-  font-size: 13px;
+  transition: all 0.15s ease;
+  border-bottom: 2px solid transparent;
 
   &:hover {
-    color: ${palette.gray.dark3};
+    background: ${palette.gray.light2};
   }
 `
 
-const errorStyles = css`
-  color: ${palette.red.dark2};
-  font-size: 12px;
-  margin-top: 4px;
+const tabButtonActiveStyles = css`
+  background: ${palette.white};
+  color: ${palette.green.dark2};
+  border-bottom-color: ${palette.green.dark1};
+
+  &:hover {
+    background: ${palette.white};
+  }
 `
 
-interface QueryBarProps {
-  onSubmit: (query: {
-    filter?: Record<string, unknown>
-    sort?: Record<string, 1 | -1>
-    limit?: number
-    skip?: number
-  }) => void
+const limitInputStyles = css`
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid ${palette.gray.light2};
+  border-radius: 4px;
+  font-size: 13px;
+`
+
+const labelStyles = css`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+`
+
+// Types
+export interface QueryBarProps {
+  database: string
+  collection: string
+  onExecute: (query: QueryOptions) => Promise<{ count: number; time: number }>
+  onQueryChange?: (query: string) => void
+  initialQuery?: string
+  showHistory?: boolean
+  onHistoryToggle?: () => void
+  className?: string
 }
 
-export function QueryBar({ onSubmit }: QueryBarProps) {
-  const [filterText, setFilterText] = useState('{}')
-  const [sortText, setSortText] = useState('{}')
-  const [limit, setLimit] = useState('20')
-  const [skip, setSkip] = useState('0')
-  const [showOptions, setShowOptions] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export interface QueryOptions {
+  filter: Record<string, unknown>
+  projection?: Record<string, unknown>
+  sort?: Record<string, unknown>
+  limit?: number
+}
 
-  const handleSubmit = useCallback(() => {
+type QueryTab = 'filter' | 'projection' | 'sort'
+
+// Editor theme
+const editorTheme = EditorView.theme({
+  '&': {
+    backgroundColor: palette.white,
+  },
+  '.cm-content': {
+    caretColor: palette.green.dark2,
+  },
+  '.cm-cursor': {
+    borderLeftColor: palette.green.dark2,
+  },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+    backgroundColor: palette.green.light3,
+  },
+  '.cm-activeLine': {
+    backgroundColor: `${palette.gray.light3}50`,
+  },
+  '.cm-selectionMatch': {
+    backgroundColor: palette.yellow.light3,
+  },
+})
+
+export function QueryBar({
+  database,
+  collection,
+  onExecute,
+  onQueryChange,
+  initialQuery = '{}',
+  showHistory = false,
+  onHistoryToggle,
+  className,
+}: QueryBarProps) {
+  const {
+    currentFilter,
+    currentProjection,
+    currentSort,
+    currentLimit,
+    validationErrors,
+    isValid,
+    isExecuting,
+    lastExecutionTime,
+    lastResultCount,
+    lastError,
+    setCurrentFilter,
+    setCurrentProjection,
+    setCurrentSort,
+    setCurrentLimit,
+    setExecuting,
+    setExecutionResult,
+    setExecutionError,
+    addToHistory,
+  } = useQueryStore()
+
+  const [activeTab, setActiveTab] = useState<QueryTab>('filter')
+  const editorRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const readOnlyCompartment = useRef(new Compartment())
+
+  // Get current value based on active tab
+  const getCurrentValue = useCallback(() => {
+    switch (activeTab) {
+      case 'filter':
+        return currentFilter
+      case 'projection':
+        return currentProjection
+      case 'sort':
+        return currentSort
+      default:
+        return currentFilter
+    }
+  }, [activeTab, currentFilter, currentProjection, currentSort])
+
+  // Set current value based on active tab
+  const setCurrentValue = useCallback(
+    (value: string) => {
+      switch (activeTab) {
+        case 'filter':
+          setCurrentFilter(value)
+          break
+        case 'projection':
+          setCurrentProjection(value)
+          break
+        case 'sort':
+          setCurrentSort(value)
+          break
+      }
+    },
+    [activeTab, setCurrentFilter, setCurrentProjection, setCurrentSort]
+  )
+
+  // Execute query
+  const executeQuery = useCallback(async () => {
+    if (!isValid || isExecuting) return
+
     try {
-      const filter = JSON.parse(filterText)
-      const sort = JSON.parse(sortText)
-      const limitNum = parseInt(limit, 10)
-      const skipNum = parseInt(skip, 10)
+      // Parse all query parts
+      const filter = currentFilter.trim() ? JSON.parse(currentFilter) : {}
+      const projection = currentProjection.trim() ? JSON.parse(currentProjection) : undefined
+      const sort = currentSort.trim() ? JSON.parse(currentSort) : undefined
 
-      if (isNaN(limitNum) || limitNum < 0) {
-        throw new Error('Limit must be a positive number')
-      }
-      if (isNaN(skipNum) || skipNum < 0) {
-        throw new Error('Skip must be a positive number')
-      }
+      setExecuting(true)
+      const startTime = performance.now()
 
-      setError(null)
-      onSubmit({
+      const result = await onExecute({
         filter,
+        projection,
         sort,
-        limit: limitNum,
-        skip: skipNum,
+        limit: currentLimit,
       })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Invalid query')
-    }
-  }, [filterText, sortText, limit, skip, onSubmit])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      handleSubmit()
+      const executionTime = performance.now() - startTime
+      setExecutionResult({ time: executionTime, count: result.count })
+
+      // Add to history
+      addToHistory({
+        query: currentFilter,
+        database,
+        collection,
+        executionTime,
+        resultCount: result.count,
+      })
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Query execution failed'
+      setExecutionError(errorMessage)
+
+      // Add error to history
+      addToHistory({
+        query: currentFilter,
+        database,
+        collection,
+        error: errorMessage,
+      })
+    } finally {
+      setExecuting(false)
     }
-  }
+  }, [
+    isValid,
+    isExecuting,
+    currentFilter,
+    currentProjection,
+    currentSort,
+    currentLimit,
+    onExecute,
+    database,
+    collection,
+    setExecuting,
+    setExecutionResult,
+    setExecutionError,
+    addToHistory,
+  ])
+
+  // Initialize editor
+  useEffect(() => {
+    if (!editorRef.current || viewRef.current) return
+
+    const executeKeymap = keymap.of([
+      {
+        key: 'Mod-Enter',
+        run: () => {
+          executeQuery()
+          return true
+        },
+      },
+      {
+        key: 'Shift-Enter',
+        run: () => {
+          executeQuery()
+          return true
+        },
+      },
+    ])
+
+    const updateListener = EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        const value = update.state.doc.toString()
+        setCurrentValue(value)
+        onQueryChange?.(value)
+      }
+    })
+
+    const state = EditorState.create({
+      doc: getCurrentValue() || initialQuery,
+      extensions: [
+        lineNumbers(),
+        highlightActiveLine(),
+        highlightSpecialChars(),
+        history(),
+        drawSelection(),
+        indentOnInput(),
+        bracketMatching(),
+        closeBrackets(),
+        autocompletion(),
+        highlightSelectionMatches(),
+        syntaxHighlighting(defaultHighlightStyle),
+        json(),
+        linter(jsonParseLinter()),
+        lintGutter(),
+        editorTheme,
+        placeholder('Enter MongoDB query...'),
+        executeKeymap,
+        keymap.of([
+          ...closeBracketsKeymap,
+          ...defaultKeymap,
+          ...historyKeymap,
+          ...completionKeymap,
+          ...searchKeymap,
+        ]),
+        updateListener,
+        readOnlyCompartment.current.of(EditorState.readOnly.of(false)),
+        EditorView.lineWrapping,
+      ],
+    })
+
+    const view = new EditorView({
+      state,
+      parent: editorRef.current,
+    })
+
+    viewRef.current = view
+
+    return () => {
+      view.destroy()
+      viewRef.current = null
+    }
+  }, [])
+
+  // Update editor content when tab changes or value changes externally
+  useEffect(() => {
+    if (!viewRef.current) return
+
+    const currentDoc = viewRef.current.state.doc.toString()
+    const newValue = getCurrentValue()
+
+    if (currentDoc !== newValue) {
+      viewRef.current.dispatch({
+        changes: {
+          from: 0,
+          to: currentDoc.length,
+          insert: newValue,
+        },
+      })
+    }
+  }, [activeTab, getCurrentValue])
+
+  // Update read-only state when executing
+  useEffect(() => {
+    if (!viewRef.current) return
+
+    viewRef.current.dispatch({
+      effects: readOnlyCompartment.current.reconfigure(
+        EditorState.readOnly.of(isExecuting)
+      ),
+    })
+  }, [isExecuting])
+
+  // Format JSON in editor
+  const formatQuery = useCallback(() => {
+    if (!viewRef.current) return
+
+    try {
+      const current = viewRef.current.state.doc.toString()
+      if (!current.trim()) return
+
+      const parsed = JSON.parse(current)
+      const formatted = JSON.stringify(parsed, null, 2)
+
+      viewRef.current.dispatch({
+        changes: {
+          from: 0,
+          to: current.length,
+          insert: formatted,
+        },
+      })
+    } catch {
+      // Ignore formatting errors for invalid JSON
+    }
+  }, [])
+
+  // Clear editor
+  const clearQuery = useCallback(() => {
+    if (!viewRef.current) return
+
+    viewRef.current.dispatch({
+      changes: {
+        from: 0,
+        to: viewRef.current.state.doc.length,
+        insert: '{}',
+      },
+    })
+    setCurrentValue('{}')
+  }, [setCurrentValue])
 
   return (
-    <div className={queryBarStyles} onKeyDown={handleKeyDown}>
-      <div className={mainRowStyles}>
-        <div className={filterInputStyles}>
-          <TextInput
-            label="Filter"
-            placeholder='{ "field": "value" }'
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            aria-describedby="filter-error"
-          />
+    <div
+      className={`${containerStyles} ${!isValid ? containerErrorStyles : ''} ${className ?? ''}`}
+      data-testid="query-bar"
+    >
+      <div className={headerStyles}>
+        <div className={headerLeftStyles}>
+          <Body weight="medium">Query</Body>
+          <Badge variant={isValid ? 'green' : 'red'}>
+            {isValid ? 'Valid' : 'Invalid'}
+          </Badge>
         </div>
-        <Button variant="primary" onClick={handleSubmit}>
-          <Icon glyph="MagnifyingGlass" />
-          Find
-        </Button>
+        <div className={headerRightStyles}>
+          <Tooltip trigger={<span>Format JSON (Shift+Alt+F)</span>}>
+            <IconButton
+              aria-label="Format JSON"
+              onClick={formatQuery}
+              disabled={!isValid}
+            >
+              <Icon glyph="Edit" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip trigger={<span>Clear query</span>}>
+            <IconButton aria-label="Clear query" onClick={clearQuery}>
+              <Icon glyph="X" />
+            </IconButton>
+          </Tooltip>
+          {onHistoryToggle && (
+            <Tooltip trigger={<span>Toggle history panel</span>}>
+              <IconButton
+                aria-label="Toggle history"
+                onClick={onHistoryToggle}
+                active={showHistory}
+              >
+                <Icon glyph="Clock" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      <div className={tabsContainerStyles}>
+        <button
+          className={`${tabButtonStyles} ${activeTab === 'filter' ? tabButtonActiveStyles : ''}`}
+          onClick={() => setActiveTab('filter')}
+          data-testid="tab-filter"
+        >
+          Filter
+        </button>
+        <button
+          className={`${tabButtonStyles} ${activeTab === 'projection' ? tabButtonActiveStyles : ''}`}
+          onClick={() => setActiveTab('projection')}
+          data-testid="tab-projection"
+        >
+          Projection
+        </button>
+        <button
+          className={`${tabButtonStyles} ${activeTab === 'sort' ? tabButtonActiveStyles : ''}`}
+          onClick={() => setActiveTab('sort')}
+          data-testid="tab-sort"
+        >
+          Sort
+        </button>
       </div>
 
       <div
-        className={toggleStyles}
-        onClick={() => setShowOptions(!showOptions)}
-      >
-        <Icon glyph={showOptions ? 'ChevronDown' : 'ChevronRight'} size={12} />
-        <Body>Options</Body>
+        className={editorContainerStyles}
+        ref={editorRef}
+        data-testid="query-editor"
+      />
+
+      {validationErrors.length > 0 && (
+        <div className={errorContainerStyles} data-testid="validation-errors">
+          {validationErrors.map((error, index) => (
+            <div key={index} className={errorTextStyles}>
+              <Icon glyph="Warning" fill={palette.red.base} />
+              <div>
+                <span>{error.message}</span>
+                {error.line !== undefined && (
+                  <span className={errorLocationStyles}>
+                    {' '}
+                    at line {error.line}, column {error.column}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lastError && (
+        <div className={errorContainerStyles} data-testid="execution-error">
+          <div className={errorTextStyles}>
+            <Icon glyph="Warning" fill={palette.red.base} />
+            <span>Execution error: {lastError}</span>
+          </div>
+        </div>
+      )}
+
+      <div className={footerStyles}>
+        <div className={footerLeftStyles}>
+          <div className={statsStyles}>
+            {lastResultCount !== null && (
+              <span className={statItemStyles} data-testid="result-count">
+                <Icon glyph="File" size="small" />
+                {lastResultCount} documents
+              </span>
+            )}
+            {lastExecutionTime !== null && (
+              <span className={statItemStyles} data-testid="execution-time">
+                <Icon glyph="Clock" size="small" />
+                {lastExecutionTime < 1
+                  ? '<1ms'
+                  : lastExecutionTime < 1000
+                    ? `${Math.round(lastExecutionTime)}ms`
+                    : `${(lastExecutionTime / 1000).toFixed(2)}s`}
+              </span>
+            )}
+          </div>
+          <div className={shortcutStyles}>
+            <kbd className={kbdStyles}>
+              {typeof navigator !== 'undefined' && navigator.platform?.includes('Mac') ? 'Cmd' : 'Ctrl'}
+            </kbd>
+            <span>+</span>
+            <kbd className={kbdStyles}>Enter</kbd>
+            <span>to execute</span>
+          </div>
+        </div>
+        <div className={footerRightStyles}>
+          <label className={labelStyles}>
+            Limit:
+            <input
+              type="number"
+              value={currentLimit}
+              onChange={(e) => setCurrentLimit(parseInt(e.target.value, 10) || 20)}
+              min={1}
+              max={1000}
+              className={limitInputStyles}
+              data-testid="limit-input"
+            />
+          </label>
+          <Button
+            variant="primary"
+            onClick={executeQuery}
+            disabled={!isValid || isExecuting}
+            leftGlyph={
+              isExecuting ? (
+                <span className={loadingStyles}>
+                  <Icon glyph="Refresh" />
+                </span>
+              ) : (
+                <Icon glyph="Play" />
+              )
+            }
+            data-testid="execute-button"
+          >
+            {isExecuting ? 'Executing...' : 'Execute'}
+          </Button>
+        </div>
       </div>
-
-      {showOptions && (
-        <div className={optionsRowStyles}>
-          <div className={filterInputStyles}>
-            <TextInput
-              label="Sort"
-              placeholder='{ "field": 1 }'
-              value={sortText}
-              onChange={(e) => setSortText(e.target.value)}
-            />
-          </div>
-          <div className={smallInputStyles}>
-            <TextInput
-              label="Limit"
-              type="number"
-              value={limit}
-              onChange={(e) => setLimit(e.target.value)}
-            />
-          </div>
-          <div className={smallInputStyles}>
-            <TextInput
-              label="Skip"
-              type="number"
-              value={skip}
-              onChange={(e) => setSkip(e.target.value)}
-            />
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div id="filter-error" className={errorStyles}>
-          {error}
-        </div>
-      )}
     </div>
   )
 }
+
+export default QueryBar

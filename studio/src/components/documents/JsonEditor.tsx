@@ -174,7 +174,7 @@ export function JsonEditor({
         if (error instanceof SyntaxError) {
           // Try to extract position from error message
           const match = error.message.match(/position (\d+)/)
-          const pos = match ? parseInt(match[1], 10) : 0
+          const pos = match?.[1] ? parseInt(match[1], 10) : 0
           return [
             {
               from: Math.min(pos, content.length),
@@ -196,16 +196,12 @@ export function JsonEditor({
     const heightStyles = EditorView.theme({
       '&': {
         height: typeof height === 'number' ? `${height}px` : height,
-        minHeight: minHeight
-          ? typeof minHeight === 'number'
-            ? `${minHeight}px`
-            : minHeight
-          : undefined,
-        maxHeight: maxHeight
-          ? typeof maxHeight === 'number'
-            ? `${maxHeight}px`
-            : maxHeight
-          : undefined,
+        ...(minHeight && {
+          minHeight: typeof minHeight === 'number' ? `${minHeight}px` : minHeight,
+        }),
+        ...(maxHeight && {
+          maxHeight: typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight,
+        }),
       },
       '.cm-scroller': {
         overflow: 'auto',

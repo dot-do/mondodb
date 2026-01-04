@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
-import { H2, Body, InlineCode } from '@leafygreen-ui/typography'
+import { H2, Body } from '@leafygreen-ui/typography'
 import Button from '@leafygreen-ui/button'
 import { Tabs, Tab } from '@leafygreen-ui/tabs'
 import Icon from '@leafygreen-ui/icon'
 import Badge from '@leafygreen-ui/badge'
 import { useDocumentsQuery, useDocumentCountQuery } from '@hooks/useQueries'
 import { DocumentList } from '../documents/DocumentList'
-import { QueryBar } from '../query/QueryBar'
+import { QueryBar, type QueryOptions } from '../query/QueryBar'
 import { SkeletonLoader } from '../SkeletonLoader'
 
 const pageStyles = css`
@@ -71,17 +71,15 @@ export function CollectionPage() {
     return <Body>No collection selected</Body>
   }
 
-  const handleQuerySubmit = (query: {
-    filter?: Record<string, unknown>
-    sort?: Record<string, 1 | -1>
-    limit?: number
-    skip?: number
-  }) => {
-    if (query.filter) setFilter(query.filter)
-    if (query.sort) setSort(query.sort)
+  const handleQueryExecute = useCallback(async (query: QueryOptions): Promise<{ count: number; time: number }> => {
+    const startTime = performance.now()
+    setFilter(query.filter)
+    if (query.sort) setSort(query.sort as Record<string, 1 | -1>)
     if (query.limit !== undefined) setLimit(query.limit)
-    if (query.skip !== undefined) setSkip(query.skip)
-  }
+    await refetch()
+    const endTime = performance.now()
+    return { count: count ?? 0, time: endTime - startTime }
+  }, [refetch, count])
 
   return (
     <div className={pageStyles}>
@@ -110,7 +108,11 @@ export function CollectionPage() {
         >
           <Tab name="Documents">
             <div className={tabContentStyles}>
-              <QueryBar onSubmit={handleQuerySubmit} />
+              <QueryBar
+                database={database}
+                collection={collection}
+                onExecute={handleQueryExecute}
+              />
               {isLoading ? (
                 <SkeletonLoader count={5} height={40} />
               ) : error ? (
@@ -120,8 +122,11 @@ export function CollectionPage() {
               ) : (
                 <DocumentList
                   documents={documents ?? []}
-                  database={database}
-                  collection={collection}
+                  totalCount={count}
+                  page={Math.floor(skip / limit) + 1}
+                  pageSize={limit}
+                  onPageChange={(page) => setSkip((page - 1) * limit)}
+                  onPageSizeChange={setLimit}
                 />
               )}
             </div>
