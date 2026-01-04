@@ -22,6 +22,7 @@ import {
   jsonArrayLength as dialectJsonArrayLength,
   regexMatch as dialectRegexMatch,
 } from './dialect.js';
+import { translateExpression, translateExpressionValue } from './stages/expression-translator.js';
 
 export interface TranslatedQuery {
   sql: string;
@@ -56,6 +57,37 @@ const MONGO_TYPE_TO_SQLITE: Record<string, string | string[]> = {
   object: 'object',
   null: 'null',
 };
+
+/**
+ * JSON Schema type definition for $jsonSchema operator
+ */
+interface JsonSchema {
+  type?: string | string[];
+  bsonType?: string | string[];
+  required?: string[];
+  properties?: Record<string, JsonSchema>;
+  additionalProperties?: boolean | JsonSchema;
+  items?: JsonSchema | JsonSchema[];
+  enum?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number | boolean;
+  exclusiveMaximum?: number | boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minItems?: number;
+  maxItems?: number;
+  uniqueItems?: boolean;
+  minProperties?: number;
+  maxProperties?: number;
+  allOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
+  not?: JsonSchema;
+  description?: string;
+  title?: string;
+}
 
 /**
  * Options for query translation
@@ -205,6 +237,40 @@ export class QueryTranslator {
       // Check that the field is numeric and apply modulo
       // Use CAST to handle float truncation like MongoDB
       return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND CAST(${this.jsonExtract(path)} AS INTEGER) % ? = ?)`;
+    },
+
+    // Bitwise operators
+    $bitsAllSet: (path, value, params) => {
+      // $bitsAllSet: [bit positions] or bitmask number
+      // Matches if all specified bits are set (1)
+      const mask = this.resolveBitmask(value);
+      params.push(mask, mask);
+      // (field & mask) == mask means all bits in mask are set
+      return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND (CAST(${this.jsonExtract(path)} AS INTEGER) & ?) = ?)`;
+    },
+    $bitsAnyClear: (path, value, params) => {
+      // $bitsAnyClear: [bit positions] or bitmask number
+      // Matches if any of the specified bits are clear (0)
+      const mask = this.resolveBitmask(value);
+      params.push(mask, mask);
+      // (field & mask) != mask means at least one bit in mask is clear
+      return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND (CAST(${this.jsonExtract(path)} AS INTEGER) & ?) != ?)`;
+    },
+    $bitsAllClear: (path, value, params) => {
+      // $bitsAllClear: [bit positions] or bitmask number
+      // Matches if all specified bits are clear (0)
+      const mask = this.resolveBitmask(value);
+      params.push(mask);
+      // (field & mask) == 0 means all bits in mask are clear
+      return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND (CAST(${this.jsonExtract(path)} AS INTEGER) & ?) = 0)`;
+    },
+    $bitsAnySet: (path, value, params) => {
+      // $bitsAnySet: [bit positions] or bitmask number
+      // Matches if any of the specified bits are set (1)
+      const mask = this.resolveBitmask(value);
+      params.push(mask);
+      // (field & mask) != 0 means at least one bit in mask is set
+      return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND (CAST(${this.jsonExtract(path)} AS INTEGER) & ?) != 0)`;
     },
   };
 
@@ -560,6 +626,29 @@ export class QueryTranslator {
         return sql;
       }
 
+      case '$expr': {
+        // $expr allows use of aggregation expressions in the query language
+        // It enables comparing fields within the same document
+        const exprResult = translateExpression(value as Record<string, unknown>, params, this.dialect);
+        return exprResult;
+      }
+
+      case '$jsonSchema': {
+        // $jsonSchema validates documents against a JSON Schema
+        const schema = value as JsonSchema;
+        return this.translateJsonSchema(schema, '$', params);
+      }
+
+      case '$where': {
+        // $where executes JavaScript expressions - NOT SUPPORTED due to security risks
+        // MongoDB's $where allows arbitrary JavaScript execution which is a security risk
+        // In a SQL context, we cannot safely execute JavaScript
+        throw new Error(
+          '$where operator is not supported due to security risks. ' +
+          'Use $expr with aggregation expressions instead for field comparisons.'
+        );
+      }
+
       default:
         throw new Error(`Unknown logical operator: ${op}`);
     }
@@ -602,6 +691,24 @@ export class QueryTranslator {
     }
     // Otherwise, it's a direct reference (for elemMatch context)
     return path;
+  }
+
+  /**
+   * Convert a bitwise operator value to a bitmask
+   * Accepts either:
+   * - A number (used directly as bitmask)
+   * - An array of bit positions (converted to bitmask)
+   */
+  private resolveBitmask(value: unknown): number {
+    if (typeof value === 'number') {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      // Convert array of bit positions to bitmask
+      // e.g., [0, 2, 4] -> 0b10101 = 21
+      return value.reduce((mask: number, pos: number) => mask | (1 << pos), 0);
+    }
+    throw new Error('Bitwise operator value must be a number or array of bit positions');
   }
 
   /**
@@ -1220,5 +1327,174 @@ export class QueryTranslator {
       requiresFTS: true,
       ftsMatch,
     };
+  }
+
+  /**
+   * Translate a JSON Schema to SQL conditions
+   * Supports common JSON Schema validation keywords
+   *
+   * @param schema The JSON Schema to validate against
+   * @param path The current JSON path (e.g., "$.field.nested")
+   * @param params The parameters array to push values to
+   */
+  private translateJsonSchema(
+    schema: JsonSchema,
+    path: string,
+    params: unknown[]
+  ): string {
+    const conditions: string[] = [];
+    const jsonPath = path === '$' ? 'data' : `json_extract(data, '${path}')`;
+    const typeExpr = path === '$'
+      ? 'json_type(data)'
+      : dialectJsonType(this.dialect, 'data', path);
+
+    // Handle type/bsonType constraint
+    const schemaType = schema.type || schema.bsonType;
+    if (schemaType) {
+      const types = Array.isArray(schemaType) ? schemaType : [schemaType];
+      const typeConditions = types.map(t => {
+        const sqlType = MONGO_TYPE_TO_SQLITE[t];
+        if (Array.isArray(sqlType)) {
+          return `${typeExpr} IN (${sqlType.map(st => `'${st}'`).join(', ')})`;
+        }
+        return `${typeExpr} = '${sqlType || t}'`;
+      });
+      if (typeConditions.length === 1) {
+        conditions.push(typeConditions[0]);
+      } else {
+        conditions.push(`(${typeConditions.join(' OR ')})`);
+      }
+    }
+
+    // Handle required fields
+    if (schema.required && schema.required.length > 0) {
+      for (const field of schema.required) {
+        validateFieldPath(field);
+        const fieldPath = path === '$' ? `$.${field}` : `${path}.${field}`;
+        const existsExpr = dialectJsonTypeWithPath(this.dialect, 'data', fieldPath);
+        conditions.push(`${existsExpr} IS NOT NULL`);
+      }
+    }
+
+    // Handle properties
+    if (schema.properties) {
+      for (const [field, propSchema] of Object.entries(schema.properties)) {
+        validateFieldPath(field);
+        const fieldPath = path === '$' ? `$.${field}` : `${path}.${field}`;
+        const existsExpr = dialectJsonTypeWithPath(this.dialect, 'data', fieldPath);
+        // Property validation only applies if the field exists
+        const propCondition = this.translateJsonSchema(propSchema, fieldPath, params);
+        if (propCondition !== '1 = 1') {
+          conditions.push(`(${existsExpr} IS NULL OR ${propCondition})`);
+        }
+      }
+    }
+
+    // Handle enum constraint
+    if (schema.enum && schema.enum.length > 0) {
+      const enumValues = schema.enum.map(v => {
+        if (v === null) return 'NULL';
+        params.push(typeof v === 'object' ? JSON.stringify(v) : v);
+        return '?';
+      });
+      const nullIncluded = schema.enum.includes(null);
+      const nonNullValues = enumValues.filter(v => v !== 'NULL');
+      if (nullIncluded && nonNullValues.length > 0) {
+        conditions.push(`(${jsonPath} IS NULL OR ${jsonPath} IN (${nonNullValues.join(', ')}))`);
+      } else if (nullIncluded) {
+        conditions.push(`${jsonPath} IS NULL`);
+      } else {
+        conditions.push(`${jsonPath} IN (${enumValues.join(', ')})`);
+      }
+    }
+
+    // Handle minimum/maximum for numbers
+    if (schema.minimum !== undefined) {
+      params.push(schema.minimum);
+      conditions.push(`${jsonPath} >= ?`);
+    }
+    if (schema.maximum !== undefined) {
+      params.push(schema.maximum);
+      conditions.push(`${jsonPath} <= ?`);
+    }
+    if (schema.exclusiveMinimum !== undefined) {
+      const val = typeof schema.exclusiveMinimum === 'boolean' ? schema.minimum : schema.exclusiveMinimum;
+      if (val !== undefined) {
+        params.push(val);
+        conditions.push(`${jsonPath} > ?`);
+      }
+    }
+    if (schema.exclusiveMaximum !== undefined) {
+      const val = typeof schema.exclusiveMaximum === 'boolean' ? schema.maximum : schema.exclusiveMaximum;
+      if (val !== undefined) {
+        params.push(val);
+        conditions.push(`${jsonPath} < ?`);
+      }
+    }
+
+    // Handle minLength/maxLength for strings
+    if (schema.minLength !== undefined) {
+      params.push(schema.minLength);
+      conditions.push(`LENGTH(${jsonPath}) >= ?`);
+    }
+    if (schema.maxLength !== undefined) {
+      params.push(schema.maxLength);
+      conditions.push(`LENGTH(${jsonPath}) <= ?`);
+    }
+
+    // Handle pattern for strings
+    if (schema.pattern) {
+      const likePattern = this.regexToLike(schema.pattern);
+      params.push(likePattern);
+      conditions.push(`${jsonPath} LIKE ?`);
+    }
+
+    // Handle minItems/maxItems for arrays
+    if (schema.minItems !== undefined) {
+      params.push(schema.minItems);
+      const lenExpr = dialectJsonArrayLength(this.dialect, 'data', path);
+      conditions.push(`${lenExpr} >= ?`);
+    }
+    if (schema.maxItems !== undefined) {
+      params.push(schema.maxItems);
+      const lenExpr = dialectJsonArrayLength(this.dialect, 'data', path);
+      conditions.push(`${lenExpr} <= ?`);
+    }
+
+    // Handle allOf - all schemas must match
+    if (schema.allOf && schema.allOf.length > 0) {
+      const allOfConditions = schema.allOf.map(s => this.translateJsonSchema(s, path, params));
+      conditions.push(`(${allOfConditions.join(' AND ')})`);
+    }
+
+    // Handle anyOf - at least one schema must match
+    if (schema.anyOf && schema.anyOf.length > 0) {
+      const anyOfConditions = schema.anyOf.map(s => this.translateJsonSchema(s, path, params));
+      conditions.push(`(${anyOfConditions.join(' OR ')})`);
+    }
+
+    // Handle oneOf - exactly one schema must match (approximated with OR for SQL)
+    if (schema.oneOf && schema.oneOf.length > 0) {
+      // Note: True oneOf validation (exactly one match) is complex in SQL
+      // We approximate with anyOf behavior since exact oneOf requires counting matches
+      const oneOfConditions = schema.oneOf.map(s => this.translateJsonSchema(s, path, params));
+      conditions.push(`(${oneOfConditions.join(' OR ')})`);
+    }
+
+    // Handle not - schema must not match
+    if (schema.not) {
+      const notCondition = this.translateJsonSchema(schema.not, path, params);
+      conditions.push(`NOT (${notCondition})`);
+    }
+
+    if (conditions.length === 0) {
+      return '1 = 1';
+    }
+
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+
+    return `(${conditions.join(' AND ')})`;
   }
 }

@@ -12,6 +12,154 @@ export interface TranslatedUpdate {
   params: unknown[];
 }
 
+/**
+ * Context for positional array updates.
+ * Contains information needed to resolve positional operators.
+ */
+export interface PositionalContext {
+  /** The matched array index for $ operator (from query phase) */
+  matchedIndex?: number;
+  /** The matched indices map: array path -> index for nested positional operators */
+  matchedIndices?: Map<string, number>;
+  /** Array filters for $[identifier] operators */
+  arrayFilters?: ArrayFilter[];
+}
+
+/**
+ * An array filter specification for $[identifier] operators.
+ * Used to identify and update specific array elements matching conditions.
+ */
+export interface ArrayFilter {
+  /** The identifier used in the path (e.g., "elem" for $[elem]) */
+  identifier: string;
+  /** The filter conditions to match against array elements */
+  conditions: Record<string, unknown>;
+}
+
+/**
+ * Parses arrayFilters option into ArrayFilter objects.
+ *
+ * @param arrayFilters - Array of filter objects from MongoDB update options
+ * @returns Parsed ArrayFilter array
+ *
+ * @example
+ * parseArrayFilters([{ "elem.status": "pending" }])
+ * // Returns: [{ identifier: "elem", conditions: { status: "pending" } }]
+ */
+export function parseArrayFilters(arrayFilters: Record<string, unknown>[]): ArrayFilter[] {
+  const result: ArrayFilter[] = [];
+
+  for (const filter of arrayFilters) {
+    // Each filter object should have keys like "elem.field" or "elem.field.nested"
+    // The identifier is the first part before the dot
+    const entries = Object.entries(filter);
+    if (entries.length === 0) continue;
+
+    // Group by identifier
+    const byIdentifier = new Map<string, Record<string, unknown>>();
+
+    for (const [key, value] of entries) {
+      const dotIndex = key.indexOf('.');
+      if (dotIndex === -1) {
+        // No dot - the key itself is the identifier with a direct condition
+        // This handles cases like { elem: { $gt: 5 } }
+        const identifier = key;
+        if (!byIdentifier.has(identifier)) {
+          byIdentifier.set(identifier, {});
+        }
+        // Store the condition directly - this is a condition on the element itself
+        byIdentifier.get(identifier)!['$elemCondition'] = value;
+      } else {
+        const identifier = key.substring(0, dotIndex);
+        const field = key.substring(dotIndex + 1);
+
+        if (!byIdentifier.has(identifier)) {
+          byIdentifier.set(identifier, {});
+        }
+        byIdentifier.get(identifier)![field] = value;
+      }
+    }
+
+    for (const [identifier, conditions] of byIdentifier) {
+      result.push({ identifier, conditions });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Information about a positional operator found in a field path.
+ */
+interface PositionalOperator {
+  /** The type of positional operator */
+  type: 'first' | 'all' | 'filtered';
+  /** For filtered operators, the identifier name (e.g., "elem" from $[elem]) */
+  identifier?: string;
+  /** The index in the path where this operator was found */
+  pathIndex: number;
+  /** The array path up to this operator */
+  arrayPath: string;
+}
+
+/**
+ * Parses a field path to detect positional operators.
+ * Returns information about any positional operators found.
+ *
+ * @example
+ * parsePositionalPath("items.$.price")  // { type: 'first', arrayPath: 'items' }
+ * parsePositionalPath("items.$[].qty")  // { type: 'all', arrayPath: 'items' }
+ * parsePositionalPath("items.$[elem].status")  // { type: 'filtered', identifier: 'elem', arrayPath: 'items' }
+ */
+function parsePositionalPath(path: string): { operators: PositionalOperator[]; segments: string[] } {
+  const segments = path.split('.');
+  const operators: PositionalOperator[] = [];
+  let currentArrayPath = '';
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment === '$') {
+      // $ - positional operator for first matching element
+      operators.push({
+        type: 'first',
+        pathIndex: i,
+        arrayPath: currentArrayPath
+      });
+    } else if (segment === '$[]') {
+      // $[] - update all array elements
+      operators.push({
+        type: 'all',
+        pathIndex: i,
+        arrayPath: currentArrayPath
+      });
+    } else if (segment.startsWith('$[') && segment.endsWith(']')) {
+      // $[identifier] - filtered positional operator
+      const identifier = segment.slice(2, -1);
+      if (identifier) {
+        operators.push({
+          type: 'filtered',
+          identifier,
+          pathIndex: i,
+          arrayPath: currentArrayPath
+        });
+      }
+    } else {
+      // Regular field - add to array path
+      currentArrayPath = currentArrayPath ? `${currentArrayPath}.${segment}` : segment;
+    }
+  }
+
+  return { operators, segments };
+}
+
+/**
+ * Checks if a field path contains positional operators.
+ */
+function hasPositionalOperator(path: string): boolean {
+  return path.includes('.$') || path.includes('.$[');
+}
+
 type UpdateOperation = {
   sql: string;
   params: unknown[];
@@ -30,6 +178,25 @@ interface PendingUpdate {
 }
 
 /**
+ * Validates a field path segment, skipping positional operators.
+ * Positional operators ($, $[], $[identifier]) are not validated.
+ */
+function validateFieldPathSegment(segment: string): void {
+  // Skip validation for positional operators
+  if (segment === '$' || segment === '$[]' || (segment.startsWith('$[') && segment.endsWith(']'))) {
+    return;
+  }
+  // Skip validation for numeric indices
+  if (/^\d+$/.test(segment)) {
+    return;
+  }
+  // Validate regular field names - allow alphanumeric, underscore, and hyphen
+  if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(segment) && segment !== '') {
+    throw new Error(`Invalid field path segment: ${segment}`);
+  }
+}
+
+/**
  * Converts a MongoDB-style field path to a JSONPath expression.
  * Handles nested paths and array indices.
  *
@@ -42,8 +209,17 @@ interface PendingUpdate {
  * @throws Error if field path contains invalid characters
  */
 function toJsonPath(fieldPath: string): string {
-  // Validate the entire field path to prevent SQL injection
-  validateFieldPath(fieldPath);
+  // Check if path has positional operators - if so, use the specialized function
+  if (hasPositionalOperator(fieldPath)) {
+    // Don't validate the whole path at once; validate segments individually
+    const parts = fieldPath.split('.');
+    for (const part of parts) {
+      validateFieldPathSegment(part);
+    }
+  } else {
+    // Validate the entire field path to prevent SQL injection
+    validateFieldPath(fieldPath);
+  }
 
   const parts = fieldPath.split('.');
   let result = '$';
@@ -52,8 +228,47 @@ function toJsonPath(fieldPath: string): string {
     // Check if this part is a numeric array index
     if (/^\d+$/.test(part)) {
       result += `[${part}]`;
+    } else if (part === '$' || part === '$[]' || (part.startsWith('$[') && part.endsWith(']'))) {
+      // Positional operators are kept as-is for later processing
+      result += `.${part}`;
     } else {
       result += `.${part}`;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Converts a field path with a resolved positional index to JSONPath.
+ * Used when we know the specific array index to update.
+ *
+ * @param fieldPath - The original path with positional operator
+ * @param arrayPath - The path to the array (e.g., "items")
+ * @param index - The resolved array index
+ * @returns JSONPath with the index substituted
+ */
+function toJsonPathWithIndex(fieldPath: string, arrayPath: string, index: number): string {
+  const { operators, segments } = parsePositionalPath(fieldPath);
+
+  if (operators.length === 0) {
+    return toJsonPath(fieldPath);
+  }
+
+  // Reconstruct the path with the index substituted
+  let result = '$';
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+
+    if (segment === '$') {
+      result += `[${index}]`;
+    } else if (/^\d+$/.test(segment)) {
+      result += `[${segment}]`;
+    } else if (segment === '$[]' || (segment.startsWith('$[') && segment.endsWith(']'))) {
+      // For $[] and $[identifier], we'll handle in a different way
+      result += `.${segment}`;
+    } else {
+      result += `.${segment}`;
     }
   }
 
@@ -183,13 +398,14 @@ function createValueExpression(value: unknown): { sql: string; params: unknown[]
 export class UpdateTranslator {
   private static readonly SUPPORTED_OPERATORS = new Set([
     '$set', '$unset', '$inc', '$mul', '$min', '$max', '$rename',
-    '$push', '$pull', '$addToSet', '$pop'
+    '$push', '$pull', '$addToSet', '$pop', '$bit', '$pullAll', '$setOnInsert'
   ]);
 
   // Operator processing order - ensures proper nesting and conflict resolution
+  // $setOnInsert is handled specially and not processed here (it requires upsert context)
   private static readonly OPERATOR_ORDER = [
-    '$rename', '$unset', '$set', '$inc', '$mul', '$min', '$max',
-    '$push', '$addToSet', '$pull', '$pop'
+    '$rename', '$unset', '$set', '$setOnInsert', '$inc', '$mul', '$min', '$max', '$bit',
+    '$push', '$addToSet', '$pull', '$pullAll', '$pop'
   ];
 
   /**
@@ -271,6 +487,12 @@ export class UpdateTranslator {
         return this.translateAddToSet(fields, baseSql, baseParams);
       case '$pop':
         return this.translatePop(fields, baseSql, baseParams);
+      case '$bit':
+        return this.translateBit(fields, baseSql, baseParams);
+      case '$pullAll':
+        return this.translatePullAll(fields, baseSql, baseParams);
+      case '$setOnInsert':
+        return this.translateSetOnInsert(fields, baseSql, baseParams);
       default:
         throw new Error(`Unsupported operator: ${operator}`);
     }
