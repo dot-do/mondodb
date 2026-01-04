@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { MongoClient } from '../../src/client/mongo-client'
+import { MongoClient } from '../../src/client/MongoClient'
 import { MongoDatabase } from '../../src/client/mongo-database'
 import { MongoCollection } from '../../src/client/mongo-collection'
 import { ObjectId } from '../../src/types/objectid'

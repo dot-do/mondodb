@@ -7,8 +7,14 @@
 
 export {
   serializeForEmbedding,
+  serializeDocument,
+  serializeDocuments,
+  DocumentSerializer,
   type SerializationOptions,
-  type AutoEmbeddingConfig
+  type AutoEmbeddingConfig,
+  type SerializedDocument,
+  type VectorizeMetadata,
+  type VectorizeMetadataValue
 } from './document-serializer';
 
 export {

@@ -5,6 +5,7 @@
 
 import type { StageResult, StageContext } from './types'
 import { translateExpressionValue, isFieldReference, getFieldPath } from './expression-translator'
+import { validateFieldPath } from '../../utils/sql-safety.js'
 
 export function translateAddFieldsStage(
   addFields: Record<string, unknown>,
@@ -17,6 +18,8 @@ export function translateAddFieldsStage(
   let result = 'data'
 
   for (const [field, value] of Object.entries(addFields)) {
+    // Validate field name to prevent SQL injection
+    validateFieldPath(field)
     const jsonPath = `'$.${field}'`
 
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -24,7 +27,7 @@ export function translateAddFieldsStage(
       const exprSql = translateExpressionValue(value, params)
       result = `json_set(${result}, ${jsonPath}, ${exprSql})`
     } else if (isFieldReference(value)) {
-      // Field reference
+      // Field reference - getFieldPath validates the field
       const fieldPath = getFieldPath(value)
       result = `json_set(${result}, ${jsonPath}, json_extract(data, '${fieldPath}'))`
     } else if (typeof value === 'string') {

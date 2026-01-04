@@ -1375,13 +1375,11 @@ export class MongoCollection<TSchema extends Document = Document>
     let func: (...args: unknown[]) => unknown | Promise<unknown>
 
     if (typeof fn.body === 'string') {
-      // Parse function from string
-      try {
-        // eslint-disable-next-line no-new-func
-        func = new Function('return ' + fn.body)() as (...args: unknown[]) => unknown
-      } catch (error) {
-        throw new Error(`Failed to parse $function body: ${error}`)
-      }
+      // String function bodies require secure worker-loader execution
+      throw new Error(
+        '$function requires worker_loaders binding. ' +
+        'Add to wrangler.jsonc: "worker_loaders": [{ "binding": "LOADER" }]'
+      )
     } else {
       func = fn.body
     }

@@ -19,13 +19,22 @@ export type Migration = {
 
 /**
  * SQL statements for initial schema (v1)
+ *
+ * UNIFIED SCHEMA: This schema supports both MondoDatabase and IndexManager:
+ * - collections table: stores collection metadata including indexes JSON
+ * - documents table: stores documents with _id as the document identifier
+ *
+ * Both components import these definitions from schema.ts which re-exports them.
  */
 const INITIAL_SCHEMA_SQL = {
   createCollections: `
     CREATE TABLE IF NOT EXISTS collections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
-      options TEXT DEFAULT '{}'
+      options TEXT DEFAULT '{}',
+      indexes TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     )
   `.trim(),
 
@@ -33,8 +42,11 @@ const INITIAL_SCHEMA_SQL = {
     CREATE TABLE IF NOT EXISTS documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       collection_id INTEGER NOT NULL,
-      _id TEXT NOT NULL UNIQUE,
+      _id TEXT NOT NULL,
       data TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(collection_id, _id),
       FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
     )
   `.trim(),

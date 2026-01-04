@@ -5,7 +5,7 @@
  */
 
 // Server
-export { WireProtocolServer, createServer, type ServerOptions } from './server.js'
+export { WireProtocolServer, createServer, type ServerOptions, type TlsOptions } from './server.js'
 
 // Types
 export * from './types.js'
@@ -44,4 +44,15 @@ export type {
 export { LocalSQLiteBackend } from './backend/local-sqlite.js'
 
 // Command router
-export { CommandRouter } from './commands/router.js'
+export { CommandRouter, type RouterOptions } from './commands/router.js'
+
+// Authentication
+export {
+  ScramAuthenticator,
+  InMemoryCredentialsProvider,
+  createScramCredentials,
+  type StoredCredentials,
+  type CredentialsProvider,
+} from './auth/scram.js'
+export { requiresAuthentication, UNAUTHENTICATED_COMMANDS } from './commands/auth.js'
+export type { AuthOptions } from './server.js'

@@ -10,6 +10,8 @@
  * - $text operator for full-text search with FTS5
  */
 
+import { validateFieldPath } from '../utils/sql-safety.js';
+
 export interface TranslatedQuery {
   sql: string;
   params: unknown[];
@@ -132,6 +134,48 @@ export class QueryTranslator {
       const placeholders = arr.map(() => '?').join(', ');
       return `${this.jsonExtract(path)} NOT IN (${placeholders})`;
     },
+    $regex: (path, value, params) => {
+      // Handle both { $regex: "pattern" } and { $regex: "pattern", $options: "i" }
+      // Also handle direct { field: { $regex: /pattern/i } } form
+      let pattern: string;
+      let options: string = '';
+
+      if (typeof value === 'string') {
+        pattern = value;
+      } else if (value instanceof RegExp) {
+        pattern = value.source;
+        options = value.flags;
+      } else if (value && typeof value === 'object') {
+        const regexObj = value as { $regex?: string; $options?: string };
+        pattern = regexObj.$regex || '';
+        options = regexObj.$options || '';
+      } else {
+        pattern = String(value);
+      }
+
+      // Convert regex pattern to SQLite LIKE pattern
+      // This is a simplified conversion that handles common cases
+      const likePattern = this.regexToLike(pattern, options);
+      params.push(likePattern);
+
+      // First ensure the field is a string type (regex only works on strings)
+      const typeCheck = `json_type(${this.jsonExtract(path)}) = 'text'`;
+
+      // For case-insensitive matching, use LIKE with LOWER()
+      // SQLite LIKE is case-insensitive for ASCII by default, but we use LOWER for consistency
+      if (options.includes('i')) {
+        return `(${typeCheck} AND LOWER(${this.jsonExtract(path)}) LIKE LOWER(?))`;
+      }
+      return `(${typeCheck} AND ${this.jsonExtract(path)} LIKE ?)`;
+    },
+    $mod: (path, value, params) => {
+      // $mod: [divisor, remainder] - matches if field % divisor == remainder
+      const [divisor, remainder] = value as [number, number];
+      params.push(divisor, remainder);
+      // Check that the field is numeric and apply modulo
+      // Use CAST to handle float truncation like MongoDB
+      return `(json_type(${this.jsonExtract(path)}) IN ('integer', 'real') AND CAST(${this.jsonExtract(path)} AS INTEGER) % ? = ?)`;
+    },
   };
 
   /**
@@ -139,10 +183,25 @@ export class QueryTranslator {
    */
   private elementOperators: Record<string, OperatorHandler> = {
     $exists: (path, value, _params) => {
-      if (value) {
-        return `${this.jsonExtract(path)} IS NOT NULL`;
+      // MongoDB $exists distinguishes between missing fields and null values:
+      // - $exists: true  -> field exists (including explicit null values)
+      // - $exists: false -> field is completely missing from the document
+      //
+      // SQLite's json_extract returns NULL for both missing fields AND null values,
+      // but json_type returns 'null' for explicit nulls and NULL for missing fields.
+      // So we use json_type to properly detect field existence.
+      if (path.startsWith('$')) {
+        // JSON path - use json_type on data column
+        if (value) {
+          return `json_type(data, '${path}') IS NOT NULL`;
+        }
+        return `json_type(data, '${path}') IS NULL`;
       }
-      return `${this.jsonExtract(path)} IS NULL`;
+      // Direct reference (for elemMatch context) - use json_type
+      if (value) {
+        return `json_type(${path}) IS NOT NULL`;
+      }
+      return `json_type(${path}) IS NULL`;
     },
     $type: (path, value, _params) => {
       const mongoType = value as string;
@@ -339,7 +398,15 @@ export class QueryTranslator {
   ): string {
     const sqlParts: string[] = [];
 
+    // Check for $regex with sibling $options
+    const hasRegexWithOptions = '$regex' in conditions && '$options' in conditions;
+
     for (const [op, value] of Object.entries(conditions)) {
+      // Skip $options when it's a sibling of $regex (handled together with $regex)
+      if (op === '$options' && hasRegexWithOptions) {
+        continue;
+      }
+
       let sql: string;
 
       if (op === '$not') {
@@ -347,6 +414,11 @@ export class QueryTranslator {
         const innerConditions = value as Record<string, unknown>;
         const innerSql = this.translateFieldConditions(path, innerConditions, params, isElemMatch);
         sql = `NOT (${innerSql})`;
+      } else if (op === '$regex' && hasRegexWithOptions) {
+        // Handle $regex with sibling $options
+        const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
+        const regexValue = { $regex: value, $options: conditions.$options };
+        sql = this.comparisonOperators[op](actualPath, regexValue, params);
       } else if (this.comparisonOperators[op]) {
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
         sql = this.comparisonOperators[op](actualPath, value, params);
@@ -444,8 +516,14 @@ export class QueryTranslator {
    * Convert a field name to a JSON path
    * e.g., "a.b.c" -> "$.a.b.c"
    * e.g., "items.0.name" -> "$.items[0].name"
+   *
+   * SECURITY: Validates field name to prevent SQL injection attacks.
+   * @throws Error if field contains invalid characters
    */
   private fieldToJsonPath(field: string): string {
+    // Validate the entire field path to prevent SQL injection
+    validateFieldPath(field);
+
     const parts = field.split('.');
     let path = '$';
 
@@ -475,6 +553,7 @@ export class QueryTranslator {
 
   /**
    * Generate path for elemMatch field access
+   * SECURITY: Validates field name to prevent SQL injection attacks.
    */
   private elemMatchFieldPath(basePath: string, field: string): string {
     if (basePath === 'value') {
@@ -482,17 +561,152 @@ export class QueryTranslator {
       if (field === '') {
         return 'value';
       }
+      // Validate field name to prevent SQL injection
+      validateFieldPath(field);
       return `json_extract(value, '$.${field}')`;
     }
     if (field === '') {
       return basePath;
     }
+    // Validate field name to prevent SQL injection
+    validateFieldPath(field);
     return `${basePath}.${field}`;
+  }
+
+  /**
+   * Convert a regex pattern to SQLite LIKE/GLOB pattern
+   * This handles common regex patterns:
+   * - ^pattern -> pattern% (starts with)
+   * - pattern$ -> %pattern (ends with)
+   * - ^pattern$ -> pattern (exact match)
+   * - .* or .+ -> % (any characters)
+   * - . -> _ (single character)
+   * - [0-9] -> character class (converted to GLOB syntax)
+   * - [a-z] -> character class (converted to GLOB syntax)
+   * - Literal text -> %text% (contains, default behavior)
+   *
+   * @param pattern The regex pattern to convert
+   * @param options Regex options (i=case-insensitive, m=multiline)
+   */
+  private regexToLike(pattern: string, options: string = ''): string {
+    // For multiline mode, we need special handling of ^ and $
+    // In multiline mode, ^ matches start of line (after \n) and $ matches before \n
+    const isMultiline = options.includes('m');
+
+    // Handle anchors
+    let startsWithAnchor = pattern.startsWith('^');
+    let endsWithAnchor = pattern.endsWith('$') && !pattern.endsWith('\\$');
+
+    // In multiline mode, anchors match line boundaries, not string boundaries
+    // Since LIKE can't match line boundaries, we convert to contains match
+    if (isMultiline && (startsWithAnchor || endsWithAnchor)) {
+      // For multiline, we treat ^ and $ as matching within the string
+      // This is an approximation - LIKE can't truly match line boundaries
+      // But we can check for patterns after newline or before newline
+      startsWithAnchor = false;
+      endsWithAnchor = false;
+    }
+
+    // Remove anchors for processing
+    let processed = pattern;
+    if (pattern.startsWith('^')) {
+      processed = processed.slice(1);
+    }
+    if (processed.endsWith('$') && !processed.endsWith('\\$')) {
+      processed = processed.slice(0, -1);
+    }
+
+    // Process character by character to handle escaping properly
+    let result = '';
+    let i = 0;
+    while (i < processed.length) {
+      const char = processed[i];
+      const nextChar = processed[i + 1];
+
+      if (char === '\\' && nextChar !== undefined) {
+        // Escaped character in regex - keep literal character
+        // But we need to escape it for LIKE if it's a special LIKE character
+        if (nextChar === '%' || nextChar === '_') {
+          result += '\\' + nextChar;
+        } else {
+          result += nextChar;
+        }
+        i += 2;
+      } else if (char === '[') {
+        // Character class - find the closing bracket
+        const endBracket = processed.indexOf(']', i + 1);
+        if (endBracket !== -1) {
+          const charClass = processed.slice(i + 1, endBracket);
+          // Convert common character classes to approximate LIKE patterns
+          // [0-9] -> _ (single digit) or % for multiple
+          // [a-zA-Z] -> _ (single letter)
+          // For now, use _ as a single character match (approximation)
+          if (charClass.includes('+') || processed[endBracket + 1] === '+') {
+            result += '%';
+            i = endBracket + (processed[endBracket + 1] === '+' ? 2 : 1);
+          } else if (processed[endBracket + 1] === '*') {
+            result += '%';
+            i = endBracket + 2;
+          } else {
+            result += '_';
+            i = endBracket + 1;
+          }
+        } else {
+          // No closing bracket, treat [ as literal
+          result += char;
+          i += 1;
+        }
+      } else if (char === '.' && nextChar === '*') {
+        // .* -> % (any characters)
+        result += '%';
+        i += 2;
+      } else if (char === '.' && nextChar === '+') {
+        // .+ -> % (one or more characters, approximate with %)
+        result += '%';
+        i += 2;
+      } else if (char === '.') {
+        // . -> _ (single character)
+        result += '_';
+        i += 1;
+      } else if (char === '%') {
+        // Escape literal % for LIKE
+        result += '\\%';
+        i += 1;
+      } else if (char === '_') {
+        // Escape literal _ for LIKE
+        result += '\\_';
+        i += 1;
+      } else if (char === '+' || char === '*' || char === '?' || char === '|' || char === '(' || char === ')') {
+        // Skip regex quantifiers and grouping - not directly translatable to LIKE
+        // These would need more sophisticated handling
+        i += 1;
+      } else {
+        // Regular character
+        result += char;
+        i += 1;
+      }
+    }
+
+    // Apply wildcards based on anchors
+    if (!startsWithAnchor && !endsWithAnchor) {
+      // No anchors: match anywhere (contains)
+      return `%${result}%`;
+    } else if (startsWithAnchor && !endsWithAnchor) {
+      // Starts with anchor only
+      return `${result}%`;
+    } else if (!startsWithAnchor && endsWithAnchor) {
+      // Ends with anchor only
+      return `%${result}`;
+    } else {
+      // Both anchors: exact match
+      return result;
+    }
   }
 
   /**
    * Translate conditions inside $elemMatch
    * This handles document conditions like { field: value, field: { $op: value } }
+   * SECURITY: Validates field names to prevent SQL injection attacks.
    */
   private translateElemMatchConditions(
     conditions: Record<string, unknown>,
@@ -501,6 +715,8 @@ export class QueryTranslator {
     const sqlParts: string[] = [];
 
     for (const [field, value] of Object.entries(conditions)) {
+      // Validate field name to prevent SQL injection
+      validateFieldPath(field);
       // In elemMatch, 'value' refers to the current array element from json_each
       // For nested fields, we use json_extract(value, '$.field')
       const extractPath = `json_extract(value, '$.${field}')`;
@@ -592,7 +808,43 @@ export class QueryTranslator {
         return `${path} NOT IN (${arr.map(() => '?').join(', ')})`;
       }
       case '$exists':
-        return value ? `${path} IS NOT NULL` : `${path} IS NULL`;
+        // Use json_type to distinguish between null values and missing fields
+        return value ? `json_type(${path}) IS NOT NULL` : `json_type(${path}) IS NULL`;
+      case '$regex': {
+        // Handle $regex in elemMatch context
+        let pattern: string;
+        let options: string = '';
+
+        if (typeof value === 'string') {
+          pattern = value;
+        } else if (value instanceof RegExp) {
+          pattern = value.source;
+          options = value.flags;
+        } else if (value && typeof value === 'object') {
+          const regexObj = value as { $regex?: string; $options?: string };
+          pattern = regexObj.$regex || '';
+          options = regexObj.$options || '';
+        } else {
+          pattern = String(value);
+        }
+
+        const likePattern = this.regexToLike(pattern, options);
+        params.push(likePattern);
+
+        // Add type check to ensure we only match string values
+        const typeCheck = `json_type(${path}) = 'text'`;
+
+        if (options.includes('i')) {
+          return `(${typeCheck} AND LOWER(${path}) LIKE LOWER(?))`;
+        }
+        return `(${typeCheck} AND ${path} LIKE ?)`;
+      }
+      case '$mod': {
+        // Handle $mod in elemMatch context
+        const [divisor, remainder] = value as [number, number];
+        params.push(divisor, remainder);
+        return `(json_type(${path}) IN ('integer', 'real') AND CAST(${path} AS INTEGER) % ? = ?)`;
+      }
       default:
         throw new Error(`Unsupported operator in $elemMatch: ${op}`);
     }

@@ -4,7 +4,7 @@
  * Provides collection access and database-level operations.
  */
 
-import { MongoClient } from './mongo-client'
+import { MongoClient } from './MongoClient'
 import { MongoCollection } from './mongo-collection'
 
 export interface CreateCollectionOptions {

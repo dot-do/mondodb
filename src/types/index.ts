@@ -9,11 +9,57 @@ export type {
   FunctionContext,
   FunctionResult,
   FunctionExpression,
-  WorkerLoader,
-  WorkerCode,
-  WorkerStub,
-  WorkerEntrypoint,
 } from './function'
+
+// Re-export RPC types (consolidated)
+export {
+  // Cloudflare types
+  type DurableObjectNamespace,
+  type DurableObjectId,
+  type DurableObjectStub,
+  // Environment types
+  type MondoEnv,
+  // Worker loader types
+  type WorkerLoader,
+  type WorkerCode,
+  type WorkerStub,
+  type WorkerEntrypoint,
+  // JSON-RPC style types
+  type RpcRequest,
+  type RpcResponse,
+  type BatchResponse,
+  // HTTP RPC types
+  type HttpRpcRequest,
+  type HttpRpcSuccessResponse,
+  type HttpRpcErrorResponse,
+  type HttpRpcResponse,
+  // Legacy RPC types
+  MessageType,
+  type LegacyRpcRequest,
+  type LegacyRpcResponse,
+  // Database reference types
+  type DatabaseRef,
+  type CollectionRef,
+  // Batched executor types
+  type BatchedExecutorOptions,
+  type PipelineOp,
+  // RPC client types
+  type RpcClientOptions,
+  type DeduplicatorOptions,
+  type EventHandler,
+  type ReconnectEvent,
+  // RPC handler types
+  type RpcHandler,
+  // Error codes
+  ErrorCode,
+  type ErrorCodeValue,
+  getErrorCodeName,
+  // Response helpers
+  successResponse,
+  errorResponse,
+  legacySuccessResponse,
+  legacyErrorResponse,
+} from './rpc'
 
 /**
  * Index specification type
@@ -130,7 +176,9 @@ export interface UpdateResult {
   acknowledged: boolean
   matchedCount: number
   modifiedCount: number
-  upsertedCount: number
+  /** Number of documents upserted (only present when upsert: true was used) */
+  upsertedCount?: number
+  /** ID of the upserted document (only present when a document was upserted) */
   upsertedId?: string
 }
 

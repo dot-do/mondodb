@@ -44,3 +44,33 @@ export type { KVStorageBackend, KVStorageDocument } from './kv-store'
 // Tool call audit logging
 export { ToolCallAuditLog, createInMemoryAuditBackend, ImmutableEntryError } from './toolcalls'
 export type { ToolCallEntry, AuditBackend, AuditQueryOptions, TimeRange, RecordOptions } from './toolcalls'
+
+// MonDoAgent - Main entry point
+export { MonDoAgent, createMonDoAgent, isMonDoAgent } from './mondo-agent'
+export type {
+  MonDoAgentOptions,
+  AgentGlobOptions,
+  AgentGrepOptions,
+  AgentState,
+  AgentEnv,
+  AgentContext,
+  WebSocketConnection,
+  WebSocketMessage,
+} from './mondo-agent'
+
+// SDK Adapters
+export {
+  AnthropicMCPAdapter,
+  createMonDoMcpServer,
+  createAgentFSVercelTools,
+} from './adapters'
+export type {
+  AgentFSProvider,
+  GrepProvider,
+  AuditProvider,
+  AdapterOptions,
+  AgentFSMcpServer,
+  AgentFSToolContext,
+  VercelToolDefinition,
+  AgentFSVercelTools,
+} from './adapters'

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { MongoClient } from '../../src/client/mongo-client'
+import { MongoClient } from '../../src/client/MongoClient'
 import { MongoCollection } from '../../src/client/mongo-collection'
 import { AggregationCursor, AggregationError } from '../../src/client/aggregation-cursor'
 

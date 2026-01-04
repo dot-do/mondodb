@@ -145,8 +145,8 @@ export class SearchTranslator {
   private translateText(text: TextOperator): string {
     const { query, path } = text;
 
-    // Split query into terms
-    const terms = query.trim().split(/\s+/).filter(t => t.length > 0);
+    // Split query into terms and escape each term to prevent FTS5 injection
+    const terms = query.trim().split(/\s+/).filter(t => t.length > 0).map(t => this.escapeFTS5Term(t));
 
     if (terms.length === 0) {
       return '*';
@@ -171,7 +171,10 @@ export class SearchTranslator {
   private translatePhrase(phrase: PhraseOperator): string {
     const { query, path } = phrase;
 
-    const quotedPhrase = `"${query}"`;
+    // Escape the phrase content to prevent FTS5 injection
+    // For phrases, we escape and then wrap in quotes
+    const escapedPhrase = this.escapeFTS5Term(query);
+    const quotedPhrase = `"${escapedPhrase}"`;
 
     if (path) {
       const column = Array.isArray(path) ? path[0] : path;
@@ -190,12 +193,18 @@ export class SearchTranslator {
   private translateWildcard(wildcard: WildcardOperator): string {
     const { query, path } = wildcard;
 
+    // For wildcard queries, we need to escape special chars but preserve the wildcard (*) at the end
+    // First check if query ends with wildcard
+    const hasTrailingWildcard = query.endsWith('*');
+    const baseQuery = hasTrailingWildcard ? query.slice(0, -1) : query;
+    const escapedQuery = this.escapeFTS5Term(baseQuery) + (hasTrailingWildcard ? '*' : '');
+
     if (path) {
       const column = Array.isArray(path) ? path[0] : path;
-      return `${column}:${query}`;
+      return `${column}:${escapedQuery}`;
     }
 
-    return query;
+    return escapedQuery;
   }
 
   /**
@@ -210,8 +219,8 @@ export class SearchTranslator {
   private translateAutocomplete(autocomplete: AutocompleteOperator): string {
     const { query, path, tokenOrder } = autocomplete;
 
-    // Split query into terms
-    const terms = query.trim().split(/\s+/).filter(t => t.length > 0);
+    // Split query into terms and escape each term to prevent FTS5 injection
+    const terms = query.trim().split(/\s+/).filter(t => t.length > 0).map(t => this.escapeFTS5Term(t));
 
     if (terms.length === 0) {
       return '*';

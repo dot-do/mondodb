@@ -5,6 +5,8 @@
  * REFACTORED: Optimized with combined json_set calls, validation, and CTE-based array operations.
  */
 
+import { validateFieldPath } from '../utils/sql-safety.js';
+
 export interface TranslatedUpdate {
   sql: string;
   params: unknown[];
@@ -35,8 +37,14 @@ interface PendingUpdate {
  * - "name" -> "$.name"
  * - "address.city" -> "$.address.city"
  * - "items.0.name" -> "$.items[0].name"
+ *
+ * SECURITY: Validates field path to prevent SQL injection attacks.
+ * @throws Error if field path contains invalid characters
  */
 function toJsonPath(fieldPath: string): string {
+  // Validate the entire field path to prevent SQL injection
+  validateFieldPath(fieldPath);
+
   const parts = fieldPath.split('.');
   let result = '$';
 
@@ -640,6 +648,8 @@ export class UpdateTranslator {
     // Build WHERE clause for the condition
     const conditions: string[] = [];
     for (const [field, value] of Object.entries(condition)) {
+      // Validate field name to prevent SQL injection
+      validateFieldPath(field);
       if (typeof value === 'object' && value !== null) {
         // Handle operators like $gte, $lte, etc.
         for (const [op, opValue] of Object.entries(value as Record<string, unknown>)) {

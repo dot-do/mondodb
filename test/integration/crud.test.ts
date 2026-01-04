@@ -27,6 +27,7 @@ interface MockStorage {
   sql: MockSqlStorage;
   get: ReturnType<typeof vi.fn>;
   put: ReturnType<typeof vi.fn>;
+  transactionSync: <T>(callback: () => T) => T;
 }
 
 interface MockState {
@@ -363,6 +364,9 @@ function createMockState(db: InMemoryDatabase): MockState {
     sql: mockSql,
     get: vi.fn().mockResolvedValue(1), // Schema already initialized
     put: vi.fn(),
+    // transactionSync simply executes the callback - the mock doesn't need
+    // actual transaction support, just needs to invoke the callback
+    transactionSync: <T>(callback: () => T): T => callback(),
   };
 
   const mockState: MockState = {

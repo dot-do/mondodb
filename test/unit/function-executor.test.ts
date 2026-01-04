@@ -455,6 +455,35 @@ describe('FunctionExecutor', () => {
       expect(moduleCode).toContain('argsArray.map')
       expect(moduleCode).toContain('Response.json({ results })')
     })
+
+    it('generates code with timeout enforcement for single execution', async () => {
+      const capturedCode: { value: WorkerCode | null } = { value: null }
+      const executor = new FunctionExecutor({
+        LOADER: createMockLoader({ result: 1, capturedCode })
+      })
+
+      await executor.execute('() => 1', [])
+
+      const moduleCode = capturedCode.value!.modules['fn.js'] as string
+      expect(moduleCode).toContain('timeout = 5000')
+      expect(moduleCode).toContain('Promise.race')
+      expect(moduleCode).toContain('Function execution timeout')
+    })
+
+    it('generates code with timeout enforcement for batch execution', async () => {
+      const capturedCode: { value: WorkerCode | null } = { value: null }
+      const executor = new FunctionExecutor({
+        LOADER: createMockLoader({ batchResults: [1], capturedCode })
+      })
+
+      await executor.executeBatch('() => 1', [[]])
+
+      const moduleCode = capturedCode.value!.modules['fn.js'] as string
+      expect(moduleCode).toContain('timeout = 10000')
+      expect(moduleCode).toContain('Promise.race')
+      expect(moduleCode).toContain('Function execution timeout')
+      expect(moduleCode).toContain('executeWithTimeout')
+    })
   })
 
   // ==========================================================================

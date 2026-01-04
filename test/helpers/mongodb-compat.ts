@@ -7,7 +7,7 @@
 
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import { MongoClient as RealMongoClient, Collection as RealCollection, Db as RealDb, Document as RealDocument } from 'mongodb'
-import { MongoClient as MondoClient } from '../../src/client/mongo-client'
+import { MongoClient as MondoClient } from '../../src/client/MongoClient'
 import { MongoDatabase as MondoDatabase } from '../../src/client/mongo-database'
 import { MongoCollection as MondoCollection } from '../../src/client/mongo-collection'
 

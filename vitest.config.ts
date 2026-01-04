@@ -30,6 +30,10 @@ export default defineWorkersConfig({
         miniflare: {
           // Persist DO SQLite data to this directory
           durableObjectsPersist: './test-data',
+          // Enable debug endpoints for testing
+          bindings: {
+            ENABLE_DEBUG_ENDPOINTS: 'true',
+          },
         },
       },
     },

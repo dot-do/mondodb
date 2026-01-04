@@ -8,6 +8,11 @@ import { serializeForEmbedding, SerializationOptions } from './document-serializ
 export const DEFAULT_EMBEDDING_MODEL = '@cf/baai/bge-m3';
 
 /**
+ * Cloudflare Vectorize has a limit of 100 vectors per upsert operation
+ */
+export const VECTORIZE_BATCH_LIMIT = 100;
+
+/**
  * Configuration for the EmbeddingManager
  */
 export interface EmbeddingConfig {
@@ -188,7 +193,7 @@ export class EmbeddingManager {
     const embeddings = await this.generateEmbeddings(texts);
 
     // Prepare vectors for upsert
-    const vectors = docs.map((doc, index) => {
+    const vectors: { id: string; values: number[]; metadata: VectorizeMetadata }[] = docs.map((doc, index) => {
       const documentId = String(doc._id);
       const vectorId = this.getVectorId(documentId);
 
@@ -198,15 +203,21 @@ export class EmbeddingManager {
         ...options.metadata
       };
 
+      // Safe access - embeddings array length matches docs array
+      const values: number[] = embeddings[index] ?? [];
+
       return {
         id: vectorId,
-        values: embeddings[index],
+        values,
         metadata
       };
     });
 
-    // Upsert all vectors
-    await this.vectorize.upsert(vectors);
+    // Upsert vectors in chunks to respect Vectorize batch limit
+    for (let i = 0; i < vectors.length; i += VECTORIZE_BATCH_LIMIT) {
+      const chunk = vectors.slice(i, i + VECTORIZE_BATCH_LIMIT);
+      await this.vectorize.upsert(chunk);
+    }
 
     return {
       count: docs.length,
@@ -241,7 +252,8 @@ export class EmbeddingManager {
     const result = await this.ai.run<EmbeddingResult>(this.model, {
       text: [text]
     });
-    return result.data[0];
+    // Safe access - single text input always returns single embedding
+    return result.data[0] ?? [];
   }
 
   /**

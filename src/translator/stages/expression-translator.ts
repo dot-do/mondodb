@@ -4,6 +4,7 @@
  */
 
 import type { FunctionSpec, FunctionExpression } from '../../types/function'
+import { validateFieldPath } from '../../utils/sql-safety.js'
 
 /**
  * Check if a value is a field reference (starts with $)
@@ -14,10 +15,17 @@ export function isFieldReference(value: unknown): value is string {
 
 /**
  * Get the JSON path for a field reference
+ *
+ * SECURITY: Validates field name to prevent SQL injection attacks.
+ * @throws Error if field contains invalid characters
  */
 export function getFieldPath(fieldRef: string): string {
   // Remove the leading $ and convert to JSON path
   const field = fieldRef.substring(1)
+
+  // Validate the field path to prevent SQL injection
+  validateFieldPath(field)
+
   const parts = field.split('.')
   let path = '$'
 

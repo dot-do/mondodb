@@ -18,6 +18,7 @@ import type {
   AggregateOptions,
   IndexSpecification,
 } from '../types/mongodb'
+import { HttpFindCursor, HttpAggregationCursor } from './http-cursor'
 
 /**
  * Collection class
@@ -110,15 +111,42 @@ export class Collection<TDocument extends Document = Document> {
   /**
    * Find all documents matching the filter
    *
+   * Returns a cursor that supports:
+   * - Async iteration with `for await (const doc of cursor)`
+   * - Converting to array with `await cursor.toArray()`
+   * - Chainable modifiers: sort(), limit(), skip(), project()
+   *
    * @param filter - Query filter
    * @param options - Find options (projection, sort, skip, limit, etc.)
-   * @returns Array of matching documents
+   * @returns HttpFindCursor for iterating over results
+   *
+   * @example
+   * ```typescript
+   * // Using toArray
+   * const docs = await collection.find({ status: 'active' }).toArray()
+   *
+   * // Using async iterator
+   * for await (const doc of collection.find({ status: 'active' })) {
+   *   console.log(doc)
+   * }
+   *
+   * // Using chainable modifiers
+   * const docs = await collection.find({})
+   *   .sort({ name: 1 })
+   *   .limit(10)
+   *   .skip(5)
+   *   .toArray()
+   * ```
    */
-  async find(
+  find(
     filter: Filter<TDocument> = {},
     options: FindOptions<TDocument> = {}
-  ): Promise<TDocument[]> {
-    return this.request<TDocument[]>('POST', '/find', { filter, options })
+  ): HttpFindCursor<TDocument> {
+    return new HttpFindCursor<TDocument>(
+      (method, path, body) => this.request<TDocument[]>(method, path, body),
+      filter,
+      options
+    )
   }
 
   /**
@@ -207,15 +235,40 @@ export class Collection<TDocument extends Document = Document> {
   /**
    * Execute an aggregation pipeline
    *
+   * Returns a cursor that supports:
+   * - Async iteration with `for await (const doc of cursor)`
+   * - Converting to array with `await cursor.toArray()`
+   * - forEach iteration with `await cursor.forEach(callback)`
+   *
    * @param pipeline - Array of aggregation stages
    * @param options - Aggregation options
-   * @returns Array of result documents
+   * @returns HttpAggregationCursor for iterating over results
+   *
+   * @example
+   * ```typescript
+   * // Using toArray
+   * const results = await collection.aggregate([
+   *   { $match: { status: 'active' } },
+   *   { $group: { _id: '$category', count: { $sum: 1 } } }
+   * ]).toArray()
+   *
+   * // Using async iterator
+   * for await (const doc of collection.aggregate([
+   *   { $match: { status: 'active' } }
+   * ])) {
+   *   console.log(doc)
+   * }
+   * ```
    */
-  async aggregate<TResult extends Document = Document>(
+  aggregate<TResult extends Document = Document>(
     pipeline: AggregationStage[],
     options: AggregateOptions = {}
-  ): Promise<TResult[]> {
-    return this.request<TResult[]>('POST', '/aggregate', { pipeline, options })
+  ): HttpAggregationCursor<TResult> {
+    return new HttpAggregationCursor<TResult>(
+      (method, path, body) => this.request<TResult[]>(method, path, body),
+      pipeline,
+      options
+    )
   }
 
   /**

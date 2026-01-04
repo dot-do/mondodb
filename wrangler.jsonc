@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mondodb",
   "main": "src/worker.ts",
-  "compatibility_date": "2024-12-01",
+  "compatibility_date": "2025-06-01",
 
   // Static assets configuration for mondodb Studio
   "assets": {
@@ -14,12 +14,13 @@
   // Run worker first for API routes, serve static for everything else
   "run_worker_first": ["/api/*", "/rpc/*", "/health"],
 
-  // Deploy to .do organization by default
-  // Users can override by setting CLOUDFLARE_ACCOUNT_ID env var
-  "account_id": "b6641681fe423910342b9ffa1364c76d",
+  // Account ID is not hardcoded for security reasons
+  // Set the CLOUDFLARE_ACCOUNT_ID environment variable before deploying
   "compatibility_flags": [
     // Required for Node.js compatibility (Buffer, crypto, etc.)
-    "nodejs_compat"
+    "nodejs_compat",
+    // Required for Worker Loader bindings (MCP code execution sandbox)
+    "enable_ctx_exports"
   ],
 
   // Durable Objects configuration

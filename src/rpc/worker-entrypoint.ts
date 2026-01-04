@@ -8,13 +8,29 @@
  * - Environment safety
  */
 
-import {
-  MondoRpcTarget,
+import { MondoRpcTarget } from './rpc-target';
+import type {
   DurableObjectNamespace,
   DurableObjectStub,
   DatabaseRef,
   CollectionRef,
-} from './rpc-target';
+  MondoEnv,
+  WorkerLoader,
+  WorkerCode,
+  WorkerStub,
+} from '../types/rpc';
+
+// Re-export types for backward compatibility
+export type {
+  DurableObjectNamespace,
+  DurableObjectStub,
+  DatabaseRef,
+  CollectionRef,
+  MondoEnv,
+  WorkerLoader,
+  WorkerCode,
+  WorkerStub,
+};
 
 // ============================================================================
 // Types and Interfaces
@@ -26,35 +42,6 @@ import {
 export interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
-}
-
-/**
- * Worker Loader interface for dynamic worker creation
- * (Closed beta feature for $function operator support)
- */
-export interface WorkerLoader {
-  get(id: string, getCode: () => Promise<WorkerCode>): WorkerStub;
-}
-
-export interface WorkerCode {
-  compatibilityDate: string;
-  mainModule: string;
-  modules: Record<string, string | { js: string } | { text: string }>;
-  globalOutbound?: null;
-  env?: Record<string, unknown>;
-}
-
-export interface WorkerStub {
-  fetch(request: Request): Promise<Response>;
-}
-
-/**
- * Mondo environment bindings interface
- */
-export interface MondoEnv {
-  MONDO_DATABASE: DurableObjectNamespace;
-  /** Optional Worker Loader for $function support (closed beta) */
-  LOADER?: WorkerLoader;
 }
 
 /**
@@ -311,13 +298,6 @@ export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
 // ============================================================================
 
 export { MondoRpcTarget, newWorkersRpcResponse } from './rpc-target';
-export type {
-  DurableObjectNamespace,
-  DurableObjectId,
-  DurableObjectStub,
-  DatabaseRef,
-  CollectionRef,
-  RpcRequest,
-  RpcResponse,
-  BatchResponse,
-} from './rpc-target';
+// Note: All RPC types are consolidated in '../types/rpc' and re-exported at the top of this file.
+// The following types are re-exported from '../types/rpc' for convenience:
+export type { DurableObjectId, RpcRequest, RpcResponse, BatchResponse } from '../types/rpc';

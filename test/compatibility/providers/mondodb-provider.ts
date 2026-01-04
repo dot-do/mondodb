@@ -3,11 +3,11 @@
  * Wraps the mondodb in-memory client for compatibility testing
  *
  * This provider uses the in-memory MongoDB-compatible implementation from
- * src/client/mongo-*.ts for testing purposes. It implements the TestProvider
+ * src/client/MongoClient.ts for testing purposes. It implements the TestProvider
  * interface to allow comparison testing between mondodb and real MongoDB.
  */
 
-import { MongoClient } from '../../../src/client/mongo-client'
+import { MongoClient } from '../../../src/client/MongoClient'
 import { MongoDatabase } from '../../../src/client/mongo-database'
 import { MongoCollection, Document as ClientDocument } from '../../../src/client/mongo-collection'
 import { FindCursor } from '../../../src/client/cursor'
@@ -420,7 +420,7 @@ class MondoDBDatabase implements TestDatabase {
 /**
  * MondoDB Provider
  *
- * Uses the in-memory MongoDB-compatible client from src/client/mongo-client.ts
+ * Uses the in-memory MongoDB-compatible client from src/client/MongoClient.ts
  * for compatibility testing. This allows comparing mondodb behavior against
  * real MongoDB using the same test interface.
  */

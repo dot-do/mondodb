@@ -5,14 +5,23 @@
  * operations backed by Cloudflare's SQLite storage.
  */
 
+// Import types from the unified schema module
 import {
   SchemaManager,
   DurableObjectStorage,
+  Document,
+  InsertOneResult,
+  UpdateResult,
+  DeleteResult,
 } from './schema';
 import { ObjectId } from '../types/objectid';
 import type { WorkerLoader } from '../types/function';
 import { AggregationExecutor } from '../executor/aggregation-executor';
 import type { PipelineStage } from '../translator/aggregation-translator';
+import { createMondoMcpHandler, type HttpHandler } from './mcp-handler';
+
+// Re-export types that consumers of MondoDatabase might need
+export type { Document, InsertOneResult, UpdateResult, DeleteResult };
 
 /**
  * Interface for Durable Object state
@@ -28,49 +37,19 @@ export interface DurableObjectState {
 export interface Env {
   /** Optional worker-loader binding for $function support */
   LOADER?: WorkerLoader
-}
-
-/**
- * MongoDB-style document with optional _id field
- */
-export interface Document {
-  _id?: string | ObjectId;
-  [key: string]: unknown;
-}
-
-/**
- * Result of an insertOne operation
- */
-export interface InsertOneResult {
-  acknowledged: boolean;
-  insertedId: string;
+  /** Enable debug endpoints (/internal/reset, /internal/dump) - DO NOT enable in production */
+  ENABLE_DEBUG_ENDPOINTS?: string
 }
 
 /**
  * Result of an insertMany operation
+ * Note: This uses string[] for insertedIds (matching MongoDB's native driver behavior),
+ * while the shared InsertManyResult type uses Record<number, string> for MongoDB compatibility
  */
 export interface InsertManyResult {
   acknowledged: boolean;
   insertedCount: number;
   insertedIds: string[];
-}
-
-/**
- * Result of an update operation
- */
-export interface UpdateResult {
-  acknowledged: boolean;
-  matchedCount: number;
-  modifiedCount: number;
-  upsertedId?: string;
-}
-
-/**
- * Result of a delete operation
- */
-export interface DeleteResult {
-  acknowledged: boolean;
-  deletedCount: number;
 }
 
 /**
@@ -84,6 +63,7 @@ export class MondoDatabase {
   private env: Env;
   private schemaManager: SchemaManager;
   private initialized: boolean = false;
+  private mcpHandler: HttpHandler | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -198,27 +178,34 @@ export class MondoDatabase {
   async insertMany(collection: string, documents: Document[]): Promise<InsertManyResult> {
     const collectionId = this.getOrCreateCollection(collection);
     const sql = this.state.storage.sql;
-    const insertedIds: string[] = [];
 
-    for (const document of documents) {
-      // Generate _id if not provided
-      const docId = document._id
-        ? (document._id instanceof ObjectId ? document._id.toHexString() : String(document._id))
-        : new ObjectId().toHexString();
+    // Use transactionSync for atomic bulk insert
+    // If any insert fails, all are rolled back
+    const insertedIds = this.state.storage.transactionSync(() => {
+      const ids: string[] = [];
 
-      // Create document with _id included
-      const docWithId = { ...document, _id: docId };
+      for (const document of documents) {
+        // Generate _id if not provided
+        const docId = document._id
+          ? (document._id instanceof ObjectId ? document._id.toHexString() : String(document._id))
+          : new ObjectId().toHexString();
 
-      // Insert document
-      sql.exec(
-        `INSERT INTO documents (collection_id, _id, data) VALUES (?, ?, json(?))`,
-        collectionId,
-        docId,
-        JSON.stringify(docWithId)
-      );
+        // Create document with _id included
+        const docWithId = { ...document, _id: docId };
 
-      insertedIds.push(docId);
-    }
+        // Insert document
+        sql.exec(
+          `INSERT INTO documents (collection_id, _id, data) VALUES (?, ?, json(?))`,
+          collectionId,
+          docId,
+          JSON.stringify(docWithId)
+        );
+
+        ids.push(docId);
+      }
+
+      return ids;
+    });
 
     return {
       acknowledged: true,
@@ -517,35 +504,41 @@ export class MondoDatabase {
     const sql = this.state.storage.sql;
     const { whereClause, params } = this.buildWhereClause(filter);
 
-    // If no filter, delete all documents in collection
-    if (!whereClause) {
-      const countResult = sql.exec(
-        `SELECT COUNT(*) as count FROM documents WHERE collection_id = ?`,
-        collectionId
-      ).toArray() as { count: number }[];
+    // Use transactionSync for atomic bulk delete
+    // If any delete fails, all are rolled back
+    const deletedCount = this.state.storage.transactionSync(() => {
+      // If no filter, delete all documents in collection
+      if (!whereClause) {
+        const countResult = sql.exec(
+          `SELECT COUNT(*) as count FROM documents WHERE collection_id = ?`,
+          collectionId
+        ).toArray() as { count: number }[];
 
-      const count = countResult[0]?.count || 0;
+        const count = countResult[0]?.count || 0;
 
-      sql.exec(`DELETE FROM documents WHERE collection_id = ?`, collectionId);
+        sql.exec(`DELETE FROM documents WHERE collection_id = ?`, collectionId);
 
-      return { acknowledged: true, deletedCount: count };
-    }
+        return count;
+      }
 
-    // Find and delete matching documents
-    const findQuery = `
-      SELECT id FROM documents
-      WHERE collection_id = ? AND ${whereClause}
-    `;
+      // Find and delete matching documents
+      const findQuery = `
+        SELECT id FROM documents
+        WHERE collection_id = ? AND ${whereClause}
+      `;
 
-    const found = sql.exec(findQuery, collectionId, ...params).toArray() as { id: number }[];
+      const found = sql.exec(findQuery, collectionId, ...params).toArray() as { id: number }[];
 
-    for (const row of found) {
-      sql.exec(`DELETE FROM documents WHERE id = ?`, row.id);
-    }
+      for (const row of found) {
+        sql.exec(`DELETE FROM documents WHERE id = ?`, row.id);
+      }
+
+      return found.length;
+    });
 
     return {
       acknowledged: true,
-      deletedCount: found.length,
+      deletedCount,
     };
   }
 
@@ -656,6 +649,15 @@ export class MondoDatabase {
     const path = url.pathname;
 
     try {
+      // MCP endpoint - route to MCP handler for AI agent access
+      if (path.startsWith('/mcp')) {
+        // Lazily create MCP handler on first request
+        if (!this.mcpHandler) {
+          this.mcpHandler = createMondoMcpHandler(this);
+        }
+        return this.mcpHandler(request);
+      }
+
       // Health check endpoint
       if (path === '/health') {
         const isValid = await this.schemaManager.validateSchema();
@@ -671,19 +673,30 @@ export class MondoDatabase {
         );
       }
 
-      // Internal endpoints for testing
-      if (request.method === 'POST' && path === '/internal/reset') {
-        await this.reset();
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+      // Internal endpoints for testing - SECURITY: Gated behind ENABLE_DEBUG_ENDPOINTS
+      // These endpoints are dangerous and should NEVER be enabled in production
+      if (path === '/internal/reset' || path === '/internal/dump') {
+        // Check if debug endpoints are enabled via environment variable
+        if (this.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
+          return new Response(JSON.stringify({ error: 'Debug endpoints are disabled' }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
 
-      if (request.method === 'GET' && path === '/internal/dump') {
-        const data = await this.dump();
-        return new Response(JSON.stringify(data), {
-          headers: { 'Content-Type': 'application/json' },
-        });
+        if (request.method === 'POST' && path === '/internal/reset') {
+          await this.reset();
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (request.method === 'GET' && path === '/internal/dump') {
+          const data = await this.dump();
+          return new Response(JSON.stringify(data), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
       }
 
       // CRUD endpoints

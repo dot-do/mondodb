@@ -10,66 +10,72 @@
  * - Background cleanup removes expired documents periodically
  */
 
+// Import all types from the unified schema module
 import type {
   IndexSpec,
   CreateIndexOptions,
   CreateIndexResult,
   IndexInfo,
   DropIndexResult,
-} from '../types'
+  SQLStorage,
+  SQLStatement,
+  TTLIndexInfo,
+  TTLMetadata,
+  TTLCleanupResult,
+  ExpiredDocumentsQuery,
+} from './schema'
 
-/**
- * TTL Index information with collection context
- */
-export interface TTLIndexInfo {
-  collectionName: string
-  collectionId: number
-  indexName: string
-  field: string
-  expireAfterSeconds: number
+// Re-export types that consumers of IndexManager might need
+export type {
+  SQLStorage,
+  SQLStatement,
+  TTLIndexInfo,
+  TTLMetadata,
+  TTLCleanupResult,
+  ExpiredDocumentsQuery,
 }
 
 /**
- * TTL metadata for tracking cleanup operations
+ * Validates and escapes a field name/path for safe use in SQL json_extract expressions.
+ * Prevents SQL injection by only allowing safe characters in field paths.
+ *
+ * @throws Error if field name contains invalid characters
  */
-export interface TTLMetadata {
-  field: string
-  expireAfterSeconds: number
-  lastCleanupAt?: string
-  lastCleanupCount?: number
+export function escapeFieldPath(field: string): string {
+  if (!field || field.length === 0) {
+    throw new Error('Field name cannot be empty')
+  }
+  if (field.includes('\0')) {
+    throw new Error('Field name cannot contain null characters')
+  }
+  const safeFieldPattern = /^[a-zA-Z0-9_.$-]+$/
+  if (!safeFieldPattern.test(field)) {
+    throw new Error(`Invalid field name: ${field}. Field names can only contain alphanumeric characters, underscores, dots, hyphens, and dollar signs.`)
+  }
+  if (field.includes('..') || field.startsWith('.') || field.endsWith('.')) {
+    throw new Error(`Invalid field path: ${field}. Field paths cannot have consecutive, leading, or trailing dots.`)
+  }
+  return field
 }
 
 /**
- * Result of a TTL cleanup operation
+ * Validates an identifier (table name, index name) for safe use in SQL.
+ * Only allows alphanumeric characters and underscores.
+ *
+ * @throws Error if identifier contains invalid characters
  */
-export interface TTLCleanupResult {
-  ok: 1
-  collectionsProcessed: number
-  documentsDeleted: number
-  errors?: string[]
-}
-
-/**
- * Query info for deleting expired documents
- */
-export interface ExpiredDocumentsQuery {
-  sql: string
-  params: unknown[]
-}
-
-/**
- * Interface representing a SQLite-compatible storage with SQL execution
- */
-export interface SQLStorage {
-  exec(sql: string): void
-  prepare(sql: string): SQLStatement
-}
-
-export interface SQLStatement {
-  bind(...params: unknown[]): SQLStatement
-  run(): void
-  first<T = unknown>(): T | null
-  all<T = unknown>(): T[]
+export function validateIdentifier(identifier: string): string {
+  if (!identifier || identifier.length === 0) {
+    throw new Error('Identifier cannot be empty')
+  }
+  if (identifier.includes('\0')) {
+    throw new Error('Identifier cannot contain null characters')
+  }
+  const safeIdentifierPattern = /^[a-zA-Z0-9_]+$/
+  if (!safeIdentifierPattern.test(identifier)) {
+    throw new Error(`Invalid identifier: ${identifier}. Identifiers can only contain alphanumeric characters and underscores.`)
+  }
+  return identifier
 }
 
 /**
@@ -92,6 +98,7 @@ export function getTextFields(keys: IndexSpec): string[] {
  * Generate FTS5 virtual table name for a collection
  */
 export function generateFTS5TableName(collectionName: string): string {
+  validateIdentifier(collectionName)
   return `${collectionName}_fts`
 }
 
@@ -99,12 +106,15 @@ export function generateFTS5TableName(collectionName: string): string {
  * Generates an index name from collection name and key specification
  */
 export function generateIndexName(collectionName: string, keys: IndexSpec): string {
+  validateIdentifier(collectionName)
   const keyParts = Object.entries(keys).map(([field, direction]) => {
+    escapeFieldPath(field)
+    const safeField = field.replace(/\./g, '_')
     if (direction === 'text') {
-      return `${field}_text`
+      return `${safeField}_text`
     }
     const suffix = direction === 1 ? '1' : '-1'
-    return `${field}_${suffix}`
+    return `${safeField}_${suffix}`
   })
   return `${collectionName}_${keyParts.join('_')}`
 }
@@ -132,8 +142,9 @@ export function buildCreateIndexSQL(
 
   // Build the column expressions for the index
   const columns = Object.entries(keys).map(([field, direction]) => {
-    // Use json_extract for nested fields, handle dot notation
-    const jsonPath = field.startsWith('$') ? field : `$.${field}`
+    // Validate and escape field name to prevent SQL injection
+    const safeField = escapeFieldPath(field)
+    const jsonPath = safeField.startsWith('$') ? safeField : `$.${safeField}`
     const expr = `json_extract(data, '${jsonPath}')`
     const order = direction === 1 ? 'ASC' : 'DESC'
     return `${expr} ${order}`
@@ -148,7 +159,8 @@ export function buildCreateIndexSQL(
   let sparseCondition = ''
   if (options.sparse) {
     const sparseChecks = Object.keys(keys).map(field => {
-      const jsonPath = field.startsWith('$') ? field : `$.${field}`
+      const safeField = escapeFieldPath(field)
+      const jsonPath = safeField.startsWith('$') ? safeField : `$.${safeField}`
       return `json_extract(data, '${jsonPath}') IS NOT NULL`
     })
     sparseCondition = ` AND ${sparseChecks.join(' AND ')}`
@@ -162,27 +174,31 @@ export function buildCreateIndexSQL(
 }
 
 /**
- * Builds the SQL for creating an FTS5 virtual table for text indexing
+ * Builds the SQL for creating an FTS5 virtual table for text indexing.
+ *
+ * UNIFIED SCHEMA: Uses _id column from the unified schema (not doc_id).
  */
 export function buildFTS5CreateSQL(
   collectionName: string,
   fields: string[],
   options: CreateIndexOptions = {}
 ): { tableName: string; createSQL: string; triggersSQL: string[] } {
+  // generateFTS5TableName validates collectionName
   const ftsTableName = generateFTS5TableName(collectionName)
 
-  // Build field list for FTS5
-  // We store doc_id to link back to the documents table
-  const ftsFields = ['doc_id', ...fields]
+  // Validate and escape all field names to prevent SQL injection
+  const safeFields = fields.map(f => escapeFieldPath(f))
+  // Replace dots with underscores for FTS5 column names
+  const safeFtsFields = safeFields.map(f => f.replace(/\./g, '_'))
+  // Use _id to match the unified schema column name
+  const ftsFields = ['_id', ...safeFtsFields]
 
   // Tokenize option - use unicode61 by default for better international support
-  // If porter stemming is desired, use 'porter unicode61'
   const tokenize = options.default_language === 'none'
     ? 'unicode61'
     : 'porter unicode61'
 
   // Create the FTS5 virtual table
-  // Use content= to reference the documents table for external content
   const createSQL = `CREATE VIRTUAL TABLE IF NOT EXISTS ${ftsTableName} USING fts5(
   ${ftsFields.join(', ')},
   content='documents',
@@ -190,24 +206,29 @@ export function buildFTS5CreateSQL(
   tokenize='${tokenize}'
 )`
 
+  // Build json_extract expressions with validated field paths
+  const jsonExtractExprsNew = safeFields.map(f => `json_extract(NEW.data, '$.${f}')`)
+  const jsonExtractExprsOld = safeFields.map(f => `json_extract(OLD.data, '$.${f}')`)
+
   // Create triggers to keep FTS5 table in sync with documents table
+  // Uses _id column from the unified schema
   const triggersSQL: string[] = [
     // Insert trigger
     `CREATE TRIGGER IF NOT EXISTS ${ftsTableName}_ai AFTER INSERT ON documents BEGIN
-  INSERT INTO ${ftsTableName}(rowid, doc_id, ${fields.join(', ')})
-  VALUES (NEW.id, NEW.doc_id, ${fields.map(f => `json_extract(NEW.data, '$.${f}')`).join(', ')});
+  INSERT INTO ${ftsTableName}(rowid, _id, ${safeFtsFields.join(', ')})
+  VALUES (NEW.id, NEW._id, ${jsonExtractExprsNew.join(', ')});
 END`,
     // Delete trigger
     `CREATE TRIGGER IF NOT EXISTS ${ftsTableName}_ad AFTER DELETE ON documents BEGIN
-  INSERT INTO ${ftsTableName}(${ftsTableName}, rowid, doc_id, ${fields.join(', ')})
-  VALUES('delete', OLD.id, OLD.doc_id, ${fields.map(f => `json_extract(OLD.data, '$.${f}')`).join(', ')});
+  INSERT INTO ${ftsTableName}(${ftsTableName}, rowid, _id, ${safeFtsFields.join(', ')})
+  VALUES('delete', OLD.id, OLD._id, ${jsonExtractExprsOld.join(', ')});
 END`,
     // Update trigger
     `CREATE TRIGGER IF NOT EXISTS ${ftsTableName}_au AFTER UPDATE ON documents BEGIN
-  INSERT INTO ${ftsTableName}(${ftsTableName}, rowid, doc_id, ${fields.join(', ')})
-  VALUES('delete', OLD.id, OLD.doc_id, ${fields.map(f => `json_extract(OLD.data, '$.${f}')`).join(', ')});
-  INSERT INTO ${ftsTableName}(rowid, doc_id, ${fields.join(', ')})
-  VALUES (NEW.id, NEW.doc_id, ${fields.map(f => `json_extract(NEW.data, '$.${f}')`).join(', ')});
+  INSERT INTO ${ftsTableName}(${ftsTableName}, rowid, _id, ${safeFtsFields.join(', ')})
+  VALUES('delete', OLD.id, OLD._id, ${jsonExtractExprsOld.join(', ')});
+  INSERT INTO ${ftsTableName}(rowid, _id, ${safeFtsFields.join(', ')})
+  VALUES (NEW.id, NEW._id, ${jsonExtractExprsNew.join(', ')});
 END`,
   ]
 
@@ -247,13 +268,18 @@ export class IndexManager {
   }
 
   /**
-   * Ensure the collections metadata table exists
+   * Ensure the collections and documents tables exist.
+   *
+   * UNIFIED SCHEMA: This uses the same schema as MondoDatabase/SchemaManager.
+   * The schema is defined in schema.ts/migrations.ts as the single source of truth.
+   * This method creates the tables if they don't exist (for standalone IndexManager usage).
    */
   ensureMetadataTable(): void {
     this.storage.exec(`
       CREATE TABLE IF NOT EXISTS collections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL UNIQUE,
+        options TEXT DEFAULT '{}',
         indexes TEXT DEFAULT '[]',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
@@ -264,19 +290,21 @@ export class IndexManager {
       CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         collection_id INTEGER NOT NULL,
-        doc_id TEXT NOT NULL,
-        data TEXT NOT NULL,
+        _id TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
-        UNIQUE(collection_id, doc_id),
-        FOREIGN KEY (collection_id) REFERENCES collections(id)
+        UNIQUE(collection_id, _id),
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
       )
     `)
 
-    // Create default index on doc_id per collection
+    // Create default indexes on _id per collection (unified schema indexes)
     this.storage.exec(`
-      CREATE INDEX IF NOT EXISTS idx_documents_collection_doc
-      ON documents (collection_id, doc_id)
+      CREATE INDEX IF NOT EXISTS idx_documents_id ON documents(_id)
+    `)
+    this.storage.exec(`
+      CREATE INDEX IF NOT EXISTS idx_documents_collection_id ON documents(collection_id, _id)
     `)
   }
 
@@ -512,6 +540,9 @@ export class IndexManager {
    * Drop a specific index by name
    */
   dropIndex(collectionName: string, indexName: string): DropIndexResult {
+    // Validate collection name to prevent SQL injection
+    validateIdentifier(collectionName)
+
     const collection = this.getCollection(collectionName)
     if (!collection) {
       throw new Error(`Collection not found: ${collectionName}`)
@@ -535,7 +566,7 @@ export class IndexManager {
     const isText = isTextIndex(indexToRemove.key)
 
     if (isText) {
-      // Drop FTS5 table and triggers
+      // Drop FTS5 table and triggers (collection name already validated)
       const { dropSQL, dropTriggersSQL } = buildFTS5DropSQL(collectionName)
       try {
         for (const triggerSQL of dropTriggersSQL) {
@@ -547,6 +578,7 @@ export class IndexManager {
       }
     } else {
       // Generate SQLite index name and drop it
+      // Index name comes from stored metadata so it's already validated
       const sqliteIndexName = `idx_${indexToRemove.unique ? 'unique_' : ''}${indexName}`
       try {
         this.storage.exec(`DROP INDEX IF EXISTS ${sqliteIndexName}`)
@@ -578,6 +610,9 @@ export class IndexManager {
    * Drop all indexes on a collection (except _id)
    */
   dropIndexes(collectionName: string): DropIndexResult {
+    // Validate collection name to prevent SQL injection
+    validateIdentifier(collectionName)
+
     const collection = this.getCollection(collectionName)
     if (!collection) {
       throw new Error(`Collection not found: ${collectionName}`)
@@ -587,6 +622,7 @@ export class IndexManager {
     const nIndexesWas = currentIndexes.length + 1 // +1 for _id
 
     // Drop all SQLite indexes
+    // Index names come from stored metadata so they're already validated
     for (const index of currentIndexes) {
       const sqliteIndexName = `idx_${index.unique ? 'unique_' : ''}${index.name}`
       try {
@@ -752,7 +788,9 @@ export class IndexManager {
     field: string,
     expireAfterSeconds: number
   ): ExpiredDocumentsQuery {
-    const jsonPath = field.startsWith('$') ? field : `$.${field}`
+    // Validate field name to prevent SQL injection
+    const safeField = escapeFieldPath(field)
+    const jsonPath = safeField.startsWith('$') ? safeField : `$.${safeField}`
     const cutoffTime = new Date(Date.now() - expireAfterSeconds * 1000).toISOString()
 
     // Get collection id if it exists, otherwise use a subquery

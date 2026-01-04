@@ -102,7 +102,10 @@ describe('AggregationExecutor', () => {
   })
 
   describe('pipelines with $function', () => {
-    it('uses fallback direct execution when LOADER not available', async () => {
+    it('throws security error when LOADER not available', async () => {
+      // SECURITY: Direct function execution has been disabled
+      // The $function operator now requires the LOADER binding for secure sandboxed execution
+
       // Return SQL result containing a function marker with a valid value reference
       mockSql.exec.mockReturnValue({
         results: [
@@ -115,13 +118,11 @@ describe('AggregationExecutor', () => {
       })
 
       const executor = new AggregationExecutor(mockSql, {})
-      const results = await executor.execute('users', [
-        { $addFields: { doubled: { $function: { body: '(x) => x * 2', args: ['$value'], lang: 'js' } } } }
-      ])
 
-      // Should use fallback direct evaluation and compute 5 * 2 = 10
-      expect(results).toHaveLength(1)
-      expect(results[0]).toEqual({ _id: '1', value: 5, doubled: 10 })
+      // Should throw security error when LOADER is not available
+      await expect(executor.execute('users', [
+        { $addFields: { doubled: { $function: { body: '(x) => x * 2', args: ['$value'], lang: 'js' } } } }
+      ])).rejects.toThrow('SECURITY: $function operator requires the LOADER binding')
     })
 
     it('executes $addFields with $function', async () => {

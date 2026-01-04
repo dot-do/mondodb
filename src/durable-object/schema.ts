@@ -3,6 +3,10 @@
  *
  * This module handles the initialization and management of SQLite tables
  * for MongoDB-compatible document storage in Cloudflare Durable Objects.
+ *
+ * UNIFIED SCHEMA TYPES:
+ * This module serves as the single source of truth for all schema-related types
+ * used by both IndexManager and MondoDatabase.
  */
 
 import {
@@ -11,6 +15,22 @@ import {
   getLatestVersion,
   validateMigrations,
 } from './migrations';
+
+// Re-export common types from src/types for convenience
+export type {
+  IndexSpec,
+  IndexInfo,
+  CreateIndexOptions,
+  CreateIndexResult,
+  DropIndexResult,
+  Document,
+  InsertOneResult,
+  InsertManyResult,
+  DeleteResult,
+  UpdateResult,
+  FindOptions,
+  CollectionMetadata,
+} from '../types';
 
 /**
  * Current schema version - derived from migrations module
@@ -24,6 +44,13 @@ export const SCHEMA_VERSION_KEY = 'schema_version';
 
 /**
  * Table definitions for the schema (exported for reference/testing)
+ *
+ * UNIFIED SCHEMA: This schema supports both MondoDatabase and IndexManager:
+ * - collections table: stores collection metadata including indexes JSON
+ * - documents table: stores documents with _id as the document identifier
+ *
+ * Note: The actual table creation is handled by migrations.ts.
+ * These definitions are kept in sync for reference and testing.
  */
 export const SCHEMA_TABLES = {
   collections: {
@@ -32,7 +59,10 @@ export const SCHEMA_TABLES = {
       CREATE TABLE IF NOT EXISTS collections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        options TEXT DEFAULT '{}'
+        options TEXT DEFAULT '{}',
+        indexes TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
       )
     `.trim(),
   },
@@ -42,8 +72,11 @@ export const SCHEMA_TABLES = {
       CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         collection_id INTEGER NOT NULL,
-        _id TEXT NOT NULL UNIQUE,
+        _id TEXT NOT NULL,
         data TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(collection_id, _id),
         FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
       )
     `.trim(),
@@ -64,8 +97,16 @@ export const SCHEMA_INDEXES = {
   },
 } as const;
 
+// ============================================================================
+// UNIFIED SQL STORAGE INTERFACES
+// ============================================================================
+// These interfaces are used by both IndexManager and MondoDatabase to interact
+// with SQLite storage. The two styles (prepared statements vs exec) are both
+// supported to accommodate different use cases.
+
 /**
  * Interface for SQL query result with parameter binding
+ * Used by MondoDatabase with Cloudflare's native SQL interface
  */
 export interface SqlQueryResult {
   toArray(): unknown[];
@@ -75,6 +116,7 @@ export interface SqlQueryResult {
 
 /**
  * Interface for Cloudflare Durable Object SQL storage
+ * Used by MondoDatabase for direct SQL execution
  */
 export interface SqlStorage {
   exec(sql: string, ...params: unknown[]): SqlQueryResult;
@@ -82,11 +124,86 @@ export interface SqlStorage {
 
 /**
  * Interface for Cloudflare Durable Object storage
+ * Used by MondoDatabase and SchemaManager
  */
 export interface DurableObjectStorage {
   sql: SqlStorage;
   get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
+  /**
+   * Execute a synchronous callback wrapped in a transaction.
+   * If the callback throws, the transaction is rolled back.
+   * Only available for SQLite-backed Durable Objects.
+   */
+  transactionSync<T>(callback: () => T): T;
+}
+
+/**
+ * Interface for SQL prepared statement
+ * Used by IndexManager for prepared statement execution
+ */
+export interface SQLStatement {
+  bind(...params: unknown[]): SQLStatement;
+  run(): void;
+  first<T = unknown>(): T | null;
+  all<T = unknown>(): T[];
+}
+
+/**
+ * Interface for SQLite-compatible storage with SQL execution
+ * Used by IndexManager for prepared statement-based operations
+ *
+ * This is an alternative interface to DurableObjectStorage that provides
+ * a prepare() method for creating prepared statements, which is useful
+ * for operations that need to retrieve results or bind parameters.
+ */
+export interface SQLStorage {
+  exec(sql: string): void;
+  prepare(sql: string): SQLStatement;
+}
+
+// ============================================================================
+// TTL INDEX TYPES
+// ============================================================================
+// These types support Time-To-Live (TTL) indexes for automatic document expiration
+
+/**
+ * TTL Index information with collection context
+ */
+export interface TTLIndexInfo {
+  collectionName: string;
+  collectionId: number;
+  indexName: string;
+  field: string;
+  expireAfterSeconds: number;
+}
+
+/**
+ * TTL metadata for tracking cleanup operations
+ */
+export interface TTLMetadata {
+  field: string;
+  expireAfterSeconds: number;
+  lastCleanupAt?: string;
+  lastCleanupCount?: number;
+}
+
+/**
+ * Result of a TTL cleanup operation
+ */
+export interface TTLCleanupResult {
+  ok: 1;
+  collectionsProcessed: number;
+  documentsDeleted: number;
+  errors?: string[];
+}
+
+/**
+ * Query info for deleting expired documents
+ */
+export interface ExpiredDocumentsQuery {
+  sql: string;
+  params: unknown[];
 }
 
 /**

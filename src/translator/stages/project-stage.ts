@@ -5,6 +5,7 @@
 
 import type { StageResult, StageContext } from './types'
 import { translateExpression, isFieldReference, getFieldPath } from './expression-translator'
+import { validateFieldPath } from '../../utils/sql-safety.js'
 
 /**
  * Recursively collect all field references from a $function expression's args
@@ -67,7 +68,11 @@ function translateExclusionProject(
 ): StageResult {
   const fieldsToRemove = Object.entries(projection)
     .filter(([key, value]) => value === 0 && key !== '_id')
-    .map(([key]) => `'$.${key}'`)
+    .map(([key]) => {
+      // Validate field name to prevent SQL injection
+      validateFieldPath(key)
+      return `'$.${key}'`
+    })
 
   const source = context.previousCte || context.collection
   const selectClause = fieldsToRemove.length > 0
@@ -100,12 +105,14 @@ function translateInclusionProject(
   // First, add the explicitly projected fields
   const explicitFields = new Set<string>()
   for (const [key, value] of Object.entries(projection)) {
+    // Validate key (output field name) to prevent SQL injection
+    validateFieldPath(key)
     explicitFields.add(key)
     if (value === 1) {
       // Include existing field
       jsonParts.push(`'${key}', json_extract(data, '$.${key}')`)
     } else if (typeof value === 'string' && value.startsWith('$')) {
-      // Field reference (renaming)
+      // Field reference (renaming) - getFieldPath validates the field
       const fieldPath = getFieldPath(value)
       jsonParts.push(`'${key}', json_extract(data, '${fieldPath}')`)
     } else if (typeof value === 'object' && value !== null) {
@@ -127,6 +134,8 @@ function translateInclusionProject(
   // These will be used by the function executor to extract argument values
   for (const fieldRef of functionFieldRefs) {
     if (!explicitFields.has(fieldRef)) {
+      // Validate field reference to prevent SQL injection
+      validateFieldPath(fieldRef)
       jsonParts.push(`'${fieldRef}', json_extract(data, '$.${fieldRef}')`)
     }
   }

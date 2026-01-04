@@ -40,11 +40,50 @@ import {
 } from './crud.js'
 import { AggregateCommand } from './aggregate.js'
 import { ListIndexesCommand, CreateIndexesCommand, DropIndexesCommand } from './index.js'
+import {
+  SaslStartCommand,
+  SaslContinueCommand,
+  AuthenticateCommand,
+  LogoutCommand,
+  requiresAuthentication,
+  type AuthCommandContext,
+} from './auth.js'
+import { ScramAuthenticator, type CredentialsProvider } from '../auth/scram.js'
+import type { ConnectionState } from '../types.js'
+
+/** Router configuration options */
+export interface RouterOptions {
+  /** Enable authentication requirement */
+  authEnabled?: boolean
+  /** Credentials provider for authentication */
+  credentialsProvider?: CredentialsProvider
+  /** Function to get connection state */
+  getConnectionState?: (connectionId: number) => ConnectionState | undefined
+  /** Function to update connection state after authentication */
+  setConnectionAuthenticated?: (connectionId: number, username: string, db: string) => void
+  /** Function to clear authentication */
+  clearConnectionAuthentication?: (connectionId: number) => void
+}
 
 export class CommandRouter {
   private handlers: Map<string, CommandHandler>
+  private authEnabled: boolean
+  private authenticator?: ScramAuthenticator
+  private getConnectionState?: (connectionId: number) => ConnectionState | undefined
+  private setConnectionAuthenticated?: (connectionId: number, username: string, db: string) => void
+  private clearConnectionAuthentication?: (connectionId: number) => void
 
-  constructor(private backend: MondoBackend) {
+  constructor(backend: MondoBackend, options: RouterOptions = {}) {
+    this.authEnabled = options.authEnabled ?? false
+    this.getConnectionState = options.getConnectionState
+    this.setConnectionAuthenticated = options.setConnectionAuthenticated
+    this.clearConnectionAuthentication = options.clearConnectionAuthentication
+
+    // Initialize authenticator if credentials provider is given
+    if (options.credentialsProvider) {
+      this.authenticator = new ScramAuthenticator(options.credentialsProvider)
+    }
+
     // Initialize all command handlers
     this.handlers = new Map<string, CommandHandler>([
       // Handshake & discovery
@@ -90,6 +129,18 @@ export class CommandRouter {
       ['createIndexes', new CreateIndexesCommand(backend)],
       ['dropIndexes', new DropIndexesCommand(backend)],
     ])
+
+    // Register authentication commands if authenticator is available
+    if (this.authenticator) {
+      this.handlers.set('saslStart', new SaslStartCommand(this.authenticator))
+      this.handlers.set('saslContinue', new SaslContinueCommand(this.authenticator))
+    }
+
+    // Always register authenticate and logout (even if auth not fully enabled)
+    this.handlers.set('authenticate', new AuthenticateCommand())
+    if (this.clearConnectionAuthentication) {
+      this.handlers.set('logout', new LogoutCommand(this.clearConnectionAuthentication))
+    }
   }
 
   /**
@@ -105,6 +156,19 @@ export class CommandRouter {
           ErrorCode.COMMAND_NOT_FOUND,
           'no command found in request'
         ),
+      }
+    }
+
+    // Check authentication if enabled
+    if (this.authEnabled && requiresAuthentication(commandName)) {
+      const connState = this.getConnectionState?.(context.connectionId)
+      if (!connState?.authenticated) {
+        return {
+          response: errorResponse(
+            ErrorCode.UNAUTHORIZED,
+            `command ${commandName} requires authentication`
+          ),
+        }
       }
     }
 
@@ -137,6 +201,17 @@ export class CommandRouter {
     commandName: string
   ): Promise<CommandResult> {
     try {
+      // For auth commands, extend context with setAuthenticated callback
+      if (commandName === 'saslStart' || commandName === 'saslContinue') {
+        const authContext: AuthCommandContext = {
+          ...context,
+          setAuthenticated: (username: string, db: string) => {
+            this.setConnectionAuthenticated?.(context.connectionId, username, db)
+          },
+        }
+        return await handler.execute(command, authContext)
+      }
+
       return await handler.execute(command, context)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

@@ -137,9 +137,23 @@ export class FunctionExecutor {
 export default {
   async fetch(request) {
     try {
-      const { argsArray } = await request.json();
+      const { argsArray, timeout = 10000 } = await request.json();
       const fn = ${body};
-      const results = argsArray.map(args => fn(...args));
+
+      const executeWithTimeout = async (args) => {
+        const result = fn(...args);
+        if (result instanceof Promise) {
+          return Promise.race([
+            result,
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Function execution timeout')), timeout)
+            )
+          ]);
+        }
+        return result;
+      };
+
+      const results = await Promise.all(argsArray.map(args => executeWithTimeout(args)));
       return Response.json({ results });
     } catch (err) {
       return Response.json({ error: err.message });
@@ -153,9 +167,19 @@ export default {
 export default {
   async fetch(request) {
     try {
-      const { args } = await request.json();
+      const { args, timeout = 5000 } = await request.json();
       const fn = ${body};
       const result = fn(...args);
+
+      // Enforce timeout for async functions
+      if (result instanceof Promise) {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Function execution timeout')), timeout)
+        );
+        const finalResult = await Promise.race([result, timeoutPromise]);
+        return Response.json({ result: finalResult });
+      }
+
       return Response.json({ result });
     } catch (err) {
       return Response.json({ error: err.message });

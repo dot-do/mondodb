@@ -8,75 +8,25 @@
  * - Request deduplication
  */
 
-// ============================================================================
-// Types and Interfaces
-// ============================================================================
+import type {
+  RpcClientOptions,
+  RpcRequest,
+  RpcResponse,
+  BatchResponse,
+  EventHandler,
+  ReconnectEvent,
+  DeduplicatorOptions,
+} from '../types/rpc'
 
-/**
- * RPC client options
- */
-export interface RpcClientOptions {
-  /** Enable automatic reconnection */
-  autoReconnect?: boolean;
-  /** Maximum retry attempts */
-  maxRetries?: number;
-  /** Reconnect interval in milliseconds */
-  reconnectInterval?: number;
-  /** Enable request deduplication */
-  deduplicate?: boolean;
-  /** Deduplication TTL in milliseconds */
-  deduplicationTtl?: number;
-  /** Request timeout in milliseconds */
-  timeout?: number;
-}
-
-/**
- * RPC request structure
- */
-export interface RpcRequest {
-  id?: string;
-  method: string;
-  params: unknown[];
-}
-
-/**
- * RPC response structure
- */
-export interface RpcResponse {
-  id?: string;
-  result?: unknown;
-  error?: string;
-}
-
-/**
- * Batch response structure
- */
-export interface BatchResponse {
-  results: RpcResponse[];
-}
-
-/**
- * Event handler type
- */
-export type EventHandler<T = unknown> = (event: T) => void;
-
-/**
- * Reconnect event data
- */
-export interface ReconnectEvent {
-  attempt: number;
-  lastError?: Error;
-}
-
-// ============================================================================
-// Request Deduplicator
-// ============================================================================
-
-/**
- * Options for request deduplicator
- */
-export interface DeduplicatorOptions {
-  ttl?: number;
+// Re-export types for backward compatibility
+export type {
+  RpcClientOptions,
+  RpcRequest,
+  RpcResponse,
+  BatchResponse,
+  EventHandler,
+  ReconnectEvent,
+  DeduplicatorOptions,
 }
 
 /**
@@ -174,11 +124,13 @@ export class RequestDeduplicator {
 export class WebSocketRpcTransport {
   private ws: WebSocket;
   private messageId = 0;
-  private pending: Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }> = new Map();
+  private pending: Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }> = new Map();
   private messageHandlers: Set<(message: unknown) => void> = new Set();
+  private options?: { timeout?: number };
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, options?: { timeout?: number }) {
     this.ws = ws;
+    this.options = options;
     this.setupMessageHandler();
   }
 
@@ -207,6 +159,7 @@ export class WebSocketRpcTransport {
     if (data.id) {
       const pending = this.pending.get(data.id);
       if (pending) {
+        clearTimeout(pending.timeout);
         this.pending.delete(data.id);
         if (data.error) {
           pending.reject(new Error(data.error));
@@ -230,7 +183,12 @@ export class WebSocketRpcTransport {
         return;
       }
 
-      this.pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error('Request timeout'));
+      }, this.options?.timeout ?? 30000);
+
+      this.pending.set(id, { resolve, reject, timeout });
       this.ws.send(JSON.stringify(fullRequest));
     });
   }
@@ -469,7 +427,7 @@ export class RpcClient {
       const ws = new WebSocket(this.url);
 
       ws.addEventListener('open', () => {
-        this.wsTransport = new WebSocketRpcTransport(ws);
+        this.wsTransport = new WebSocketRpcTransport(ws, { timeout: this.options.timeout });
         resolve();
       });
 
@@ -582,6 +540,231 @@ class Database {
 }
 
 /**
+ * RPC Find Cursor - Simple cursor for RPC-based find operations
+ */
+class RpcFindCursor<T = unknown> {
+  private client: RpcClient;
+  private dbName: string;
+  private collectionName: string;
+  private query: Record<string, unknown>;
+  private _sort?: Record<string, 1 | -1>;
+  private _limit?: number;
+  private _skip?: number;
+  private _projection?: Record<string, 0 | 1>;
+  private _buffer: T[] = [];
+  private _position: number = 0;
+  private _fetched: boolean = false;
+  private _closed: boolean = false;
+
+  constructor(
+    client: RpcClient,
+    dbName: string,
+    collectionName: string,
+    query: Record<string, unknown> = {}
+  ) {
+    this.client = client;
+    this.dbName = dbName;
+    this.collectionName = collectionName;
+    this.query = query;
+  }
+
+  get closed(): boolean {
+    return this._closed;
+  }
+
+  sort(spec: Record<string, 1 | -1>): this {
+    this._sort = spec;
+    return this;
+  }
+
+  limit(count: number): this {
+    if (count < 0) throw new Error('Limit must be non-negative');
+    this._limit = count;
+    return this;
+  }
+
+  skip(count: number): this {
+    if (count < 0) throw new Error('Skip must be non-negative');
+    this._skip = count;
+    return this;
+  }
+
+  project(spec: Record<string, 0 | 1>): this {
+    this._projection = spec;
+    return this;
+  }
+
+  private async ensureFetched(): Promise<void> {
+    if (this._fetched || this._closed) return;
+
+    const options: Record<string, unknown> = {};
+    if (this._sort) options.sort = this._sort;
+    if (this._limit !== undefined) options.limit = this._limit;
+    if (this._skip !== undefined) options.skip = this._skip;
+    if (this._projection) options.projection = this._projection;
+
+    this._buffer = await this.client.call('find', [
+      this.dbName,
+      this.collectionName,
+      this.query,
+      options
+    ]) as T[];
+    this._fetched = true;
+  }
+
+  async next(): Promise<T | null> {
+    if (this._closed) return null;
+    await this.ensureFetched();
+    if (this._position >= this._buffer.length) return null;
+    return this._buffer[this._position++];
+  }
+
+  async hasNext(): Promise<boolean> {
+    if (this._closed) return false;
+    await this.ensureFetched();
+    return this._position < this._buffer.length;
+  }
+
+  async toArray(): Promise<T[]> {
+    if (this._closed) return [];
+    await this.ensureFetched();
+    const remaining = this._buffer.slice(this._position);
+    this._position = this._buffer.length;
+    await this.close();
+    return remaining;
+  }
+
+  async forEach(callback: (doc: T, index: number) => void | false | Promise<void | false>): Promise<void> {
+    if (this._closed) return;
+    await this.ensureFetched();
+    let index = 0;
+    while (this._position < this._buffer.length) {
+      const doc = this._buffer[this._position++];
+      const result = await callback(doc, index++);
+      if (result === false) break;
+    }
+  }
+
+  async count(): Promise<number> {
+    await this.ensureFetched();
+    return this._buffer.length - this._position;
+  }
+
+  async close(): Promise<void> {
+    if (this._closed) return;
+    this._closed = true;
+    this._buffer = [];
+    this._position = 0;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
+    try {
+      while (await this.hasNext()) {
+        const doc = await this.next();
+        if (doc !== null) yield doc;
+      }
+    } finally {
+      await this.close();
+    }
+  }
+}
+
+/**
+ * RPC Aggregation Cursor - Simple cursor for RPC-based aggregate operations
+ */
+class RpcAggregationCursor<T = unknown> {
+  private client: RpcClient;
+  private dbName: string;
+  private collectionName: string;
+  private pipeline: unknown[];
+  private options: Record<string, unknown>;
+  private _buffer: T[] = [];
+  private _position: number = 0;
+  private _fetched: boolean = false;
+  private _closed: boolean = false;
+
+  constructor(
+    client: RpcClient,
+    dbName: string,
+    collectionName: string,
+    pipeline: unknown[] = [],
+    options: Record<string, unknown> = {}
+  ) {
+    this.client = client;
+    this.dbName = dbName;
+    this.collectionName = collectionName;
+    this.pipeline = pipeline;
+    this.options = options;
+  }
+
+  get closed(): boolean {
+    return this._closed;
+  }
+
+  private async ensureFetched(): Promise<void> {
+    if (this._fetched || this._closed) return;
+    this._buffer = await this.client.call('aggregate', [
+      this.dbName,
+      this.collectionName,
+      this.pipeline,
+      this.options
+    ]) as T[];
+    this._fetched = true;
+  }
+
+  async next(): Promise<T | null> {
+    if (this._closed) return null;
+    await this.ensureFetched();
+    if (this._position >= this._buffer.length) return null;
+    return this._buffer[this._position++];
+  }
+
+  async hasNext(): Promise<boolean> {
+    if (this._closed) return false;
+    await this.ensureFetched();
+    return this._position < this._buffer.length;
+  }
+
+  async toArray(): Promise<T[]> {
+    if (this._closed) return [];
+    await this.ensureFetched();
+    const remaining = this._buffer.slice(this._position);
+    this._position = this._buffer.length;
+    await this.close();
+    return remaining;
+  }
+
+  async forEach(callback: (doc: T, index: number) => void | false | Promise<void | false>): Promise<void> {
+    if (this._closed) return;
+    await this.ensureFetched();
+    let index = 0;
+    while (this._position < this._buffer.length) {
+      const doc = this._buffer[this._position++];
+      const result = await callback(doc, index++);
+      if (result === false) break;
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this._closed) return;
+    this._closed = true;
+    this._buffer = [];
+    this._position = 0;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterableIterator<T> {
+    try {
+      while (await this.hasNext()) {
+        const doc = await this.next();
+        if (doc !== null) yield doc;
+      }
+    } finally {
+      await this.close();
+    }
+  }
+}
+
+/**
  * Collection reference
  */
 class Collection {
@@ -596,18 +779,25 @@ class Collection {
   }
 
   /**
-   * Find documents
+   * Find documents - returns a cursor
    */
-  async find(query: Record<string, unknown> = {}): Promise<unknown[]> {
-    return this.client.call('find', [this.dbName, this.collectionName, query]) as Promise<unknown[]>;
+  find(query: Record<string, unknown> = {}): RpcFindCursor {
+    return new RpcFindCursor(this.client, this.dbName, this.collectionName, query);
   }
 
   /**
    * Find one document
    */
   async findOne(query: Record<string, unknown> = {}): Promise<unknown | null> {
-    const results = await this.find(query);
-    return results[0] || null;
+    const cursor = this.find(query).limit(1);
+    return cursor.next();
+  }
+
+  /**
+   * Aggregate pipeline - returns a cursor
+   */
+  aggregate(pipeline: unknown[] = [], options: Record<string, unknown> = {}): RpcAggregationCursor {
+    return new RpcAggregationCursor(this.client, this.dbName, this.collectionName, pipeline, options);
   }
 
   /**

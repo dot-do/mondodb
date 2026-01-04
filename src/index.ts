@@ -30,7 +30,60 @@ export type {
 // Client collection with index support
 export { MongoCollection } from './client/mongo-collection';
 
-// RPC Server
+// Consolidated RPC Types (from types/rpc.ts)
+export {
+  // Error codes and helpers
+  ErrorCode,
+  getErrorCodeName,
+  successResponse,
+  errorResponse,
+  legacySuccessResponse,
+  legacyErrorResponse,
+  // Legacy RPC message types
+  MessageType,
+} from './types/rpc';
+
+export type {
+  // Cloudflare types
+  DurableObjectNamespace,
+  DurableObjectId,
+  DurableObjectStub,
+  // Environment types
+  MondoEnv,
+  // Worker loader types
+  WorkerLoader,
+  WorkerCode,
+  WorkerStub,
+  WorkerEntrypoint as WorkerEntrypointType,
+  // JSON-RPC style types
+  RpcRequest,
+  RpcResponse,
+  BatchResponse,
+  // HTTP RPC types
+  HttpRpcRequest,
+  HttpRpcSuccessResponse,
+  HttpRpcErrorResponse,
+  HttpRpcResponse,
+  // Legacy RPC types
+  LegacyRpcRequest,
+  LegacyRpcResponse,
+  // Database reference types
+  DatabaseRef,
+  CollectionRef,
+  // Batched executor types
+  BatchedExecutorOptions,
+  PipelineOp,
+  // RPC client types
+  RpcClientOptions,
+  DeduplicatorOptions,
+  EventHandler,
+  ReconnectEvent,
+  // RPC handler types
+  RpcHandler,
+  ErrorCodeValue,
+} from './types/rpc';
+
+// RPC Server (classes and functions)
 export {
   RpcTarget,
   MondoRpcTarget,
@@ -40,33 +93,15 @@ export {
   PipelinedRpcProxy,
 } from './rpc/rpc-target';
 
-export type {
-  MondoEnv as RpcMondoEnv,
-  DurableObjectNamespace,
-  DurableObjectId,
-  DurableObjectStub,
-  DatabaseRef,
-  CollectionRef,
-  RpcRequest,
-  RpcResponse,
-  BatchResponse,
-  BatchedExecutorOptions,
-  PipelineOp,
-} from './rpc/rpc-target';
+// Backward compatibility: re-export RpcMondoEnv alias
+export type { MondoEnv as RpcMondoEnv } from './types/rpc';
 
-// RPC Client
+// RPC Client (classes)
 export {
   RpcClient,
   MongoClient,
   WebSocketRpcTransport,
   RequestDeduplicator,
-} from './rpc/rpc-client';
-
-export type {
-  RpcClientOptions,
-  DeduplicatorOptions,
-  ReconnectEvent,
-  EventHandler,
 } from './rpc/rpc-client';
 
 // Worker Entrypoint
@@ -80,7 +115,6 @@ export {
 
 export type {
   ExecutionContext,
-  MondoEnv,
   MondoBindings,
   MondoEntrypointOptions,
 } from './rpc/worker-entrypoint';

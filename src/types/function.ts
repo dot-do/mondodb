@@ -2,6 +2,16 @@
  * Types for $function operator - secure user code execution via worker-loader
  */
 
+// Import and re-export worker loader types from consolidated RPC types
+import type {
+  WorkerLoader,
+  WorkerCode,
+  WorkerStub,
+  WorkerEntrypoint,
+} from './rpc'
+
+export type { WorkerLoader, WorkerCode, WorkerStub, WorkerEntrypoint }
+
 /**
  * MongoDB $function operator specification
  */
@@ -64,28 +74,4 @@ export interface FunctionExpression {
   body: string
   argPaths: string[]  // Field paths to extract from documents
   literalArgs: Map<number, unknown>  // Position -> literal value
-}
-
-/**
- * Cloudflare worker-loader types (matches CF API)
- */
-export interface WorkerLoader {
-  get(id: string, getCode: () => Promise<WorkerCode>): WorkerStub
-}
-
-export interface WorkerCode {
-  compatibilityDate: string
-  compatibilityFlags?: string[]
-  mainModule: string
-  modules: Record<string, string | { js: string } | { text: string }>
-  globalOutbound?: null  // null blocks all network access
-  env?: Record<string, unknown>
-}
-
-export interface WorkerStub {
-  getEntrypoint(name?: string): WorkerEntrypoint
-}
-
-export interface WorkerEntrypoint {
-  fetch(request: Request): Promise<Response>
 }

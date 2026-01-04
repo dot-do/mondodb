@@ -8,97 +8,33 @@
  * - Promise pipelining for chained operations
  */
 
-// ============================================================================
-// Types and Interfaces
-// ============================================================================
+import type {
+  DurableObjectNamespace,
+  DurableObjectId,
+  DurableObjectStub,
+  MondoEnv,
+  RpcRequest,
+  RpcResponse,
+  BatchResponse,
+  DatabaseRef,
+  CollectionRef,
+  BatchedExecutorOptions,
+  PipelineOp,
+} from '../types/rpc'
 
-/**
- * Durable Object namespace interface
- */
-export interface DurableObjectNamespace {
-  idFromName(name: string): DurableObjectId;
-  get(id: DurableObjectId): DurableObjectStub;
-}
-
-/**
- * Durable Object ID interface
- */
-export interface DurableObjectId {
-  toString(): string;
-}
-
-/**
- * Durable Object stub interface
- */
-export interface DurableObjectStub {
-  fetch(request: Request | string, init?: RequestInit): Promise<Response>;
-}
-
-/**
- * Environment bindings interface
- */
-export interface MondoEnv {
-  MONDO_DATABASE: DurableObjectNamespace;
-}
-
-/**
- * RPC request structure
- */
-export interface RpcRequest {
-  id?: string;
-  method: string;
-  params: unknown[];
-}
-
-/**
- * RPC response structure
- */
-export interface RpcResponse {
-  id?: string;
-  result?: unknown;
-  error?: string;
-}
-
-/**
- * Batch response structure
- */
-export interface BatchResponse {
-  results: RpcResponse[];
-}
-
-/**
- * Database reference returned by db() method
- */
-export interface DatabaseRef {
-  name: string;
-  stub: DurableObjectStub;
-}
-
-/**
- * Collection reference returned by collection() method
- */
-export interface CollectionRef {
-  dbName: string;
-  collectionName: string;
-  stub: DurableObjectStub;
-}
-
-/**
- * Batched executor options
- */
-export interface BatchedExecutorOptions {
-  maxBatchSize?: number;
-  flushInterval?: number;
-}
-
-/**
- * Pipelined operation reference
- */
-export interface PipelineOp {
-  id: string;
-  method: string;
-  params: unknown[];
-  dependencies: string[];
+// Re-export types for backward compatibility
+export type {
+  DurableObjectNamespace,
+  DurableObjectId,
+  DurableObjectStub,
+  MondoEnv,
+  RpcRequest,
+  RpcResponse,
+  BatchResponse,
+  DatabaseRef,
+  CollectionRef,
+  BatchedExecutorOptions,
+  PipelineOp,
 }
 
 // ============================================================================
@@ -112,6 +48,13 @@ export class RpcTarget {
   protected methods: Map<string, (...args: unknown[]) => Promise<unknown>> = new Map();
 
   /**
+   * Allowlist of methods that can be invoked via RPC.
+   * Subclasses should override this to define their allowed methods.
+   * This prevents invocation of inherited methods like constructor, __proto__, toString, etc.
+   */
+  protected allowedMethods: Set<string> = new Set();
+
+  /**
    * Register a method handler
    */
   protected registerMethod(name: string, handler: (...args: unknown[]) => Promise<unknown>): void {
@@ -119,20 +62,33 @@ export class RpcTarget {
   }
 
   /**
-   * Check if a method exists
+   * Check if a method exists and is allowed
    */
   hasMethod(name: string): boolean {
-    return this.methods.has(name) || typeof (this as Record<string, unknown>)[name] === 'function';
+    // Only return true if the method is in the allowlist or registered methods
+    if (this.methods.has(name)) {
+      return true;
+    }
+    if (this.allowedMethods.has(name) && typeof (this as Record<string, unknown>)[name] === 'function') {
+      return true;
+    }
+    return false;
   }
 
   /**
    * Invoke a method by name
    */
   async invoke(method: string, params: unknown[]): Promise<unknown> {
-    // First check registered methods
+    // First check registered methods (these are always allowed)
     const handler = this.methods.get(method);
     if (handler) {
       return handler.apply(this, params);
+    }
+
+    // For class methods, enforce the allowlist to prevent prototype pollution
+    // and invocation of inherited methods like constructor, __proto__, toString, etc.
+    if (!this.allowedMethods.has(method)) {
+      throw new Error(`Method not allowed: ${method}`);
     }
 
     // Then check class methods
@@ -156,6 +112,20 @@ export class MondoRpcTarget extends RpcTarget {
   private env: MondoEnv;
   private connectionString: string | null = null;
   private databases: Map<string, DatabaseRef> = new Map();
+
+  /**
+   * Explicit allowlist of methods that can be invoked via RPC.
+   * This prevents invocation of inherited methods like constructor, __proto__, toString, etc.
+   */
+  protected override allowedMethods = new Set([
+    'connect',
+    'db',
+    'collection',
+    'find',
+    'insertOne',
+    'updateOne',
+    'deleteOne',
+  ]);
 
   constructor(env: MondoEnv) {
     super();

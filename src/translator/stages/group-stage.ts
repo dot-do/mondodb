@@ -5,6 +5,7 @@
 
 import type { StageResult, StageContext, GroupStage } from './types'
 import { isFieldReference, getFieldPath, translateExpressionValue } from './expression-translator'
+import { validateFieldPath } from '../../utils/sql-safety.js'
 
 export function translateGroupStage(
   group: GroupStage,
@@ -36,7 +37,10 @@ export function translateGroupStage(
     // Compound _id
     const idParts: string[] = []
     for (const [key, value] of Object.entries(_id)) {
+      // Validate key to prevent SQL injection
+      validateFieldPath(key)
       if (typeof value === 'string' && isFieldReference(value)) {
+        // getFieldPath validates the field reference
         const path = getFieldPath(value)
         const fieldExpr = `json_extract(data, '${path}')`
         groupByFields.push(fieldExpr)
@@ -48,6 +52,8 @@ export function translateGroupStage(
 
   // Build accumulators
   for (const [field, accumulator] of Object.entries(accumulators)) {
+    // Validate field name to prevent SQL injection
+    validateFieldPath(field)
     const accSql = translateAccumulator(accumulator as Record<string, unknown>, params)
     selectParts.push(`'${field}', ${accSql}`)
   }

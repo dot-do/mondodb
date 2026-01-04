@@ -163,10 +163,12 @@ export class AggregationExecutor {
 
     // Re-apply $sort stages after function execution
     // This is needed because SQL sorting happened on placeholder strings, not computed values
-    const sortStage = pipeline.find(stage => '$sort' in stage) as { $sort: Record<string, number> } | undefined
-    if (sortStage) {
+    // Use the last $sort stage since that represents the final ordering intent
+    const sortStages = pipeline.filter(stage => '$sort' in stage);
+    const lastSortStage = sortStages[sortStages.length - 1] as { $sort: Record<string, number> } | undefined;
+    if (lastSortStage) {
       documents.sort((a, b) => {
-        for (const [field, direction] of Object.entries(sortStage.$sort)) {
+        for (const [field, direction] of Object.entries(lastSortStage.$sort)) {
           const aVal = this.extractFieldValue(a, `$.${field}`)
           const bVal = this.extractFieldValue(b, `$.${field}`)
 
@@ -187,34 +189,24 @@ export class AggregationExecutor {
   }
 
   /**
-   * Execute functions directly without sandboxing (fallback for testing)
-   * WARNING: This is NOT secure and should only be used when LOADER binding is unavailable
+   * SECURITY: Direct function execution has been disabled to prevent arbitrary code execution.
+   *
+   * The $function operator requires the LOADER binding for secure sandboxed execution
+   * via Cloudflare worker-loader. Without this binding, $function operators cannot be used.
+   *
+   * This method is kept as a private placeholder that throws an error to prevent
+   * any bypass attempts.
+   *
+   * @throws Error - Always throws to prevent unsafe code execution
    */
-  private executeDirectBatch(body: string, argsArray: unknown[][]): unknown[] {
-    // Normalize function body
-    const normalizedBody = body.trim()
-    let fnCode: string
-
-    // Wrap function declarations in parentheses for invocation
-    if (normalizedBody.startsWith('function')) {
-      fnCode = `(${normalizedBody})`
-    } else {
-      fnCode = normalizedBody
-    }
-
-    // Create the function using Function constructor
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const fn = new Function(`return ${fnCode}`)() as (...args: unknown[]) => unknown
-
-    // Execute for each args set
-    return argsArray.map(args => {
-      try {
-        return fn(...args)
-      } catch (error) {
-        // Return error message as a special marker
-        return { __error: error instanceof Error ? error.message : String(error) }
-      }
-    })
+  private executeDirectBatch(_body: string, _argsArray: unknown[][]): never {
+    // SECURITY: new Function() has been removed to prevent arbitrary code execution
+    // The $function operator requires the LOADER binding for secure sandboxed execution
+    throw new Error(
+      'SECURITY: $function operator requires the LOADER binding for secure sandboxed execution. ' +
+        'Direct function execution is disabled to prevent arbitrary code execution. ' +
+        'Please configure the worker_loaders binding in your wrangler.toml to enable $function support.'
+    )
   }
 
   /**

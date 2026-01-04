@@ -167,6 +167,110 @@ describe('QueryTranslator', () => {
       });
     });
 
+    describe('$regex operator', () => {
+      it('should translate simple $regex pattern (contains)', () => {
+        const query = { name: { $regex: 'john' } };
+        const result = translator.translate(query);
+
+        // The implementation adds type check for string fields
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?)");
+        expect(result.params).toEqual(['%john%']);
+      });
+
+      it('should translate $regex with ^ anchor (starts with)', () => {
+        const query = { name: { $regex: '^John' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?)");
+        expect(result.params).toEqual(['John%']);
+      });
+
+      it('should translate $regex with $ anchor (ends with)', () => {
+        const query = { name: { $regex: 'son$' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?)");
+        expect(result.params).toEqual(['%son']);
+      });
+
+      it('should translate $regex with both anchors (exact match)', () => {
+        const query = { name: { $regex: '^John$' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?)");
+        expect(result.params).toEqual(['John']);
+      });
+
+      it('should translate $regex with .* wildcard', () => {
+        const query = { name: { $regex: 'J.*n' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?)");
+        expect(result.params).toEqual(['%J%n%']);
+      });
+
+      it('should translate $regex with . single char', () => {
+        const query = { code: { $regex: '^A.B$' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.code')) = 'text' AND json_extract(data, '$.code') LIKE ?)");
+        expect(result.params).toEqual(['A_B']);
+      });
+
+      it('should translate $regex with $options: "i" (case insensitive)', () => {
+        const query = { name: { $regex: 'john', $options: 'i' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND LOWER(json_extract(data, '$.name')) LIKE LOWER(?))");
+        expect(result.params).toEqual(['%john%']);
+      });
+
+      it('should handle $regex as RegExp object', () => {
+        const query = { name: { $regex: /john/i } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.name')) = 'text' AND LOWER(json_extract(data, '$.name')) LIKE LOWER(?))");
+        expect(result.params).toEqual(['%john%']);
+      });
+
+      it('should escape LIKE special characters in pattern', () => {
+        const query = { value: { $regex: '100%' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.value')) = 'text' AND json_extract(data, '$.value') LIKE ?)");
+        expect(result.params).toEqual(['%100\\%%']);
+      });
+
+      it('should translate $regex with nested path', () => {
+        const query = { 'user.email': { $regex: '@gmail.com$' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("(json_type(json_extract(data, '$.user.email')) = 'text' AND json_extract(data, '$.user.email') LIKE ?)");
+        expect(result.params).toEqual(['%@gmail_com']);
+      });
+
+      it('should translate $regex combined with other operators', () => {
+        const query = {
+          name: { $regex: '^J' },
+          age: { $gte: 18 }
+        };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain("LIKE ?");
+        expect(result.sql).toContain(">= ?");
+        expect(result.params).toContain('J%');
+        expect(result.params).toContain(18);
+      });
+
+      it('should translate $regex with $not', () => {
+        const query = { name: { $not: { $regex: '^Admin' } } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toBe("NOT ((json_type(json_extract(data, '$.name')) = 'text' AND json_extract(data, '$.name') LIKE ?))");
+        expect(result.params).toEqual(['Admin%']);
+      });
+    });
+
     describe('Nested field paths', () => {
       it('should handle single level nested path', () => {
         const query = { 'address.city': 'New York' };
@@ -409,7 +513,9 @@ describe('QueryTranslator', () => {
         const query = { email: { $exists: true } };
         const result = translator.translate(query);
 
-        expect(result.sql).toBe("json_extract(data, '$.email') IS NOT NULL");
+        // Uses json_type to distinguish between null values and missing fields
+        // json_type returns 'null' for explicit nulls, NULL for missing fields
+        expect(result.sql).toBe("json_type(data, '$.email') IS NOT NULL");
         expect(result.params).toEqual([]);
       });
 
@@ -417,7 +523,8 @@ describe('QueryTranslator', () => {
         const query = { deletedAt: { $exists: false } };
         const result = translator.translate(query);
 
-        expect(result.sql).toBe("json_extract(data, '$.deletedAt') IS NULL");
+        // Uses json_type to distinguish between null values and missing fields
+        expect(result.sql).toBe("json_type(data, '$.deletedAt') IS NULL");
         expect(result.params).toEqual([]);
       });
 
@@ -425,7 +532,8 @@ describe('QueryTranslator', () => {
         const query = { 'profile.avatar': { $exists: true } };
         const result = translator.translate(query);
 
-        expect(result.sql).toBe("json_extract(data, '$.profile.avatar') IS NOT NULL");
+        // Uses json_type to distinguish between null values and missing fields
+        expect(result.sql).toBe("json_type(data, '$.profile.avatar') IS NOT NULL");
         expect(result.params).toEqual([]);
       });
     });
@@ -555,6 +663,124 @@ describe('QueryTranslator', () => {
 
         expect(result.sql).toBe("json_array_length(json_extract(data, '$.items')) = ?");
         expect(result.params).toEqual([0]);
+      });
+    });
+  });
+
+  // ============================================================
+  // EVALUATION OPERATORS
+  // ============================================================
+  describe('Evaluation Operators', () => {
+    describe('$regex operator', () => {
+      it('should translate basic $regex to LIKE pattern', () => {
+        const query = { name: { $regex: 'Apple' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain('LIKE');
+        expect(result.sql).toContain("json_type");
+        expect(result.params).toEqual(['%Apple%']);
+      });
+
+      it('should handle $regex with case-insensitive option', () => {
+        const query = { name: { $regex: 'apple', $options: 'i' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain('LOWER');
+        expect(result.sql).toContain('LIKE');
+        expect(result.params).toEqual(['%apple%']);
+      });
+
+      it('should handle $regex with ^ anchor (starts with)', () => {
+        const query = { name: { $regex: '^A' } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual(['A%']);
+      });
+
+      it('should handle $regex with $ anchor (ends with)', () => {
+        const query = { name: { $regex: 'a$' } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual(['%a']);
+      });
+
+      it('should handle $regex with both anchors (exact match)', () => {
+        const query = { name: { $regex: '^Apple$' } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual(['Apple']);
+      });
+
+      it('should handle $regex with .* wildcard', () => {
+        const query = { name: { $regex: 'A.*e' } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual(['%A%e%']);
+      });
+
+      it('should handle $regex with . single character', () => {
+        const query = { name: { $regex: 'A.ple' } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual(['%A_ple%']);
+      });
+
+      it('should handle $regex with character class', () => {
+        const query = { name: { $regex: '[0-9]+' } };
+        const result = translator.translate(query);
+
+        // Character class with + becomes %
+        expect(result.params).toEqual(['%%%']);
+      });
+
+      it('should handle $regex with multiline option', () => {
+        const query = { name: { $regex: '^Line2', $options: 'm' } };
+        const result = translator.translate(query);
+
+        // In multiline mode, ^ doesn't anchor to start of string
+        expect(result.params).toEqual(['%Line2%']);
+      });
+
+      it('should handle $regex with escaped special characters', () => {
+        const query = { name: { $regex: 'test\\.value' } };
+        const result = translator.translate(query);
+
+        // Escaped dot should be literal
+        expect(result.params).toEqual(['%test.value%']);
+      });
+
+      it('should add type check for string fields', () => {
+        const query = { value: { $regex: '123' } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain("json_type");
+        expect(result.sql).toContain("= 'text'");
+      });
+    });
+
+    describe('$mod operator', () => {
+      it('should translate $mod to modulo check', () => {
+        const query = { value: { $mod: [10, 0] } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain('%');
+        expect(result.sql).toContain('CAST');
+        expect(result.sql).toContain("json_type");
+        expect(result.params).toEqual([10, 0]);
+      });
+
+      it('should handle $mod with non-zero remainder', () => {
+        const query = { value: { $mod: [10, 5] } };
+        const result = translator.translate(query);
+
+        expect(result.params).toEqual([10, 5]);
+      });
+
+      it('should check for numeric type', () => {
+        const query = { value: { $mod: [2, 1] } };
+        const result = translator.translate(query);
+
+        expect(result.sql).toContain("IN ('integer', 'real')");
       });
     });
   });

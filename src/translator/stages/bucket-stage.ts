@@ -5,6 +5,7 @@
 
 import type { StageResult, StageContext, BucketStage } from './types'
 import { getFieldPath, translateExpressionValue } from './expression-translator'
+import { validateFieldPath } from '../../utils/sql-safety.js'
 
 export function translateBucketStage(
   bucket: BucketStage,
@@ -14,8 +15,15 @@ export function translateBucketStage(
   const { groupBy, boundaries, output } = bucket
   const defaultBucket = bucket.default
 
-  // Get the field to bucket on
-  const fieldPath = groupBy.startsWith('$') ? getFieldPath(groupBy) : `$.${groupBy}`
+  // Get the field to bucket on - getFieldPath validates the field reference
+  // If not a $ reference, validate directly
+  let fieldPath: string
+  if (groupBy.startsWith('$')) {
+    fieldPath = getFieldPath(groupBy)
+  } else {
+    validateFieldPath(groupBy)
+    fieldPath = `$.${groupBy}`
+  }
   const fieldExpr = `json_extract(data, '${fieldPath}')`
 
   // Build CASE WHEN expression for bucket assignment

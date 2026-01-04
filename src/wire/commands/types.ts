@@ -3,6 +3,26 @@
  */
 
 import type { Document } from 'bson'
+import type { ConnectionState } from '../types.js'
+import {
+  ErrorCode,
+  getErrorCodeName,
+  successResponse as rpcSuccessResponse,
+  errorResponse as rpcErrorResponse,
+} from '../../types/rpc.js'
+
+// Re-export ErrorCode from consolidated types
+export { ErrorCode }
+
+/** Authentication configuration */
+export interface AuthConfig {
+  /** Enable authentication */
+  enabled: boolean
+  /** Username for SCRAM-SHA-256 authentication */
+  username: string
+  /** Password for SCRAM-SHA-256 authentication */
+  password: string
+}
 
 /** Context passed to command handlers */
 export interface CommandContext {
@@ -14,6 +34,10 @@ export interface CommandContext {
   requestId: number
   /** Document sequences from OP_MSG kind=1 sections */
   documentSequences: Map<string, Document[]>
+  /** SECURITY: Authentication configuration (when auth is enabled) */
+  auth?: AuthConfig
+  /** Connection state (for updating authentication status) */
+  connection?: ConnectionState
 }
 
 /** Result from a command handler */
@@ -30,50 +54,9 @@ export interface CommandHandler {
   execute(command: Document, context: CommandContext): Promise<CommandResult>
 }
 
-/** Error codes matching MongoDB */
-export const ErrorCode = {
-  OK: 0,
-  INTERNAL_ERROR: 1,
-  BAD_VALUE: 2,
-  NO_SUCH_KEY: 4,
-  GRAPH_CONTAINS_CYCLE: 5,
-  HOST_UNREACHABLE: 6,
-  HOST_NOT_FOUND: 7,
-  UNKNOWN_ERROR: 8,
-  FAILED_TO_PARSE: 9,
-  CANNOT_MUTATE_OBJECT: 10,
-  USER_NOT_FOUND: 11,
-  UNSUPPORTED_FORMAT: 12,
-  UNAUTHORIZED: 13,
-  TYPE_MISMATCH: 14,
-  OVERFLOW: 15,
-  INVALID_LENGTH: 16,
-  PROTOCOL_ERROR: 17,
-  AUTHENTICATION_FAILED: 18,
-  CANNOT_REUSE_OBJECT: 19,
-  ILLEGAL_OPERATION: 20,
-  EMPTY_ARRAY_OPERATION: 21,
-  INVALID_BSON: 22,
-  ALREADY_INITIALIZED: 23,
-  LOCK_TIMEOUT: 24,
-  REMOTE_VALIDATION_ERROR: 25,
-  NAMESPACE_NOT_FOUND: 26,
-  INDEX_NOT_FOUND: 27,
-  PATH_NOT_VIABLE: 28,
-  NON_EXISTENT_PATH: 29,
-  INVALID_PATH: 30,
-  ROLE_NOT_FOUND: 31,
-  ROLES_NOT_RELATED: 32,
-  PRIVILEGE_NOT_FOUND: 33,
-  CANNOT_BACKFILL_ARRAY: 34,
-  COMMAND_NOT_FOUND: 59,
-  DATABASE_NOT_FOUND: 60,
-  LOCATION_ERROR: 16755,
-} as const
-
 /** Create a success response */
 export function successResponse(data: Document = {}): Document {
-  return { ok: 1, ...data }
+  return rpcSuccessResponse(data) as Document
 }
 
 /** Create an error response */
@@ -82,23 +65,5 @@ export function errorResponse(
   errmsg: string,
   codeName?: string
 ): Document {
-  return {
-    ok: 0,
-    code,
-    codeName: codeName || getCodeName(code),
-    errmsg,
-  }
-}
-
-/** Get the code name for an error code */
-function getCodeName(code: number): string {
-  for (const [name, value] of Object.entries(ErrorCode)) {
-    if (value === code) {
-      return name
-        .split('_')
-        .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-        .join('')
-    }
-  }
-  return 'UnknownError'
+  return rpcErrorResponse(code, errmsg, codeName) as Document
 }

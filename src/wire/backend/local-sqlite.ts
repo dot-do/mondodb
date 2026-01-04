@@ -7,6 +7,7 @@
 
 import { Database, type SQLQueryBindings } from 'bun:sqlite'
 import { ObjectId, type Document } from 'bson'
+import { validateFieldPath, safeJsonPath } from '../../utils/sql-safety.js'
 import type {
   MondoBackend,
   DatabaseInfo,
@@ -26,6 +27,95 @@ import type {
 
 /** Default batch size for cursor results */
 const DEFAULT_BATCH_SIZE = 101
+
+/**
+ * Validate and sanitize a database name to prevent path traversal attacks.
+ * Throws an error if the name contains dangerous characters or patterns.
+ *
+ * SECURITY: This function is critical for preventing attacks where malicious
+ * database names like "../../../etc/passwd" could be used to read/write
+ * files outside the data directory.
+ *
+ * @throws Error if the database name is invalid or contains path traversal attempts
+ */
+function sanitizeDatabaseName(name: string): string {
+  // Reject empty names
+  if (!name || typeof name !== 'string') {
+    throw new Error('Database name must be a non-empty string')
+  }
+
+  // Reject path traversal patterns
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+    throw new Error(`Invalid database name "${name}": contains path traversal characters`)
+  }
+
+  // Reject null bytes (can bypass path checks in some systems)
+  if (name.includes('\0')) {
+    throw new Error('Invalid database name: contains null byte')
+  }
+
+  // Reject names starting with dots (hidden files)
+  if (name.startsWith('.')) {
+    throw new Error(`Invalid database name "${name}": cannot start with a dot`)
+  }
+
+  // Reject names that are too long (filesystem safety)
+  if (name.length > 255) {
+    throw new Error(`Database name too long: ${name.length} characters (max 255)`)
+  }
+
+  // Only allow alphanumeric, underscore, and hyphen (safe filename characters)
+  // This is more restrictive than MongoDB but appropriate for filesystem safety
+  const validNameRegex = /^[a-zA-Z0-9_-]+$/
+  if (!validNameRegex.test(name)) {
+    throw new Error(
+      `Invalid database name "${name}": only alphanumeric characters, underscores, and hyphens are allowed`
+    )
+  }
+
+  return name
+}
+
+/**
+ * Validate a collection name to prevent injection attacks.
+ * Collection names are stored in the database, not used in file paths,
+ * but validation prevents SQL-related issues and maintains consistency.
+ *
+ * @throws Error if the collection name is invalid
+ */
+function validateCollectionName(name: string): string {
+  // Reject empty names
+  if (!name || typeof name !== 'string') {
+    throw new Error('Collection name must be a non-empty string')
+  }
+
+  // Reject null bytes
+  if (name.includes('\0')) {
+    throw new Error('Invalid collection name: contains null byte')
+  }
+
+  // Reject names that are too long
+  if (name.length > 255) {
+    throw new Error(`Collection name too long: ${name.length} characters (max 255)`)
+  }
+
+  // MongoDB allows more characters in collection names, but we restrict
+  // to prevent potential issues. Allow alphanumeric, underscore, hyphen, and dot.
+  // Dots are allowed for namespacing (e.g., "system.users")
+  const validNameRegex = /^[a-zA-Z_][a-zA-Z0-9_.-]*$/
+  if (!validNameRegex.test(name)) {
+    throw new Error(
+      `Invalid collection name "${name}": must start with a letter or underscore, and contain only alphanumeric characters, underscores, hyphens, and dots`
+    )
+  }
+
+  // Reject system collection prefixes unless it's a known system collection
+  if (name.startsWith('system.') && !['system.users', 'system.indexes', 'system.namespaces'].includes(name)) {
+    throw new Error(`Invalid collection name "${name}": cannot use reserved 'system.' prefix`)
+  }
+
+  return name
+}
 
 /** Cursor timeout in milliseconds (10 minutes) */
 const CURSOR_TIMEOUT_MS = 10 * 60 * 1000
@@ -58,12 +148,15 @@ export class LocalSQLiteBackend implements MondoBackend {
    * Get or create a database connection
    */
   private getDatabase(name: string): Database {
-    let db = this.databases.get(name)
+    // SECURITY: Validate database name to prevent path traversal attacks
+    const safeName = sanitizeDatabaseName(name)
+
+    let db = this.databases.get(safeName)
     if (!db) {
-      const dbPath = `${this.dataDir}/${name}.sqlite`
+      const dbPath = `${this.dataDir}/${safeName}.sqlite`
       db = new Database(dbPath)
       this.initializeSchema(db)
-      this.databases.set(name, db)
+      this.databases.set(safeName, db)
     }
     return db
   }
@@ -107,7 +200,10 @@ export class LocalSQLiteBackend implements MondoBackend {
    * Get collection ID, creating collection if it doesn't exist
    */
   private getOrCreateCollectionId(db: Database, name: string): number {
-    const existing = db.query('SELECT id FROM collections WHERE name = ?').get(name) as
+    // SECURITY: Validate collection name
+    const safeName = validateCollectionName(name)
+
+    const existing = db.query('SELECT id FROM collections WHERE name = ?').get(safeName) as
       | { id: number }
       | null
 
@@ -115,7 +211,7 @@ export class LocalSQLiteBackend implements MondoBackend {
       return existing.id
     }
 
-    const result = db.query('INSERT INTO collections (name) VALUES (?) RETURNING id').get(name) as {
+    const result = db.query('INSERT INTO collections (name) VALUES (?) RETURNING id').get(safeName) as {
       id: number
     }
     return result.id
@@ -125,7 +221,10 @@ export class LocalSQLiteBackend implements MondoBackend {
    * Get collection ID or null if not found
    */
   private getCollectionId(db: Database, name: string): number | null {
-    const result = db.query('SELECT id FROM collections WHERE name = ?').get(name) as
+    // SECURITY: Validate collection name
+    const safeName = validateCollectionName(name)
+
+    const result = db.query('SELECT id FROM collections WHERE name = ?').get(safeName) as
       | { id: number }
       | null
     return result?.id ?? null
@@ -173,22 +272,28 @@ export class LocalSQLiteBackend implements MondoBackend {
   }
 
   async dropDatabase(name: string): Promise<void> {
-    const db = this.databases.get(name)
+    // SECURITY: Validate database name to prevent path traversal attacks
+    const safeName = sanitizeDatabaseName(name)
+
+    const db = this.databases.get(safeName)
     if (db) {
       db.close()
-      this.databases.delete(name)
+      this.databases.delete(safeName)
     }
 
     const fs = require('fs')
-    const dbPath = `${this.dataDir}/${name}.sqlite`
+    const dbPath = `${this.dataDir}/${safeName}.sqlite`
     if (fs.existsSync(dbPath)) {
       fs.unlinkSync(dbPath)
     }
   }
 
   async databaseExists(name: string): Promise<boolean> {
+    // SECURITY: Validate database name to prevent path traversal attacks
+    const safeName = sanitizeDatabaseName(name)
+
     const fs = require('fs')
-    return fs.existsSync(`${this.dataDir}/${name}.sqlite`)
+    return fs.existsSync(`${this.dataDir}/${safeName}.sqlite`)
   }
 
   // ============ Collection Operations ============
@@ -215,19 +320,28 @@ export class LocalSQLiteBackend implements MondoBackend {
   }
 
   async createCollection(dbName: string, name: string, options?: Document): Promise<void> {
+    // SECURITY: Validate collection name
+    const safeName = validateCollectionName(name)
+
     const db = this.getDatabase(dbName)
     const optionsJson = JSON.stringify(options || {})
-    db.query('INSERT OR IGNORE INTO collections (name, options) VALUES (?, ?)').run(name, optionsJson)
+    db.query('INSERT OR IGNORE INTO collections (name, options) VALUES (?, ?)').run(safeName, optionsJson)
   }
 
   async dropCollection(dbName: string, name: string): Promise<void> {
+    // SECURITY: Validate collection name
+    const safeName = validateCollectionName(name)
+
     const db = this.getDatabase(dbName)
-    db.query('DELETE FROM collections WHERE name = ?').run(name)
+    db.query('DELETE FROM collections WHERE name = ?').run(safeName)
   }
 
   async collectionExists(dbName: string, name: string): Promise<boolean> {
+    // SECURITY: Validate collection name
+    const safeName = validateCollectionName(name)
+
     const db = this.getDatabase(dbName)
-    const result = db.query('SELECT 1 FROM collections WHERE name = ? LIMIT 1').get(name)
+    const result = db.query('SELECT 1 FROM collections WHERE name = ? LIMIT 1').get(safeName)
     return result !== null
   }
 
@@ -320,7 +434,9 @@ export class LocalSQLiteBackend implements MondoBackend {
         if (field === '_id') {
           sortClauses.push(`_id ${dir}`)
         } else {
-          sortClauses.push(`json_extract(data, '$.${field}') ${dir}`)
+          // Validate field name to prevent SQL injection
+          const safePath = safeJsonPath(validateFieldPath(field))
+          sortClauses.push(`json_extract(data, '${safePath}') ${dir}`)
         }
       }
       if (sortClauses.length > 0) {
@@ -607,7 +723,9 @@ export class LocalSQLiteBackend implements MondoBackend {
     if (field === '_id') {
       sql = 'SELECT DISTINCT _id as value FROM documents WHERE collection_id = ?'
     } else {
-      sql = `SELECT DISTINCT json_extract(data, '$.${field}') as value FROM documents WHERE collection_id = ?`
+      // Validate field name to prevent SQL injection
+      const safePath = safeJsonPath(validateFieldPath(field))
+      sql = `SELECT DISTINCT json_extract(data, '${safePath}') as value FROM documents WHERE collection_id = ?`
     }
     const params: SQLParams = [collectionId]
 
@@ -835,8 +953,10 @@ export class LocalSQLiteBackend implements MondoBackend {
         }
       } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle operators
+        // Validate field name to prevent SQL injection
+        const safePath = safeJsonPath(validateFieldPath(key))
         for (const [op, opValue] of Object.entries(value as Document)) {
-          const path = `json_extract(data, '$.${key}')`
+          const path = `json_extract(data, '${safePath}')`
           switch (op) {
             case '$eq':
               params.push(opValue as SQLQueryBindings)
@@ -876,9 +996,11 @@ export class LocalSQLiteBackend implements MondoBackend {
         }
       } else {
         // Direct equality
+        // Validate field name to prevent SQL injection
+        const safePath = safeJsonPath(validateFieldPath(key))
         const sqlValue = typeof value === 'boolean' ? (value ? 1 : 0) : value
         params.push(sqlValue as SQLQueryBindings)
-        conditions.push(`json_extract(data, '$.${key}') = ?`)
+        conditions.push(`json_extract(data, '${safePath}') = ?`)
       }
     }
 
