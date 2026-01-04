@@ -573,29 +573,41 @@ export function QueryBar({
           </Badge>
         </div>
         <div className={headerRightStyles}>
-          <Tooltip trigger={<span>Format JSON (Shift+Alt+F)</span>}>
-            <IconButton
-              aria-label="Format JSON"
-              onClick={formatQuery}
-              disabled={!isValid}
-            >
-              <Icon glyph="Edit" />
-            </IconButton>
+          <Tooltip
+            trigger={
+              <IconButton
+                aria-label="Format JSON"
+                onClick={formatQuery}
+                disabled={!isValid}
+              >
+                <Icon glyph="Edit" />
+              </IconButton>
+            }
+          >
+            Format JSON (Shift+Alt+F)
           </Tooltip>
-          <Tooltip trigger={<span>Clear query</span>}>
-            <IconButton aria-label="Clear query" onClick={clearQuery}>
-              <Icon glyph="X" />
-            </IconButton>
+          <Tooltip
+            trigger={
+              <IconButton aria-label="Clear query" onClick={clearQuery}>
+                <Icon glyph="X" />
+              </IconButton>
+            }
+          >
+            Clear query
           </Tooltip>
           {onHistoryToggle && (
-            <Tooltip trigger={<span>Toggle history panel</span>}>
-              <IconButton
-                aria-label="Toggle history"
-                onClick={onHistoryToggle}
-                active={showHistory}
-              >
-                <Icon glyph="Clock" />
-              </IconButton>
+            <Tooltip
+              trigger={
+                <IconButton
+                  aria-label="Toggle history"
+                  onClick={onHistoryToggle}
+                  active={showHistory}
+                >
+                  <Icon glyph="Clock" />
+                </IconButton>
+              }
+            >
+              Toggle history panel
             </Tooltip>
           )}
         </div>
