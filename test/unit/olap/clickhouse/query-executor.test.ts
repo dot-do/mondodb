@@ -662,11 +662,12 @@ describe('ClickHouseQueryExecutor', () => {
       });
 
       it('should throw last error after exhausting retries', async () => {
+        // Use retryable errors (ECONNRESET) so all retries are attempted
         mockFetch
-          .mockRejectedValueOnce(new Error('Error 1'))
-          .mockRejectedValueOnce(new Error('Error 2'))
-          .mockRejectedValueOnce(new Error('Error 3'))
-          .mockRejectedValueOnce(new Error('Final error'));
+          .mockRejectedValueOnce(new Error('ECONNRESET: Error 1'))
+          .mockRejectedValueOnce(new Error('ECONNRESET: Error 2'))
+          .mockRejectedValueOnce(new Error('ECONNRESET: Error 3'))
+          .mockRejectedValueOnce(new Error('ECONNRESET: Final error'));
 
         await expect(executor.execute('SELECT 1')).rejects.toThrow('Final error');
       });

@@ -490,7 +490,8 @@ export class ClickHouseQueryExecutor {
             continue;
           }
 
-          lastError = mappedError as Error;
+          // Non-retryable error - throw immediately
+          throw mappedError;
         }
       }
 
