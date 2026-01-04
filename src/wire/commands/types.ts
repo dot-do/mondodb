@@ -6,7 +6,6 @@ import type { Document } from 'bson'
 import type { ConnectionState } from '../types.js'
 import {
   ErrorCode,
-  getErrorCodeName,
   successResponse as rpcSuccessResponse,
   errorResponse as rpcErrorResponse,
 } from '../../types/rpc.js'

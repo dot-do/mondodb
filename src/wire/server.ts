@@ -5,13 +5,13 @@
  * Can run locally with Bun for development/Compass support.
  */
 
-import type { Socket, ServerWebSocket } from 'bun'
+import type { Socket } from 'bun'
 import { parseMessage, extractCommand, serializeOpMsg, serializeOpReply } from './message.js'
 import { CommandRouter } from './commands/router.js'
 import type { MondoBackend } from './backend/interface.js'
-import type { ConnectionState, OpQueryMessage, OpMsgMessage } from './types.js'
+import type { ConnectionState } from './types.js'
 import { OpCode } from './types.js'
-import { requiresAuthentication, UNAUTHENTICATED_COMMANDS } from './commands/auth.js'
+import { requiresAuthentication } from './commands/auth.js'
 import { ScramAuthenticator, InMemoryCredentialsProvider } from './auth/scram.js'
 import { SaslStartCommand, SaslContinueCommand, LogoutCommand } from './commands/auth.js'
 

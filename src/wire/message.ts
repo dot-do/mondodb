@@ -127,9 +127,10 @@ export function parseOpMsg(buffer: Buffer): OpMsgMessage {
   }
 
   // Optional checksum
-  const checksum = hasChecksum ? buffer.readUInt32LE(messageEnd) : undefined
-
-  return { header, flagBits, sections, checksum }
+  if (hasChecksum) {
+    return { header, flagBits, sections, checksum: buffer.readUInt32LE(messageEnd) }
+  }
+  return { header, flagBits, sections }
 }
 
 /**
@@ -166,9 +167,17 @@ export function parseOpQuery(buffer: Buffer): OpQueryMessage {
   offset = afterQuery
 
   // Optional return fields selector
-  let returnFieldsSelector: Document | undefined
   if (offset < buffer.length) {
-    ;[returnFieldsSelector] = parseBSONDocument(buffer, offset)
+    const [returnFieldsSelector] = parseBSONDocument(buffer, offset)
+    return {
+      header,
+      flags,
+      fullCollectionName,
+      numberToSkip,
+      numberToReturn,
+      query,
+      returnFieldsSelector,
+    }
   }
 
   return {
@@ -178,7 +187,6 @@ export function parseOpQuery(buffer: Buffer): OpQueryMessage {
     numberToSkip,
     numberToReturn,
     query,
-    returnFieldsSelector,
   }
 }
 
