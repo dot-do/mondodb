@@ -16,6 +16,8 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:compat": "vitest run --config vitest.config.compat.ts",
+    "test:compat:watch": "vitest --config vitest.config.compat.ts",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy"
   },
@@ -25,7 +27,9 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.5.0",
     "@cloudflare/workers-types": "^4.20240925.0",
-    "@types/node": "^20.10.0",
+    "@types/node": "^20.19.27",
+    "mongodb": "^7.0.0",
+    "mongodb-memory-server": "^11.0.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
     "wrangler": "^3.80.0"

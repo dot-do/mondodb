@@ -29,6 +29,13 @@ import {
   StoredChangeEvent,
 } from './change-stream'
 import { ClientSession, TransactableCollection } from './session'
+import {
+  AggregationCursor,
+  AggregationCursorOptions,
+  AsyncExecutionContext,
+  FunctionStage,
+} from './aggregation-cursor'
+import type { PipelineStage } from '../translator/stages/types'
 
 // Base document type
 export type Document = Record<string, unknown>
@@ -1289,6 +1296,656 @@ export class MongoCollection<TSchema extends Document = Document>
     }
 
     return { updatedFields, removedFields }
+  }
+
+  /**
+   * Execute an aggregation pipeline on the collection
+   *
+   * Returns an AggregationCursor that supports:
+   * - Async iteration with `for await (const doc of cursor)`
+   * - Converting to array with `await cursor.toArray()`
+   * - forEach iteration with `await cursor.forEach(callback)`
+   *
+   * Supports async stages like $function and $lookup with pipeline.
+   *
+   * @param pipeline - Array of aggregation pipeline stages
+   * @param options - Aggregation options
+   * @returns AggregationCursor for iterating over results
+   *
+   * @example
+   * ```typescript
+   * // Using toArray
+   * const results = await collection.aggregate([
+   *   { $match: { status: 'active' } },
+   *   { $group: { _id: '$category', count: { $sum: 1 } } }
+   * ]).toArray()
+   *
+   * // Using async iterator
+   * for await (const doc of collection.aggregate([
+   *   { $match: { status: 'active' } }
+   * ])) {
+   *   console.log(doc)
+   * }
+   * ```
+   */
+  aggregate<TResult extends Document = TSchema>(
+    pipeline: PipelineStage[],
+    options: AggregationCursorOptions = {}
+  ): AggregationCursor<TResult> {
+    // Create execution context for async stages
+    const context: AsyncExecutionContext = {
+      collectionName: this._collectionName,
+      lookupCollection: async (name: string) => {
+        // Get documents from another collection for $lookup
+        const targetCollection = this.database.collection(name)
+        return targetCollection._findDocuments({}) as Document[]
+      },
+      functionExecutor: async (fn: FunctionStage, doc: Document) => {
+        // Execute $function stage
+        return this._executeFunctionStage(fn, doc)
+      }
+    }
+
+    // Create fetch function that executes the pipeline
+    const fetchFn = async (): Promise<TResult[]> => {
+      // Get all documents from collection
+      const allDocs = this._findDocuments({})
+
+      // Execute pipeline stages
+      return this._executeAggregationPipeline<TResult>(allDocs, pipeline)
+    }
+
+    return new AggregationCursor<TResult>(
+      pipeline,
+      fetchFn,
+      options,
+      undefined, // No custom async executor - we handle in fetch
+      context
+    )
+  }
+
+  /**
+   * Execute $function stage on a document
+   * @internal
+   */
+  private async _executeFunctionStage(
+    fn: FunctionStage,
+    doc: Document
+  ): Promise<unknown> {
+    let func: (...args: unknown[]) => unknown | Promise<unknown>
+
+    if (typeof fn.body === 'string') {
+      // Parse function from string
+      try {
+        // eslint-disable-next-line no-new-func
+        func = new Function('return ' + fn.body)() as (...args: unknown[]) => unknown
+      } catch (error) {
+        throw new Error(`Failed to parse $function body: ${error}`)
+      }
+    } else {
+      func = fn.body
+    }
+
+    // Resolve args - replace field references with actual values
+    const resolvedArgs = fn.args.map(arg => {
+      if (typeof arg === 'string' && arg.startsWith('$')) {
+        return this._getNestedValue(doc, arg.slice(1))
+      }
+      return arg
+    })
+
+    // Execute function
+    return func(...resolvedArgs)
+  }
+
+  /**
+   * Execute aggregation pipeline on documents (in-memory implementation)
+   * @internal
+   */
+  private _executeAggregationPipeline<TResult extends Document = Document>(
+    documents: (TSchema & { _id: ObjectId })[],
+    pipeline: PipelineStage[]
+  ): TResult[] {
+    let results: Document[] = documents.map(doc => ({ ...doc }))
+
+    for (const stage of pipeline) {
+      const stageType = Object.keys(stage)[0]
+      const stageValue = (stage as Record<string, unknown>)[stageType]
+
+      switch (stageType) {
+        case '$match':
+          results = results.filter(doc =>
+            this._matchesFilter(doc as TSchema & { _id: ObjectId }, stageValue as object)
+          )
+          break
+
+        case '$project':
+          results = this._executeProjectStage(results, stageValue as Record<string, unknown>)
+          break
+
+        case '$group':
+          results = this._executeGroupStage(results, stageValue as Record<string, unknown>)
+          break
+
+        case '$sort':
+          results = this._executeSortStage(results, stageValue as Record<string, 1 | -1>)
+          break
+
+        case '$limit':
+          results = results.slice(0, stageValue as number)
+          break
+
+        case '$skip':
+          results = results.slice(stageValue as number)
+          break
+
+        case '$count':
+          results = [{ [stageValue as string]: results.length }]
+          break
+
+        case '$unwind':
+          results = this._executeUnwindStage(results, stageValue as string | { path: string; preserveNullAndEmptyArrays?: boolean })
+          break
+
+        case '$addFields':
+        case '$set':
+          results = this._executeAddFieldsStage(results, stageValue as Record<string, unknown>)
+          break
+
+        case '$lookup':
+          results = this._executeLookupStage(results, stageValue as {
+            from: string
+            localField?: string
+            foreignField?: string
+            as: string
+          })
+          break
+
+        default:
+          // Unsupported stage - pass through
+          break
+      }
+    }
+
+    return results as TResult[]
+  }
+
+  /**
+   * Execute $project stage
+   * @internal
+   */
+  private _executeProjectStage(
+    documents: Document[],
+    projection: Record<string, unknown>
+  ): Document[] {
+    // Check if we have inclusions or expressions (expressions count as inclusions)
+    const hasInclusion = Object.entries(projection).some(([key, v]) => {
+      if (key === '_id') return false // _id: 0 doesn't count
+      return v === 1 ||
+             (typeof v === 'string' && v.startsWith('$')) ||
+             (typeof v === 'object' && v !== null)
+    })
+    const excludeId = projection._id === 0
+
+    return documents.map(doc => {
+      const result: Document = {}
+
+      if (hasInclusion) {
+        // Inclusion mode
+        if (!excludeId && '_id' in doc) {
+          result._id = doc._id
+        }
+
+        for (const [key, value] of Object.entries(projection)) {
+          if (key === '_id' && value === 0) continue
+          if (key === '_id' && value === 1) {
+            result._id = doc._id
+            continue
+          }
+
+          if (value === 1) {
+            result[key] = this._getNestedValue(doc, key)
+          } else if (typeof value === 'string' && value.startsWith('$')) {
+            result[key] = this._getNestedValue(doc, value.slice(1))
+          } else if (typeof value === 'object' && value !== null) {
+            result[key] = this._evaluateExpression(doc, value)
+          }
+        }
+      } else {
+        // Exclusion mode
+        for (const [key, val] of Object.entries(doc)) {
+          if (projection[key] === 0) continue
+          result[key] = val
+        }
+      }
+
+      return result
+    })
+  }
+
+  /**
+   * Execute $group stage
+   * @internal
+   */
+  private _executeGroupStage(
+    documents: Document[],
+    groupSpec: Record<string, unknown>
+  ): Document[] {
+    const groups = new Map<string, { docs: Document[]; result: Document }>()
+
+    for (const doc of documents) {
+      // Compute group key
+      let groupKey: string
+      const idSpec = groupSpec._id
+
+      if (idSpec === null) {
+        groupKey = '__all__'
+      } else if (typeof idSpec === 'string' && idSpec.startsWith('$')) {
+        groupKey = String(this._getNestedValue(doc, idSpec.slice(1)))
+      } else if (typeof idSpec === 'object' && idSpec !== null) {
+        const keyObj: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(idSpec as Record<string, unknown>)) {
+          if (typeof v === 'string' && v.startsWith('$')) {
+            keyObj[k] = this._getNestedValue(doc, v.slice(1))
+          } else {
+            keyObj[k] = v
+          }
+        }
+        groupKey = JSON.stringify(keyObj)
+      } else {
+        groupKey = String(idSpec)
+      }
+
+      if (!groups.has(groupKey)) {
+        // Initialize group
+        let idValue: unknown
+        if (idSpec === null) {
+          idValue = null
+        } else if (typeof idSpec === 'string' && idSpec.startsWith('$')) {
+          idValue = this._getNestedValue(doc, idSpec.slice(1))
+        } else if (typeof idSpec === 'object' && idSpec !== null) {
+          idValue = {}
+          for (const [k, v] of Object.entries(idSpec as Record<string, unknown>)) {
+            if (typeof v === 'string' && v.startsWith('$')) {
+              (idValue as Record<string, unknown>)[k] = this._getNestedValue(doc, v.slice(1))
+            } else {
+              (idValue as Record<string, unknown>)[k] = v
+            }
+          }
+        } else {
+          idValue = idSpec
+        }
+
+        groups.set(groupKey, { docs: [], result: { _id: idValue } })
+      }
+
+      groups.get(groupKey)!.docs.push(doc)
+    }
+
+    // Apply accumulators
+    const results: Document[] = []
+
+    for (const { docs, result } of groups.values()) {
+      for (const [key, accumulator] of Object.entries(groupSpec)) {
+        if (key === '_id') continue
+
+        if (typeof accumulator === 'object' && accumulator !== null) {
+          const accObj = accumulator as Record<string, unknown>
+          const accType = Object.keys(accObj)[0]
+          const accValue = accObj[accType]
+
+          switch (accType) {
+            case '$sum':
+              if (accValue === 1) {
+                result[key] = docs.length
+              } else if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                result[key] = docs.reduce((sum, d) => {
+                  const val = this._getNestedValue(d, accValue.slice(1))
+                  return sum + (typeof val === 'number' ? val : 0)
+                }, 0)
+              }
+              break
+
+            case '$avg':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                const sum = docs.reduce((s, d) => {
+                  const val = this._getNestedValue(d, accValue.slice(1))
+                  return s + (typeof val === 'number' ? val : 0)
+                }, 0)
+                result[key] = docs.length > 0 ? sum / docs.length : null
+              }
+              break
+
+            case '$min':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                const values = docs.map(d => this._getNestedValue(d, accValue.slice(1)) as number)
+                result[key] = Math.min(...values.filter(v => typeof v === 'number'))
+              }
+              break
+
+            case '$max':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                const values = docs.map(d => this._getNestedValue(d, accValue.slice(1)) as number)
+                result[key] = Math.max(...values.filter(v => typeof v === 'number'))
+              }
+              break
+
+            case '$count':
+              result[key] = docs.length
+              break
+
+            case '$first':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                result[key] = docs.length > 0 ? this._getNestedValue(docs[0], accValue.slice(1)) : null
+              }
+              break
+
+            case '$last':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                result[key] = docs.length > 0 ? this._getNestedValue(docs[docs.length - 1], accValue.slice(1)) : null
+              }
+              break
+
+            case '$push':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                result[key] = docs.map(d => this._getNestedValue(d, accValue.slice(1)))
+              }
+              break
+
+            case '$addToSet':
+              if (typeof accValue === 'string' && accValue.startsWith('$')) {
+                const set = new Set()
+                for (const d of docs) {
+                  set.add(JSON.stringify(this._getNestedValue(d, accValue.slice(1))))
+                }
+                result[key] = Array.from(set).map(s => JSON.parse(s as string))
+              }
+              break
+          }
+        }
+      }
+
+      results.push(result)
+    }
+
+    return results
+  }
+
+  /**
+   * Execute $sort stage
+   * @internal
+   */
+  private _executeSortStage(
+    documents: Document[],
+    sortSpec: Record<string, 1 | -1>
+  ): Document[] {
+    return [...documents].sort((a, b) => {
+      for (const [field, direction] of Object.entries(sortSpec)) {
+        const aVal = this._getNestedValue(a, field)
+        const bVal = this._getNestedValue(b, field)
+
+        let comparison = 0
+        if (aVal === bVal) {
+          comparison = 0
+        } else if (aVal === null || aVal === undefined) {
+          comparison = -1
+        } else if (bVal === null || bVal === undefined) {
+          comparison = 1
+        } else if (typeof aVal === 'string' && typeof bVal === 'string') {
+          comparison = aVal.localeCompare(bVal)
+        } else {
+          comparison = (aVal as number) - (bVal as number)
+        }
+
+        if (comparison !== 0) {
+          return comparison * direction
+        }
+      }
+      return 0
+    })
+  }
+
+  /**
+   * Execute $unwind stage
+   * @internal
+   */
+  private _executeUnwindStage(
+    documents: Document[],
+    unwindSpec: string | { path: string; preserveNullAndEmptyArrays?: boolean }
+  ): Document[] {
+    const path = typeof unwindSpec === 'string' ? unwindSpec : unwindSpec.path
+    const preserveNull = typeof unwindSpec === 'object' && unwindSpec.preserveNullAndEmptyArrays === true
+    const fieldPath = path.startsWith('$') ? path.slice(1) : path
+
+    const results: Document[] = []
+
+    for (const doc of documents) {
+      const arrayValue = this._getNestedValue(doc, fieldPath)
+
+      if (Array.isArray(arrayValue) && arrayValue.length > 0) {
+        for (const item of arrayValue) {
+          const newDoc = { ...doc }
+          this._setNestedValue(newDoc, fieldPath, item)
+          results.push(newDoc)
+        }
+      } else if (preserveNull) {
+        results.push({ ...doc })
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * Execute $addFields/$set stage
+   * @internal
+   */
+  private _executeAddFieldsStage(
+    documents: Document[],
+    fieldsSpec: Record<string, unknown>
+  ): Document[] {
+    return documents.map(doc => {
+      const result = { ...doc }
+
+      for (const [field, value] of Object.entries(fieldsSpec)) {
+        if (typeof value === 'string' && value.startsWith('$')) {
+          result[field] = this._getNestedValue(doc, value.slice(1))
+        } else if (typeof value === 'object' && value !== null) {
+          result[field] = this._evaluateExpression(doc, value)
+        } else {
+          result[field] = value
+        }
+      }
+
+      return result
+    })
+  }
+
+  /**
+   * Execute $lookup stage
+   * @internal
+   */
+  private _executeLookupStage(
+    documents: Document[],
+    lookupSpec: {
+      from: string
+      localField?: string
+      foreignField?: string
+      as: string
+    }
+  ): Document[] {
+    const targetCollection = this.database.collection(lookupSpec.from)
+    const targetDocs = targetCollection._findDocuments({})
+
+    return documents.map(doc => {
+      const result = { ...doc }
+
+      if (lookupSpec.localField && lookupSpec.foreignField) {
+        const localValue = this._getNestedValue(doc, lookupSpec.localField)
+        const matched = targetDocs.filter(targetDoc => {
+          const foreignValue = this._getNestedValue(targetDoc, lookupSpec.foreignField!)
+          return this._valuesEqual(localValue, foreignValue)
+        })
+        result[lookupSpec.as] = matched
+      } else {
+        result[lookupSpec.as] = []
+      }
+
+      return result
+    })
+  }
+
+  /**
+   * Evaluate an expression (simplified)
+   * @internal
+   */
+  private _evaluateExpression(doc: Document, expr: unknown): unknown {
+    if (expr === null || typeof expr !== 'object') {
+      return expr
+    }
+
+    const exprObj = expr as Record<string, unknown>
+    const operator = Object.keys(exprObj)[0]
+    const operand = exprObj[operator]
+
+    switch (operator) {
+      case '$concat':
+        if (Array.isArray(operand)) {
+          return operand.map(item => {
+            if (typeof item === 'string' && item.startsWith('$')) {
+              return String(this._getNestedValue(doc, item.slice(1)) ?? '')
+            }
+            return String(item)
+          }).join('')
+        }
+        break
+
+      case '$add':
+        if (Array.isArray(operand)) {
+          return operand.reduce((sum, item) => {
+            if (typeof item === 'string' && item.startsWith('$')) {
+              return sum + (Number(this._getNestedValue(doc, item.slice(1))) || 0)
+            }
+            return sum + (Number(item) || 0)
+          }, 0)
+        }
+        break
+
+      case '$subtract':
+        if (Array.isArray(operand) && operand.length === 2) {
+          const a = typeof operand[0] === 'string' && operand[0].startsWith('$')
+            ? Number(this._getNestedValue(doc, operand[0].slice(1)))
+            : Number(operand[0])
+          const b = typeof operand[1] === 'string' && operand[1].startsWith('$')
+            ? Number(this._getNestedValue(doc, operand[1].slice(1)))
+            : Number(operand[1])
+          return a - b
+        }
+        break
+
+      case '$multiply':
+        if (Array.isArray(operand)) {
+          return operand.reduce((product, item) => {
+            if (typeof item === 'string' && item.startsWith('$')) {
+              return product * (Number(this._getNestedValue(doc, item.slice(1))) || 0)
+            }
+            return product * (Number(item) || 0)
+          }, 1)
+        }
+        break
+
+      case '$divide':
+        if (Array.isArray(operand) && operand.length === 2) {
+          const a = typeof operand[0] === 'string' && operand[0].startsWith('$')
+            ? Number(this._getNestedValue(doc, operand[0].slice(1)))
+            : Number(operand[0])
+          const b = typeof operand[1] === 'string' && operand[1].startsWith('$')
+            ? Number(this._getNestedValue(doc, operand[1].slice(1)))
+            : Number(operand[1])
+          return b !== 0 ? a / b : null
+        }
+        break
+
+      case '$cond':
+        if (typeof operand === 'object' && operand !== null) {
+          const cond = operand as { if: unknown; then: unknown; else: unknown }
+          const condition = this._evaluateCondition(doc, cond.if)
+          return condition
+            ? this._evaluateExpression(doc, cond.then)
+            : this._evaluateExpression(doc, cond.else)
+        }
+        break
+
+      case '$ifNull':
+        if (Array.isArray(operand) && operand.length === 2) {
+          const value = typeof operand[0] === 'string' && operand[0].startsWith('$')
+            ? this._getNestedValue(doc, operand[0].slice(1))
+            : operand[0]
+          return value ?? operand[1]
+        }
+        break
+    }
+
+    return expr
+  }
+
+  /**
+   * Evaluate a condition
+   * @internal
+   */
+  private _evaluateCondition(doc: Document, condition: unknown): boolean {
+    if (typeof condition !== 'object' || condition === null) {
+      return Boolean(condition)
+    }
+
+    const condObj = condition as Record<string, unknown>
+    const operator = Object.keys(condObj)[0]
+    const operand = condObj[operator] as unknown[]
+
+    switch (operator) {
+      case '$eq':
+        return this._compareExprValues(doc, operand[0], operand[1]) === 0
+      case '$ne':
+        return this._compareExprValues(doc, operand[0], operand[1]) !== 0
+      case '$gt':
+        return this._compareExprValues(doc, operand[0], operand[1]) > 0
+      case '$gte':
+        return this._compareExprValues(doc, operand[0], operand[1]) >= 0
+      case '$lt':
+        return this._compareExprValues(doc, operand[0], operand[1]) < 0
+      case '$lte':
+        return this._compareExprValues(doc, operand[0], operand[1]) <= 0
+      case '$and':
+        return (operand as unknown[]).every(c => this._evaluateCondition(doc, c))
+      case '$or':
+        return (operand as unknown[]).some(c => this._evaluateCondition(doc, c))
+      default:
+        return true
+    }
+  }
+
+  /**
+   * Compare two expression values
+   * @internal
+   */
+  private _compareExprValues(doc: Document, a: unknown, b: unknown): number {
+    const resolveValue = (val: unknown): unknown => {
+      if (typeof val === 'string' && val.startsWith('$')) {
+        return this._getNestedValue(doc, val.slice(1))
+      }
+      return val
+    }
+
+    const aVal = resolveValue(a)
+    const bVal = resolveValue(b)
+
+    if (aVal === bVal) return 0
+    if (aVal === null || aVal === undefined) return -1
+    if (bVal === null || bVal === undefined) return 1
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return aVal - bVal
+    }
+    return String(aVal).localeCompare(String(bVal))
   }
 }
 

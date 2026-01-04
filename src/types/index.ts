@@ -3,6 +3,17 @@
  */
 
 export { ObjectId, default as ObjectIdDefault } from './objectid'
+export type {
+  FunctionSpec,
+  FunctionDefinition,
+  FunctionContext,
+  FunctionResult,
+  FunctionExpression,
+  WorkerLoader,
+  WorkerCode,
+  WorkerStub,
+  WorkerEntrypoint,
+} from './function'
 
 /**
  * Index specification type

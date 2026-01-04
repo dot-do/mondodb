@@ -1,7 +1,9 @@
 /**
  * Expression Translator - Translates MongoDB aggregation expressions to SQL
- * Handles arithmetic, string, conditional, and comparison operators
+ * Handles arithmetic, string, conditional, comparison, and function operators
  */
+
+import type { FunctionSpec, FunctionExpression } from '../../types/function'
 
 /**
  * Check if a value is a field reference (starts with $)
@@ -180,6 +182,11 @@ export function translateExpression(
     return translateExpression(expr.$expr as Record<string, unknown>, params)
   }
 
+  // $function operator - custom JavaScript function execution
+  if (operator === '$function') {
+    return translateFunction(expr.$function as FunctionSpec, params)
+  }
+
   throw new Error(`Unknown expression operator: ${operator}`)
 }
 
@@ -245,4 +252,145 @@ function translateSwitch(
     : 'NULL'
 
   return `CASE ${whenClauses.join(' ')} ELSE ${elseSql} END`
+}
+
+/**
+ * Translate $function operator to a marker for deferred execution
+ * Returns a JSON marker string that will be processed by the aggregation executor
+ *
+ * The $function operator allows custom JavaScript functions in aggregation pipelines.
+ * Since SQLite cannot execute JavaScript, we:
+ * 1. Generate a JSON marker embedded in SQL output
+ * 2. Extract field references from args for document binding
+ * 3. Store the function expression metadata for post-processing
+ */
+function translateFunction(spec: FunctionSpec, params: unknown[]): string {
+  // Validate required fields
+  if (!spec.body) {
+    throw new Error('$function requires body')
+  }
+  if (!spec.args) {
+    throw new Error('$function requires args')
+  }
+  if (spec.lang !== 'js') {
+    throw new Error('$function only supports lang: "js"')
+  }
+
+  // Normalize body to string
+  const body = typeof spec.body === 'function'
+    ? spec.body.toString()
+    : spec.body
+
+  // Process arguments - extract field paths and literal positions
+  const argPaths: string[] = []
+  const literalArgs: Record<number, unknown> = {}
+
+  spec.args.forEach((arg, index) => {
+    if (isFieldReference(arg)) {
+      argPaths.push(getFieldPath(arg as string))
+    } else {
+      literalArgs[index] = arg
+    }
+  })
+
+  // Create marker object
+  const marker = {
+    __type: 'function',
+    body,
+    argPaths,
+    literalArgs,
+    argOrder: spec.args.map((arg, i) =>
+      isFieldReference(arg) ? { type: 'field', path: getFieldPath(arg as string) } : { type: 'literal', index: i }
+    )
+  }
+
+  // Return as a JSON string that can be detected and parsed later
+  return `'__FUNCTION__${JSON.stringify(marker).replace(/'/g, "''")}'`
+}
+
+/**
+ * Generate a unique function ID for placeholder identification
+ */
+let functionIdCounter = 0
+function generateFunctionId(): string {
+  return `fn${++functionIdCounter}`
+}
+
+/**
+ * Reset function ID counter (useful for testing)
+ */
+export function resetFunctionIdCounter(): void {
+  functionIdCounter = 0
+}
+
+/**
+ * Check if a value is a $function operator
+ */
+export function isFunctionOperator(value: unknown): value is { $function: FunctionSpec } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '$function' in value
+  )
+}
+
+/**
+ * Create a FunctionExpression from a $function spec
+ * Utility for external code that needs to work with function expressions
+ */
+export function createFunctionExpression(spec: FunctionSpec): FunctionExpression {
+  const bodyStr = typeof spec.body === 'function'
+    ? spec.body.toString()
+    : spec.body
+
+  const argPaths: string[] = []
+  const literalArgs = new Map<number, unknown>()
+
+  for (let i = 0; i < spec.args.length; i++) {
+    const arg = spec.args[i]
+
+    if (isFieldReference(arg)) {
+      const path = getFieldPath(arg as string)
+      argPaths.push(path)
+    } else {
+      literalArgs.set(i, arg)
+    }
+  }
+
+  return {
+    __type: 'function',
+    body: bodyStr,
+    argPaths,
+    literalArgs
+  }
+}
+
+/**
+ * Parse a function marker from SQL output
+ * Returns the parsed function expression or null if not a function marker
+ */
+export function parseFunctionPlaceholder(sql: string): {
+  __type: 'function'
+  body: string
+  argPaths: string[]
+  literalArgs: Record<number, unknown>
+  argOrder: Array<{ type: 'field'; path: string } | { type: 'literal'; index: number }>
+} | null {
+  const match = sql.match(/'__FUNCTION__(.+?)'/)
+  if (!match) return null
+
+  try {
+    // Unescape single quotes and parse JSON
+    const json = match[1].replace(/''/g, "'")
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Check if SQL contains function markers
+ */
+export function hasFunctionPlaceholders(sql: string): boolean {
+  return /__FUNCTION__/.test(sql)
 }

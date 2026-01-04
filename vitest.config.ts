@@ -4,7 +4,7 @@ export default defineWorkersConfig({
   test: {
     globals: true,
     include: ['test/**/*.test.ts'],
-    exclude: ['node_modules', 'dist'],
+    exclude: ['node_modules', 'dist', 'test/compat/**', 'test/compatibility/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -13,7 +13,7 @@ export default defineWorkersConfig({
     testTimeout: 30000,
     poolOptions: {
       workers: {
-        wrangler: { configPath: './wrangler.toml' },
+        wrangler: { configPath: './wrangler.jsonc' },
         // Disable isolated storage to prevent "Failed to pop isolated storage stack frame" errors
         // This is required when testing Durable Objects with SQLite storage that may have
         // concurrent operations or when errors are thrown from DO RPC methods.

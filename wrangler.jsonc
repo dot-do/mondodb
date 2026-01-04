@@ -1,0 +1,76 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mondodb",
+  "main": "src/worker.ts",
+  "compatibility_date": "2024-12-01",
+  "compatibility_flags": [
+    // Required for Node.js compatibility (Buffer, crypto, etc.)
+    "nodejs_compat"
+  ],
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  },
+
+  // Migrations for Durable Objects with SQLite storage
+  // Each migration tag must be unique and represents a schema version
+  "migrations": [
+    {
+      "tag": "v1",
+      // Declare MondoDatabase as a SQLite-backed Durable Object
+      "new_sqlite_classes": ["MondoDatabase"]
+    }
+  ],
+
+  // Worker Loader binding for $function operator support
+  // Enables secure, sandboxed execution of user-defined JavaScript functions
+  // within aggregation pipelines (e.g., $function, $accumulator)
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "LOADER",
+        "type": "worker_loader"
+      }
+    ]
+  },
+
+  // Enable observability for debugging and monitoring
+  "observability": {
+    "enabled": true
+  },
+
+  // Development server configuration for `wrangler dev`
+  "dev": {
+    // Local development server settings
+    "port": 8787,
+    "local_protocol": "http"
+  },
+
+  // Environment-specific configurations
+  "env": {
+    "dev": {
+      "name": "mondodb-dev",
+      "vars": {
+        "ENVIRONMENT": "development"
+      }
+    },
+    "staging": {
+      "name": "mondodb-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    },
+    "production": {
+      "name": "mondodb",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    }
+  }
+}

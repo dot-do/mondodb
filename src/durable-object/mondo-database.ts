@@ -10,6 +10,9 @@ import {
   DurableObjectStorage,
 } from './schema';
 import { ObjectId } from '../types/objectid';
+import type { WorkerLoader } from '../types/function';
+import { AggregationExecutor } from '../executor/aggregation-executor';
+import type { PipelineStage } from '../translator/aggregation-translator';
 
 /**
  * Interface for Durable Object state
@@ -23,7 +26,8 @@ export interface DurableObjectState {
  * Interface for Cloudflare Environment bindings
  */
 export interface Env {
-  // Add environment bindings as needed
+  /** Optional worker-loader binding for $function support */
+  LOADER?: WorkerLoader
 }
 
 /**
@@ -568,6 +572,45 @@ export class MondoDatabase {
   }
 
   /**
+   * Execute an aggregation pipeline on a collection
+   *
+   * Supports async execution for $function operators that require
+   * JavaScript execution via worker-loader.
+   *
+   * @param collection - The collection name
+   * @param pipeline - Array of aggregation pipeline stages
+   * @returns Array of result documents
+   */
+  async aggregate(collection: string, pipeline: PipelineStage[]): Promise<unknown[]> {
+    // Ensure collection exists - create view for documents
+    const collectionId = this.getCollectionId(collection);
+    if (collectionId === undefined) {
+      // Return empty for non-existent collection
+      return [];
+    }
+
+    // Create SQL interface that wraps the storage.sql for AggregationExecutor
+    const sqlInterface = {
+      exec: (query: string, ...params: unknown[]) => {
+        // The AggregationTranslator generates SQL that selects from collection name directly
+        // We need to replace the collection name with a subquery that filters by collection_id
+        const modifiedQuery = query.replace(
+          new RegExp(`FROM\\s+${collection}\\b`, 'gi'),
+          `FROM documents WHERE collection_id = ${collectionId}`
+        );
+        const result = this.state.storage.sql.exec(modifiedQuery, ...params);
+        return {
+          results: result.toArray(),
+          toArray: () => result.toArray()
+        };
+      }
+    };
+
+    const executor = new AggregationExecutor(sqlInterface, this.env);
+    return executor.execute(collection, pipeline);
+  }
+
+  /**
    * Reset database - for testing purposes
    */
   private async reset(): Promise<void> {
@@ -701,6 +744,13 @@ export class MondoDatabase {
         if (path === '/countDocuments') {
           const result = await this.countDocuments(collection, body.filter as Document || {});
           return new Response(JSON.stringify({ count: result }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/aggregate') {
+          const result = await this.aggregate(collection, body.pipeline as PipelineStage[] || []);
+          return new Response(JSON.stringify({ documents: result }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
