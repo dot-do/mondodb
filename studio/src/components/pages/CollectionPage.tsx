@@ -13,6 +13,7 @@ import { QueryBar, type QueryOptions } from '../query/QueryBar'
 import { SkeletonLoader } from '../SkeletonLoader'
 import { CreateDocument } from '../documents/CreateDocument'
 import { DeleteDocument } from '../documents/DeleteDocument'
+import { AnalyticsDashboard } from '../olap'
 import type { Document } from '@lib/rpc-client'
 
 const pageStyles = css`
@@ -187,10 +188,7 @@ export function CollectionPage() {
           </Tab>
           <Tab name="Analytics">
             <div className={tabContentStyles}>
-              <Body>OLAP Analytics dashboard coming soon...</Body>
-              <Body style={{ marginTop: 8, color: palette.gray.dark1, fontSize: 13 }}>
-                Query your data with SQL via R2 Datalake integration.
-              </Body>
+              <AnalyticsDashboard database={database} collection={collection} />
             </div>
           </Tab>
         </Tabs>
