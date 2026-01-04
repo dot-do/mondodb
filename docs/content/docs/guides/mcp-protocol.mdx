@@ -615,3 +615,106 @@ try {
 | `401` | Unauthorized | Authentication required |
 | `404` | ToolNotFound | Tool does not exist |
 | `500` | ExecutionError | Tool execution failed |
+
+---
+
+## CLI Integration
+
+MondoDB provides a CLI command for starting an MCP server that communicates via stdio, making it easy to integrate with AI assistants like Claude Desktop.
+
+### Using the MCP CLI Command
+
+```bash
+# Connect to a remote MondoDB Worker
+mondodb mcp --connection https://my-worker.workers.dev
+
+# Use a local SQLite database (requires Bun runtime)
+mondodb mcp --local ./data/local.db
+```
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `-c, --connection <url>` | Remote MondoDB Worker URL |
+| `-l, --local <path>` | Local SQLite database path |
+
+### Claude Desktop Configuration
+
+Add MondoDB to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "mondodb": {
+      "command": "npx",
+      "args": ["mondodb", "mcp", "--connection", "https://my-worker.workers.dev"]
+    }
+  }
+}
+```
+
+Or for local development:
+
+```json
+{
+  "mcpServers": {
+    "mondodb-local": {
+      "command": "npx",
+      "args": ["mondodb", "mcp", "--local", "./data/dev.db"]
+    }
+  }
+}
+```
+
+### Programmatic Usage
+
+You can also start the MCP server programmatically:
+
+```typescript
+import { startMcpServer } from 'mondodb/cli/mcp'
+
+// Start with remote connection
+const controller = await startMcpServer({
+  connection: 'https://my-worker.workers.dev'
+})
+
+// Or with local database
+const controller = await startMcpServer({
+  local: './data/local.db'
+})
+
+// Graceful shutdown
+await controller.stop()
+```
+
+---
+
+## Durable Object MCP Endpoint
+
+When running on Cloudflare Workers, each MondoDB Durable Object exposes an MCP endpoint at `/mcp`. This allows AI agents to interact directly with the database:
+
+```typescript
+// The MCP endpoint is automatically available
+// POST https://your-worker.workers.dev/mcp
+```
+
+The Durable Object MCP handler is created lazily on first request:
+
+```typescript
+// Inside MondoDatabase.fetch()
+if (path.startsWith('/mcp')) {
+  if (!this.mcpHandler) {
+    this.mcpHandler = createMondoMcpHandler(this)
+  }
+  return this.mcpHandler(request)
+}
+```
+
+---
+
+## Related
+
+- [Cloudflare Workers Integration](/docs/guides/cloudflare-workers) - Deploy MondoDB on Workers
+- [CLI Guide](/docs/guides/cli) - Command-line interface reference
+- [RPC Protocol](/docs/guides/rpc) - RPC communication details

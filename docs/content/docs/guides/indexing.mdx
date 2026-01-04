@@ -11,6 +11,24 @@ Indexes are essential for efficient query execution in MondoDB. This guide cover
 
 MondoDB uses SQLite's indexing capabilities under the hood, with `json_extract` expressions to enable efficient querying on document fields. Every collection automatically has an index on the `_id` field, and you can create additional indexes to optimize your queries.
 
+### How MondoDB Indexes Work with SQLite
+
+When you create an index in MondoDB, it translates to a SQLite index on `json_extract` expressions:
+
+```sql
+-- A MondoDB index like { email: 1 }
+-- Becomes a SQLite index like:
+CREATE INDEX idx_users_email_1 ON documents (
+  json_extract(data, '$.email') ASC
+) WHERE collection_id = ?
+```
+
+This architecture means:
+- Indexes are scoped to specific collections using `WHERE collection_id = ?`
+- Field paths like `address.city` become `$.address.city` in json_extract
+- Index ordering (ASC/DESC) is preserved in SQLite
+- Sparse indexes add `IS NOT NULL` conditions
+
 ## Index Types
 
 MondoDB supports several index types:
@@ -19,7 +37,7 @@ MondoDB supports several index types:
 |------|-------------|----------|
 | **Single Field** | Index on one document field | Simple equality/range queries |
 | **Compound** | Index on multiple fields | Multi-field queries and sorting |
-| **Text** | Full-text search index | Text search with natural language |
+| **Text** | Full-text search index (FTS5) | Text search with natural language |
 | **Unique** | Ensures no duplicate values | Enforcing uniqueness constraints |
 | **Sparse** | Only indexes documents with the field | Optional fields with queries |
 | **TTL** | Time-To-Live for auto-expiration | Session data, logs, caches |
@@ -101,6 +119,18 @@ interface CreateIndexOptions {
 }
 ```
 
+### createIndex() Return Value
+
+```typescript
+interface CreateIndexResult {
+  ok: 1
+  numIndexesBefore: number      // Number of indexes before operation
+  numIndexesAfter: number       // Number of indexes after operation
+  createdCollectionAutomatically: boolean  // True if collection was created
+  note?: string                 // 'all indexes already exist' if duplicate
+}
+```
+
 ## Single Field Indexes
 
 The most common index type, created on a single field.
@@ -114,6 +144,14 @@ await collection.createIndex({ 'address.zipCode': 1 })
 
 // Descending index for sorting newest first
 await collection.createIndex({ createdAt: -1 })
+```
+
+**How it translates to SQLite:**
+
+```sql
+CREATE INDEX idx_users_email_1 ON documents (
+  json_extract(data, '$.email') ASC
+) WHERE collection_id = ?
 ```
 
 **When to use:**
@@ -131,6 +169,15 @@ await collection.createIndex({ firstName: 1, lastName: 1 })
 
 // Compound index with mixed sort orders
 await collection.createIndex({ category: 1, price: -1 })
+```
+
+**How it translates to SQLite:**
+
+```sql
+CREATE INDEX idx_products_category_1_price_-1 ON documents (
+  json_extract(data, '$.category') ASC,
+  json_extract(data, '$.price') DESC
+) WHERE collection_id = ?
 ```
 
 **When to use:**
@@ -164,6 +211,14 @@ await collection.createIndex(
 )
 ```
 
+**How it translates to SQLite:**
+
+```sql
+CREATE UNIQUE INDEX idx_unique_users_email_1 ON documents (
+  json_extract(data, '$.email') ASC
+) WHERE collection_id = ?
+```
+
 **Behavior:**
 - Insert or update operations that would create a duplicate value will fail
 - `null` values are treated as equal (only one document can have `null`)
@@ -178,6 +233,14 @@ await collection.createIndex(
   { optionalField: 1 },
   { sparse: true }
 )
+```
+
+**How it translates to SQLite:**
+
+```sql
+CREATE INDEX idx_users_optionalField_1 ON documents (
+  json_extract(data, '$.optionalField') ASC
+) WHERE collection_id = ? AND json_extract(data, '$.optionalField') IS NOT NULL
 ```
 
 **When to use:**
@@ -215,6 +278,25 @@ await collection.createIndex(
 )
 ```
 
+### How Text Indexes Work
+
+MondoDB creates an FTS5 virtual table for text indexing:
+
+```sql
+-- FTS5 virtual table for collection "posts"
+CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
+  _id, title, content,
+  content='documents',
+  content_rowid='id',
+  tokenize='porter unicode61'
+)
+```
+
+**Automatic sync triggers** keep the FTS5 table synchronized:
+- Insert trigger: adds new documents to FTS5
+- Update trigger: removes old content, adds updated content
+- Delete trigger: removes document from FTS5
+
 **Limitations:**
 - Only one text index per collection
 - Creating a second text index will throw an error
@@ -235,9 +317,10 @@ await collection.createIndex(
   { description: 'text' },
   {
     // Language for stemming (default: 'english')
+    // Uses porter stemming algorithm with unicode61 tokenizer
     default_language: 'english',
 
-    // Use 'none' to disable stemming
+    // Use 'none' to disable stemming (unicode61 only)
     // default_language: 'none',
 
     // Field weights for relevance scoring
@@ -264,12 +347,34 @@ await collection.createIndex(
 )
 ```
 
+### TTL Index Implementation Details
+
+MondoDB TTL indexes work as follows:
+
+1. **Index creation**: A standard index is created on the date field, with TTL metadata stored
+2. **Background cleanup**: Expired documents are periodically removed (default: every 60 seconds)
+3. **Expiration calculation**: `document[field] + expireAfterSeconds < now()`
+
+**Valid date field values:**
+- Date objects
+- ISO 8601 date strings
+- Unix timestamps in milliseconds
+
 **Important notes:**
-- TTL indexes must be on a **single field** containing a Date value
+- TTL indexes must be on a **single field** - compound TTL indexes are not supported
 - Only one TTL index per collection is allowed
-- The field value must be a valid date (ISO string, Date object, or Unix timestamp)
 - Documents without the TTL field, or with invalid dates, will not expire
-- Cleanup runs periodically in the background (default: every 60 seconds)
+
+### TTL Cleanup Query
+
+The cleanup process executes a query like:
+
+```sql
+DELETE FROM documents
+WHERE collection_id = ?
+AND json_extract(data, '$.createdAt') IS NOT NULL
+AND datetime(json_extract(data, '$.createdAt')) < datetime(?)
+```
 
 **Use cases:**
 - Session management
@@ -306,17 +411,20 @@ console.log(indexes)
 
 ```typescript
 interface IndexInfo {
-  name: string                    // Index name
-  key: Record<string, 1 | -1 | 'text'>  // Index specification
-  v: number                       // Index version (always 2)
-  unique?: boolean               // Whether unique
-  sparse?: boolean               // Whether sparse
-  expireAfterSeconds?: number    // TTL value if set
-  textIndexVersion?: number      // Present for text indexes
-  weights?: Record<string, number>  // Text index weights
-  default_language?: string      // Text index language
+  name: string                           // Index name
+  key: Record<string, 1 | -1 | 'text'>   // Index specification
+  v: number                              // Index version (always 2)
+  unique?: boolean                       // Whether unique
+  sparse?: boolean                       // Whether sparse
+  expireAfterSeconds?: number            // TTL value if set
+  textIndexVersion?: number              // Present for text indexes (value: 3)
+  weights?: Record<string, number>       // Text index weights
+  default_language?: string              // Text index language
+  partialFilterExpression?: Document     // Partial filter if set
 }
 ```
+
+**Note:** The `_id_` index is always included and cannot be dropped.
 
 ## Dropping Indexes
 
@@ -325,6 +433,9 @@ interface IndexInfo {
 ```typescript
 // Drop an index by name
 await collection.dropIndex('email_1')
+
+// Returns:
+// { ok: 1, nIndexesWas: 3 }
 ```
 
 **Note:** You cannot drop the `_id_` index - it's always present.
@@ -334,16 +445,36 @@ await collection.dropIndex('email_1')
 await collection.dropIndex('_id_')  // Error: cannot drop _id index
 ```
 
+### Drop All Indexes
+
+```typescript
+// Drop all indexes except _id_
+await collection.dropIndexes()
+
+// Returns:
+// { ok: 1, nIndexesWas: 5 }
+```
+
+**For text indexes**, dropping also removes:
+- The FTS5 virtual table
+- Associated triggers (insert, update, delete)
+
 ## Index Naming
 
 ### Auto-generated Names
 
-If you don't specify a name, MondoDB generates one based on the fields and directions:
+If you don't specify a name, MondoDB generates one based on the collection name, fields, and directions:
 
 ```typescript
-{ email: 1 }           // name: 'collectionName_email_1'
-{ name: 1, age: -1 }   // name: 'collectionName_name_1_age_-1'
-{ bio: 'text' }        // name: 'collectionName_bio_text'
+// Collection: users
+{ email: 1 }           // name: 'users_email_1'
+{ name: 1, age: -1 }   // name: 'users_name_1_age_-1'
+{ bio: 'text' }        // name: 'users_bio_text'
+```
+
+**SQLite index naming convention:**
+```
+idx_[unique_]<collection>_<field>_<direction>[_<field>_<direction>...]
 ```
 
 ### Custom Names
@@ -402,23 +533,66 @@ const statuses = await collection.find(
 ).toArray()
 ```
 
-## Best Practices
+### Index Hints
+
+MondoDB provides an `getIndexHints()` method to suggest which indexes could be used for a query:
+
+```typescript
+const indexManager = new IndexManager(storage)
+const hints = indexManager.getIndexHints('users', ['email', 'status'])
+// Returns: ['users_email_1', 'users_status_1']
+```
+
+## Field Path Validation
+
+MondoDB validates field paths to prevent SQL injection and ensure data integrity:
+
+**Valid field names:**
+- Alphanumeric characters: `a-z`, `A-Z`, `0-9`
+- Underscores: `_`
+- Dots for nesting: `.` (e.g., `address.city`)
+- Hyphens: `-`
+- Dollar sign: `$` (for special fields)
+
+**Invalid patterns:**
+- Empty field names
+- Null characters (`\0`)
+- Consecutive dots (`..`)
+- Leading or trailing dots
+
+```typescript
+// Valid
+await collection.createIndex({ 'user.profile.name': 1 })
+
+// Invalid - will throw error
+await collection.createIndex({ '..invalid': 1 })
+```
+
+## Performance Tips
 
 ### Do:
 
-- Create indexes for frequently executed queries
-- Use compound indexes for multi-field queries
-- Put high-selectivity fields first in compound indexes
-- Use sparse indexes for optional fields
-- Use TTL indexes for auto-expiring data
-- Monitor index usage and remove unused indexes
+- **Create indexes for frequently executed queries** - Analyze your query patterns
+- **Use compound indexes for multi-field queries** - They're more efficient than multiple single-field indexes
+- **Put high-selectivity fields first** - Fields with many unique values should come first
+- **Use sparse indexes for optional fields** - Reduces index size and improves performance
+- **Use TTL indexes for auto-expiring data** - Cleaner than manual deletion
+- **Monitor index usage** - Remove unused indexes
 
 ### Don't:
 
-- Create too many indexes (each index has write overhead)
-- Create indexes on low-selectivity fields alone (e.g., boolean fields)
-- Create multiple text indexes on the same collection
-- Create compound TTL indexes (not supported)
+- **Create too many indexes** - Each index has write overhead (inserts/updates are slower)
+- **Create indexes on low-selectivity fields alone** - Boolean fields or fields with few unique values
+- **Create multiple text indexes on the same collection** - Only one is allowed
+- **Create compound TTL indexes** - Not supported
+- **Index every field** - Focus on actual query patterns
+
+### Index Size Considerations
+
+Since MondoDB stores indexes in SQLite:
+- Indexes consume additional storage in the SQLite database
+- Large text indexes (FTS5) can be significant
+- Consider partial indexes for large collections
 
 ## Complete Example
 
@@ -446,6 +620,12 @@ async function setupIndexes() {
     { name: 'status_created' }
   )
 
+  // Sparse index for optional phone number
+  await users.createIndex(
+    { phone: 1 },
+    { sparse: true, unique: true, name: 'unique_phone' }
+  )
+
   // TTL index for session expiration (1 hour)
   await sessions.createIndex(
     { lastAccess: 1 },
@@ -461,7 +641,13 @@ async function setupIndexes() {
     }
   )
 
-  // Sparse index for optional field
+  // Compound index for post queries
+  await posts.createIndex(
+    { authorId: 1, publishedAt: -1 },
+    { name: 'author_published' }
+  )
+
+  // Sparse index for featured posts
   await posts.createIndex(
     { featuredAt: 1 },
     { sparse: true, name: 'featured_posts' }
@@ -471,7 +657,50 @@ async function setupIndexes() {
   console.log('Users indexes:', await users.listIndexes())
   console.log('Sessions indexes:', await sessions.listIndexes())
   console.log('Posts indexes:', await posts.listIndexes())
+
+  await client.close()
 }
+```
+
+## Troubleshooting
+
+### "Collection already has a text index"
+
+Only one text index is allowed per collection. Drop the existing text index before creating a new one:
+
+```typescript
+await collection.dropIndex('old_text_index_name')
+await collection.createIndex({ newField: 'text' })
+```
+
+### "TTL indexes must be on a single field"
+
+Compound TTL indexes are not supported. Create a TTL index on a single date field:
+
+```typescript
+// Wrong - compound TTL
+await collection.createIndex(
+  { category: 1, expiresAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+
+// Correct - single field TTL
+await collection.createIndex(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+```
+
+### "Invalid field name"
+
+Ensure field names follow the validation rules (alphanumeric, underscores, dots for nesting):
+
+```typescript
+// Invalid
+await collection.createIndex({ 'field with spaces': 1 })
+
+// Valid
+await collection.createIndex({ 'field_with_underscores': 1 })
 ```
 
 ## Related

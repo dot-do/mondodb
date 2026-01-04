@@ -1,155 +1,456 @@
 ---
 title: Collection
-description: API reference for the Collection class
+description: API reference for the Collection and MongoCollection classes
 ---
 
 # Collection
 
-The `Collection` class provides methods for CRUD operations and queries on documents.
+The `Collection` class provides MongoDB-compatible CRUD operations on documents within a collection. `Collection` is used with Cloudflare Durable Objects (production), while `MongoCollection` is used with URI connections (testing/in-memory).
 
-## Insert Methods
+## Import
+
+```typescript
+import { Collection, MongoCollection } from 'mondodb'
+```
+
+## Type Parameters
+
+Both `Collection` and `MongoCollection` are generic classes:
+
+```typescript
+Collection<TDocument extends Document = Document>
+MongoCollection<TSchema extends Document = Document>
+```
+
+## Properties
+
+### collectionName
+
+```typescript
+get collectionName(): string
+```
+
+Returns the name of the collection.
+
+---
+
+## CRUD Operations
 
 ### insertOne()
 
-Insert a single document.
+Insert a single document into the collection.
 
 ```typescript
-await collection.insertOne(doc: Document): Promise<InsertOneResult>
+async insertOne(
+  doc: Omit<TDocument, '_id'> | TDocument,
+  options?: InsertOneOptions
+): Promise<InsertOneResult>
 ```
 
-#### Example
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `doc` | `TDocument` | The document to insert |
+| `options` | `InsertOneOptions` | Optional insert options |
+
+**Returns:** `InsertOneResult`
 
 ```typescript
-const result = await users.insertOne({
-  name: 'Alice',
-  email: 'alice@example.com',
-});
+interface InsertOneResult {
+  acknowledged: boolean
+  insertedId: string | ObjectId
+}
+```
 
-console.log(result.insertedId);
+**Example:**
+```typescript
+const result = await collection.insertOne({
+  name: 'John Doe',
+  email: 'john@example.com',
+  age: 30
+})
+
+console.log(`Inserted document with _id: ${result.insertedId}`)
 ```
 
 ### insertMany()
 
-Insert multiple documents.
+Insert multiple documents into the collection.
 
 ```typescript
-await collection.insertMany(docs: Document[]): Promise<InsertManyResult>
+async insertMany(
+  docs: Array<Omit<TDocument, '_id'> | TDocument>,
+  options?: InsertManyOptions
+): Promise<InsertManyResult>
 ```
 
-## Find Methods
+**Returns:** `InsertManyResult`
+
+```typescript
+interface InsertManyResult {
+  acknowledged: boolean
+  insertedCount: number
+  insertedIds: { [key: number]: string | ObjectId }
+}
+```
+
+**Example:**
+```typescript
+const result = await collection.insertMany([
+  { name: 'Alice', email: 'alice@example.com' },
+  { name: 'Bob', email: 'bob@example.com' },
+  { name: 'Charlie', email: 'charlie@example.com' }
+])
+
+console.log(`Inserted ${result.insertedCount} documents`)
+```
 
 ### findOne()
 
-Find a single document.
+Find a single document matching the filter.
 
 ```typescript
-await collection.findOne(filter: Filter, options?: FindOptions): Promise<Document | null>
+async findOne(
+  filter: Filter<TDocument> = {},
+  options?: FindOptions<TDocument>
+): Promise<TDocument | null>
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filter` | `Filter<TDocument>` | Query filter |
+| `options` | `FindOptions<TDocument>` | Find options (projection, sort, etc.) |
+
+**Returns:** The matching document or `null`.
+
+**Example:**
+```typescript
+// Find by field
+const user = await collection.findOne({ email: 'john@example.com' })
+
+// Find with projection
+const user = await collection.findOne(
+  { email: 'john@example.com' },
+  { projection: { name: 1, email: 1 } }
+)
 ```
 
 ### find()
 
-Find multiple documents.
+Find all documents matching the filter.
 
 ```typescript
-collection.find(filter: Filter, options?: FindOptions): Cursor
+find(
+  filter: Filter<TDocument> = {},
+  options?: FindOptions<TDocument>
+): FindCursor<TDocument>
 ```
 
-#### Example
+**Returns:** A `FindCursor` or `HttpFindCursor` for iterating over results.
 
+**Example:**
 ```typescript
-// Find all users
-const allUsers = await users.find({}).toArray();
+// Using toArray
+const docs = await collection.find({ status: 'active' }).toArray()
 
-// Find with filter
-const activeUsers = await users.find({ status: 'active' }).toArray();
+// Using async iterator
+for await (const doc of collection.find({ status: 'active' })) {
+  console.log(doc)
+}
 
-// Find with projection
-const names = await users.find({}, { projection: { name: 1 } }).toArray();
+// Using chainable modifiers
+const docs = await collection.find({})
+  .sort({ name: 1 })
+  .limit(10)
+  .skip(5)
+  .project({ name: 1, email: 1 })
+  .toArray()
 ```
-
-## Update Methods
 
 ### updateOne()
 
-Update a single document.
+Update a single document matching the filter.
 
 ```typescript
-await collection.updateOne(
-  filter: Filter,
-  update: UpdateFilter,
+async updateOne(
+  filter: Filter<TDocument>,
+  update: UpdateFilter<TDocument>,
   options?: UpdateOptions
 ): Promise<UpdateResult>
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filter` | `Filter<TDocument>` | Query filter |
+| `update` | `UpdateFilter<TDocument>` | Update operations |
+| `options` | `UpdateOptions` | Update options |
+
+**Options:**
+```typescript
+interface UpdateOptions {
+  upsert?: boolean        // Create document if it doesn't exist
+  arrayFilters?: object[] // Filters for array updates
+  session?: ClientSession
+}
+```
+
+**Returns:** `UpdateResult`
+
+```typescript
+interface UpdateResult {
+  acknowledged: boolean
+  matchedCount: number
+  modifiedCount: number
+  upsertedCount: number
+  upsertedId?: string | ObjectId
+}
+```
+
+**Example:**
+```typescript
+// Simple update
+const result = await collection.updateOne(
+  { email: 'john@example.com' },
+  { $set: { lastLogin: new Date() } }
+)
+
+// Upsert
+const result = await collection.updateOne(
+  { email: 'new@example.com' },
+  { $set: { name: 'New User' } },
+  { upsert: true }
+)
 ```
 
 ### updateMany()
 
-Update multiple documents.
+Update all documents matching the filter.
 
 ```typescript
-await collection.updateMany(
-  filter: Filter,
-  update: UpdateFilter,
+async updateMany(
+  filter: Filter<TDocument>,
+  update: UpdateFilter<TDocument>,
   options?: UpdateOptions
 ): Promise<UpdateResult>
 ```
 
+**Example:**
+```typescript
+const result = await collection.updateMany(
+  { status: 'pending' },
+  { $set: { status: 'processed', processedAt: new Date() } }
+)
+
+console.log(`Updated ${result.modifiedCount} documents`)
+```
+
 ### replaceOne()
 
-Replace a single document.
+Replace a single document matching the filter.
 
 ```typescript
-await collection.replaceOne(
-  filter: Filter,
-  replacement: Document,
+async replaceOne(
+  filter: Filter<TDocument>,
+  replacement: Omit<TDocument, '_id'>,
   options?: ReplaceOptions
 ): Promise<UpdateResult>
 ```
 
-## Delete Methods
+**Example:**
+```typescript
+const result = await collection.replaceOne(
+  { _id: 'user123' },
+  { name: 'John Smith', email: 'john.smith@example.com', role: 'admin' }
+)
+```
 
 ### deleteOne()
 
-Delete a single document.
+Delete a single document matching the filter.
 
 ```typescript
-await collection.deleteOne(filter: Filter): Promise<DeleteResult>
+async deleteOne(
+  filter: Filter<TDocument>,
+  options?: DeleteOptions
+): Promise<DeleteResult>
+```
+
+**Returns:** `DeleteResult`
+
+```typescript
+interface DeleteResult {
+  acknowledged: boolean
+  deletedCount: number
+}
+```
+
+**Example:**
+```typescript
+const result = await collection.deleteOne({ email: 'old@example.com' })
+console.log(`Deleted ${result.deletedCount} document(s)`)
 ```
 
 ### deleteMany()
 
-Delete multiple documents.
+Delete all documents matching the filter.
 
 ```typescript
-await collection.deleteMany(filter: Filter): Promise<DeleteResult>
+async deleteMany(
+  filter: Filter<TDocument>,
+  options?: DeleteOptions
+): Promise<DeleteResult>
 ```
+
+**Example:**
+```typescript
+// Delete all inactive users
+const result = await collection.deleteMany({ status: 'inactive' })
+
+// Delete all documents (use with caution!)
+const result = await collection.deleteMany({})
+```
+
+---
+
+## FindOneAnd Operations
+
+### findOneAndUpdate()
+
+Find a document and update it atomically.
+
+```typescript
+async findOneAndUpdate(
+  filter: Filter<TDocument>,
+  update: UpdateFilter<TDocument>,
+  options?: FindOneAndUpdateOptions
+): Promise<TDocument | null>
+```
+
+**Options:**
+```typescript
+interface FindOneAndUpdateOptions {
+  projection?: Record<string, 0 | 1>
+  sort?: Record<string, 1 | -1>
+  upsert?: boolean
+  returnDocument?: 'before' | 'after'
+  session?: ClientSession
+}
+```
+
+**Example:**
+```typescript
+// Get the updated document
+const doc = await collection.findOneAndUpdate(
+  { _id: 'user123' },
+  { $inc: { visits: 1 } },
+  { returnDocument: 'after' }
+)
+```
+
+### findOneAndDelete()
+
+Find a document and delete it atomically.
+
+```typescript
+async findOneAndDelete(
+  filter: Filter<TDocument>,
+  options?: FindOneAndDeleteOptions
+): Promise<TDocument | null>
+```
+
+**Example:**
+```typescript
+const doc = await collection.findOneAndDelete(
+  { status: 'expired' },
+  { sort: { createdAt: 1 } }
+)
+```
+
+### findOneAndReplace()
+
+Find a document and replace it atomically.
+
+```typescript
+async findOneAndReplace(
+  filter: Filter<TDocument>,
+  replacement: TDocument,
+  options?: FindOneAndReplaceOptions
+): Promise<TDocument | null>
+```
+
+---
+
+## Counting
+
+### countDocuments()
+
+Count documents matching the filter.
+
+```typescript
+async countDocuments(filter: Filter<TDocument> = {}): Promise<number>
+```
+
+**Example:**
+```typescript
+const total = await collection.countDocuments()
+const active = await collection.countDocuments({ status: 'active' })
+```
+
+### estimatedDocumentCount()
+
+Get an estimated document count (faster but less accurate).
+
+```typescript
+async estimatedDocumentCount(): Promise<number>
+```
+
+---
 
 ## Aggregation
 
 ### aggregate()
 
-Run an aggregation pipeline.
+Execute an aggregation pipeline.
 
 ```typescript
-collection.aggregate(pipeline: Document[]): AggregationCursor
+aggregate<TResult extends Document = Document>(
+  pipeline: AggregationStage[],
+  options?: AggregateOptions
+): AggregationCursor<TResult>
 ```
 
-#### Example
-
+**Options:**
 ```typescript
-const results = await users.aggregate([
+interface AggregateOptions {
+  allowDiskUse?: boolean
+  maxTimeMS?: number
+  bypassDocumentValidation?: boolean
+  readConcern?: { level: string }
+  collation?: CollationOptions
+  hint?: string | Document
+  comment?: string
+  let?: Document
+}
+```
+
+**Example:**
+```typescript
+// Group by category and count
+const results = await collection.aggregate([
   { $match: { status: 'active' } },
-  { $group: { _id: '$department', count: { $sum: 1 } } },
-]).toArray();
-```
+  { $group: { _id: '$category', count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+]).toArray()
 
-## Other Methods
-
-### countDocuments()
-
-Count documents matching a filter.
-
-```typescript
-await collection.countDocuments(filter?: Filter): Promise<number>
+// Using async iterator
+for await (const doc of collection.aggregate(pipeline)) {
+  console.log(doc)
+}
 ```
 
 ### distinct()
@@ -157,13 +458,417 @@ await collection.countDocuments(filter?: Filter): Promise<number>
 Get distinct values for a field.
 
 ```typescript
-await collection.distinct(field: string, filter?: Filter): Promise<any[]>
+async distinct<TValue = unknown>(
+  field: keyof TDocument,
+  filter: Filter<TDocument> = {}
+): Promise<TValue[]>
 ```
+
+**Example:**
+```typescript
+const categories = await collection.distinct('category')
+const activeCategories = await collection.distinct('category', { status: 'active' })
+```
+
+---
+
+## Bulk Operations
+
+### bulkWrite()
+
+Execute multiple write operations in a single batch.
+
+```typescript
+async bulkWrite(
+  operations: BulkWriteOperation<TDocument>[],
+  options?: BulkWriteOptions
+): Promise<BulkWriteResult>
+```
+
+**Options:**
+```typescript
+interface BulkWriteOptions {
+  ordered?: boolean                // Execute in order (default: true)
+  bypassDocumentValidation?: boolean
+  comment?: string | object
+  let?: Document
+}
+```
+
+**Result:**
+```typescript
+interface BulkWriteResult {
+  acknowledged: boolean
+  insertedCount: number
+  matchedCount: number
+  modifiedCount: number
+  deletedCount: number
+  upsertedCount: number
+  insertedIds: Record<number, ObjectId | string>
+  upsertedIds: Record<number, ObjectId | string>
+}
+```
+
+**Bulk Write Operation Types:**
+```typescript
+// Insert
+{ insertOne: { document: TDocument } }
+
+// Update
+{ updateOne: { filter: object, update: object, upsert?: boolean, arrayFilters?: object[] } }
+{ updateMany: { filter: object, update: object, upsert?: boolean, arrayFilters?: object[] } }
+
+// Replace
+{ replaceOne: { filter: object, replacement: TDocument, upsert?: boolean } }
+
+// Delete
+{ deleteOne: { filter: object } }
+{ deleteMany: { filter: object } }
+```
+
+**Example:**
+```typescript
+const result = await collection.bulkWrite([
+  { insertOne: { document: { name: 'Alice', age: 25 } } },
+  { updateOne: { filter: { name: 'Bob' }, update: { $inc: { age: 1 } } } },
+  { deleteOne: { filter: { name: 'Charlie' } } },
+  { replaceOne: { filter: { name: 'David' }, replacement: { name: 'David', age: 35 } } }
+])
+
+console.log(`Inserted: ${result.insertedCount}, Modified: ${result.modifiedCount}`)
+```
+
+---
+
+## Indexes
 
 ### createIndex()
 
-Create an index on the collection.
+Create an index on this collection.
 
 ```typescript
-await collection.createIndex(keys: IndexSpec, options?: IndexOptions): Promise<string>
+async createIndex(indexSpec: IndexSpecification): Promise<string>
 ```
+
+**Index Specification:**
+```typescript
+interface IndexSpecification {
+  key: { [key: string]: 1 | -1 | 'text' | '2dsphere' | '2d' | 'hashed' }
+  name?: string
+  unique?: boolean
+  sparse?: boolean
+  background?: boolean
+  expireAfterSeconds?: number
+  partialFilterExpression?: Filter
+  collation?: CollationOptions
+}
+```
+
+**Example:**
+```typescript
+// Create a simple index
+await collection.createIndex({ key: { email: 1 }, unique: true })
+
+// Create a compound index
+await collection.createIndex({ key: { status: 1, createdAt: -1 } })
+
+// Create a text index
+await collection.createIndex({ key: { title: 'text', content: 'text' } })
+
+// Create a TTL index
+await collection.createIndex({
+  key: { createdAt: 1 },
+  expireAfterSeconds: 3600 // 1 hour
+})
+```
+
+### dropIndex()
+
+Drop an index from this collection.
+
+```typescript
+async dropIndex(indexName: string): Promise<void>
+```
+
+### listIndexes()
+
+List all indexes on this collection.
+
+```typescript
+async listIndexes(): Promise<IndexSpecification[]>
+```
+
+---
+
+## Change Streams
+
+### watch()
+
+Watch for changes on this collection (MongoCollection only).
+
+```typescript
+watch(
+  pipeline?: ChangeStreamPipeline,
+  options?: ChangeStreamOptions
+): ChangeStream<TDocument>
+```
+
+**Options:**
+```typescript
+interface ChangeStreamOptions {
+  fullDocument?: 'default' | 'updateLookup' | 'whenAvailable' | 'required'
+  resumeAfter?: ResumeToken
+  startAfter?: ResumeToken
+  startAtOperationTime?: Date
+  maxAwaitTimeMS?: number
+  batchSize?: number
+}
+```
+
+**Example:**
+```typescript
+const changeStream = collection.watch([
+  { $match: { operationType: 'insert' } }
+])
+
+for await (const event of changeStream) {
+  console.log('Change:', event.operationType, event.fullDocument)
+}
+
+// Don't forget to close when done
+await changeStream.close()
+```
+
+---
+
+## Other Methods
+
+### drop()
+
+Drop this collection.
+
+```typescript
+async drop(): Promise<void>
+```
+
+---
+
+## Filter Types
+
+### Filter
+
+```typescript
+type Filter<T> = {
+  [P in keyof T]?: T[P] | FilterOperators<T[P]>
+} & RootFilterOperators<T>
+```
+
+### FilterOperators
+
+```typescript
+interface FilterOperators<T> {
+  $eq?: T
+  $ne?: T
+  $gt?: T
+  $gte?: T
+  $lt?: T
+  $lte?: T
+  $in?: T[]
+  $nin?: T[]
+  $exists?: boolean
+  $type?: string | number
+  $regex?: string | RegExp
+  $options?: string
+  $not?: FilterOperators<T>
+  $elemMatch?: Filter<T extends (infer U)[] ? U : never>
+  $size?: number
+}
+```
+
+### RootFilterOperators
+
+```typescript
+interface RootFilterOperators<T> {
+  $and?: Filter<T>[]
+  $or?: Filter<T>[]
+  $nor?: Filter<T>[]
+  $text?: {
+    $search: string
+    $language?: string
+    $caseSensitive?: boolean
+    $diacriticSensitive?: boolean
+  }
+  $where?: string | ((this: T) => boolean)
+}
+```
+
+---
+
+## Update Operators
+
+### UpdateFilter
+
+```typescript
+interface UpdateFilter<T> {
+  $set?: Partial<T>
+  $unset?: { [P in keyof T]?: '' | 1 | true }
+  $inc?: { [P in keyof T]?: number }
+  $mul?: { [P in keyof T]?: number }
+  $min?: Partial<T>
+  $max?: Partial<T>
+  $rename?: { [key: string]: string }
+  $push?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | ArrayUpdateOperators<U> : never }
+  $pull?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | Filter<U> : never }
+  $addToSet?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | { $each: U[] } : never }
+  $pop?: { [P in keyof T]?: 1 | -1 }
+  $currentDate?: { [P in keyof T]?: true | { $type: 'date' | 'timestamp' } }
+}
+```
+
+### Array Update Operators
+
+```typescript
+interface ArrayUpdateOperators<T> {
+  $each?: T[]
+  $slice?: number
+  $sort?: 1 | -1 | { [key: string]: 1 | -1 }
+  $position?: number
+}
+```
+
+---
+
+## Usage Examples
+
+### CRUD Operations
+
+```typescript
+interface User {
+  _id?: string
+  name: string
+  email: string
+  age: number
+  status: 'active' | 'inactive'
+}
+
+const users = db.collection<User>('users')
+
+// Create
+const { insertedId } = await users.insertOne({
+  name: 'John',
+  email: 'john@example.com',
+  age: 30,
+  status: 'active'
+})
+
+// Read
+const user = await users.findOne({ _id: insertedId })
+const activeUsers = await users.find({ status: 'active' }).toArray()
+
+// Update
+await users.updateOne(
+  { _id: insertedId },
+  { $set: { status: 'inactive' }, $inc: { age: 1 } }
+)
+
+// Delete
+await users.deleteOne({ _id: insertedId })
+```
+
+### Complex Queries
+
+```typescript
+// Find with multiple conditions
+const users = await collection.find({
+  $and: [
+    { age: { $gte: 18 } },
+    { status: 'active' },
+    { $or: [
+      { role: 'admin' },
+      { permissions: { $in: ['write', 'delete'] } }
+    ]}
+  ]
+}).toArray()
+
+// Find with text search
+const results = await collection.find({
+  $text: { $search: 'mongodb database' }
+}).toArray()
+
+// Find with regex
+const users = await collection.find({
+  email: { $regex: '@example\\.com$', $options: 'i' }
+}).toArray()
+```
+
+### Aggregation Pipeline
+
+```typescript
+const salesByMonth = await collection.aggregate([
+  { $match: { year: 2024 } },
+  { $group: {
+    _id: { month: '$month', product: '$product' },
+    totalSales: { $sum: '$amount' },
+    avgSale: { $avg: '$amount' },
+    count: { $sum: 1 }
+  }},
+  { $sort: { '_id.month': 1 } },
+  { $project: {
+    month: '$_id.month',
+    product: '$_id.product',
+    totalSales: 1,
+    avgSale: { $round: ['$avgSale', 2] },
+    count: 1,
+    _id: 0
+  }}
+]).toArray()
+```
+
+---
+
+## Session Support
+
+All write operations accept an optional `session` parameter for transaction support:
+
+```typescript
+const session = client.startSession()
+
+try {
+  session.startTransaction()
+
+  await collection.insertOne({ name: 'Alice' }, { session })
+  await collection.updateOne(
+    { name: 'Bob' },
+    { $inc: { balance: -100 } },
+    { session }
+  )
+
+  await session.commitTransaction()
+} catch (error) {
+  await session.abortTransaction()
+  throw error
+} finally {
+  await session.endSession()
+}
+```
+
+---
+
+## HttpFindCursor vs FindCursor
+
+MondoDB provides two cursor implementations:
+
+| Cursor | Mode | Description |
+|--------|------|-------------|
+| `FindCursor` | URI/In-memory | Used with `new MongoClient('mondodb://...')` |
+| `HttpFindCursor` | Durable Objects | Used with `new MongoClient(env)` |
+
+Both provide the same API, but `HttpFindCursor` communicates with Durable Objects via HTTP while `FindCursor` operates on in-memory data.
+
+---
+
+## Related
+
+- [Database](/docs/api-reference/database) - Database class reference
+- [Cursor](/docs/api-reference/cursor) - Cursor class reference
+- [Types](/docs/api-reference/types) - TypeScript interfaces and types

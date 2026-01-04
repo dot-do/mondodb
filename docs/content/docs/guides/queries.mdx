@@ -7,6 +7,48 @@ description: Complete guide to MondoDB query operators and filter syntax
 
 MondoDB supports MongoDB-compatible query syntax for filtering documents. This guide covers all supported query operators with examples.
 
+## Quick Reference
+
+### Comparison Operators
+| Operator | Description |
+|----------|-------------|
+| `$eq` | Equal to |
+| `$ne` | Not equal to |
+| `$gt` | Greater than |
+| `$gte` | Greater than or equal to |
+| `$lt` | Less than |
+| `$lte` | Less than or equal to |
+| `$in` | Value is in array |
+| `$nin` | Value is not in array |
+
+### Logical Operators
+| Operator | Description |
+|----------|-------------|
+| `$and` | All conditions must be true |
+| `$or` | At least one condition must be true |
+| `$not` | Negates a condition |
+| `$nor` | All conditions must be false |
+
+### Element Operators
+| Operator | Description |
+|----------|-------------|
+| `$exists` | Field exists or doesn't exist |
+| `$type` | Field is of a specific type |
+
+### Array Operators
+| Operator | Description |
+|----------|-------------|
+| `$all` | Array contains all specified values |
+| `$elemMatch` | Array element matches all conditions |
+| `$size` | Array has specified number of elements |
+
+### Evaluation Operators
+| Operator | Description |
+|----------|-------------|
+| `$regex` | String matches regular expression |
+| `$mod` | Value modulo equals result |
+| `$text` | Full-text search (requires text index) |
+
 ## Basic Query Structure
 
 Queries are JSON objects where keys are field names and values specify the conditions to match:
@@ -281,21 +323,43 @@ await collection.find({ items: { $size: 0 } });
 
 ### $all
 
-Matches arrays that contain all specified elements.
+Matches arrays that contain all specified elements. The order of elements in the array does not matter.
 
 ```javascript
 // Find documents containing all specified tags
 await collection.find({
   tags: { $all: ["javascript", "typescript", "nodejs"] }
 });
+// Matches: { tags: ["nodejs", "javascript", "typescript", "react"] }
+// Does not match: { tags: ["javascript", "typescript"] } // missing "nodejs"
 
 // Order doesn't matter - matches if all values exist
 await collection.find({
   categories: { $all: ["electronics", "sale"] }
 });
+
+// Combine with other operators
+await collection.find({
+  tags: { $all: ["featured"], $size: 3 }
+});
+// Matches arrays that contain "featured" AND have exactly 3 elements
+
+// Match documents with specific required skills
+await collection.find({
+  skills: { $all: ["Python", "SQL", "Machine Learning"] }
+});
 ```
 
 **Note:** An empty array `{ $all: [] }` matches all documents with the field.
+
+**Difference from implicit array matching:**
+```javascript
+// This matches if "javascript" is anywhere in the array
+await collection.find({ tags: "javascript" });
+
+// This matches only if ALL specified values are in the array
+await collection.find({ tags: { $all: ["javascript", "typescript"] } });
+```
 
 ### $elemMatch
 
@@ -578,3 +642,162 @@ const results = await collection.find({
   discontinued: { $ne: true }
 });
 ```
+
+---
+
+## TypeScript Support
+
+MondoDB provides full TypeScript support for type-safe queries.
+
+### Typed Filters
+
+```typescript
+import type { Filter } from 'mondodb'
+
+interface Product {
+  _id: ObjectId
+  name: string
+  price: number
+  category: string
+  tags: string[]
+  inStock: boolean
+}
+
+// Type-safe filter
+const filter: Filter<Product> = {
+  price: { $gte: 100, $lte: 500 },
+  category: { $in: ['electronics', 'computers'] },
+  inStock: true
+}
+
+const products = await collection.find(filter).toArray()
+```
+
+### FilterOperators Type
+
+```typescript
+import type { FilterOperators } from 'mondodb'
+
+// FilterOperators provides type hints for all query operators
+interface FilterOperators<T> {
+  $eq?: T
+  $ne?: T
+  $gt?: T
+  $gte?: T
+  $lt?: T
+  $lte?: T
+  $in?: T[]
+  $nin?: T[]
+  $exists?: boolean
+  $type?: string | number
+  $regex?: string | RegExp
+  $options?: string
+  $not?: FilterOperators<T>
+  $elemMatch?: Filter<T extends (infer U)[] ? U : never>
+  $size?: number
+}
+```
+
+### RootFilterOperators Type
+
+```typescript
+import type { RootFilterOperators } from 'mondodb'
+
+// Root-level operators available on the filter object
+interface RootFilterOperators<T> {
+  $and?: Filter<T>[]
+  $or?: Filter<T>[]
+  $nor?: Filter<T>[]
+  $text?: {
+    $search: string
+    $language?: string
+    $caseSensitive?: boolean
+    $diacriticSensitive?: boolean
+  }
+}
+```
+
+---
+
+## Common Query Patterns
+
+### Pagination
+
+```javascript
+// Page-based pagination
+const pageSize = 20
+const pageNumber = 3
+
+const results = await collection
+  .find({ status: 'active' })
+  .sort({ createdAt: -1 })
+  .skip((pageNumber - 1) * pageSize)
+  .limit(pageSize)
+  .toArray()
+```
+
+### Date Range Queries
+
+```javascript
+// Documents created in the last 7 days
+const weekAgo = new Date()
+weekAgo.setDate(weekAgo.getDate() - 7)
+
+await collection.find({
+  createdAt: { $gte: weekAgo }
+})
+
+// Documents within a date range
+await collection.find({
+  createdAt: {
+    $gte: new Date('2024-01-01'),
+    $lt: new Date('2024-02-01')
+  }
+})
+```
+
+### Null and Missing Field Handling
+
+```javascript
+// Field is explicitly null
+await collection.find({ deletedAt: null })
+
+// Field exists (including null values)
+await collection.find({ email: { $exists: true } })
+
+// Field exists AND is not null
+await collection.find({
+  email: { $exists: true, $ne: null }
+})
+
+// Field does not exist OR is null
+await collection.find({
+  $or: [
+    { deletedAt: { $exists: false } },
+    { deletedAt: null }
+  ]
+})
+```
+
+### Case-Insensitive Search
+
+```javascript
+// Case-insensitive regex search
+await collection.find({
+  name: { $regex: 'john', $options: 'i' }
+})
+
+// Find users with email domain (case-insensitive)
+await collection.find({
+  email: { $regex: '@example\\.com$', $options: 'i' }
+})
+```
+
+---
+
+## Related Guides
+
+- [CRUD Operations](/docs/guides/crud) - Basic document operations
+- [Aggregation Pipeline](/docs/guides/aggregation) - Complex data transformations
+- [Full-Text Search](/docs/guides/full-text-search) - Text search capabilities
+- [Indexing](/docs/guides/indexing) - Improve query performance

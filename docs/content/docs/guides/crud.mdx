@@ -7,6 +7,26 @@ description: Create, Read, Update, and Delete documents in MondoDB
 
 MondoDB provides MongoDB-compatible CRUD (Create, Read, Update, Delete) operations for managing documents in your collections. This guide covers all available operations with examples.
 
+## Quick Reference
+
+| Operation | Method | Description |
+|-----------|--------|-------------|
+| **Create** | `insertOne()` | Insert a single document |
+| | `insertMany()` | Insert multiple documents |
+| **Read** | `findOne()` | Find a single document |
+| | `find()` | Find multiple documents (returns cursor) |
+| | `countDocuments()` | Count matching documents |
+| | `estimatedDocumentCount()` | Fast count (metadata-based) |
+| | `distinct()` | Get distinct values for a field |
+| **Update** | `updateOne()` | Update a single document |
+| | `updateMany()` | Update multiple documents |
+| | `replaceOne()` | Replace a document entirely |
+| | `findOneAndUpdate()` | Find and update atomically |
+| | `findOneAndReplace()` | Find and replace atomically |
+| **Delete** | `deleteOne()` | Delete a single document |
+| | `deleteMany()` | Delete multiple documents |
+| | `findOneAndDelete()` | Find and delete atomically |
+
 ## Create Operations
 
 ### insertOne
@@ -534,7 +554,7 @@ const replaced = await collection.findOneAndReplace(
 
 ### countDocuments
 
-Count documents matching a filter.
+Count documents matching a filter. This method performs an exact count by querying the documents.
 
 ```typescript
 const count = await collection.countDocuments({ status: 'active' })
@@ -542,6 +562,63 @@ console.log(`Active users: ${count}`)
 
 // Count all documents
 const total = await collection.countDocuments({})
+
+// Count with complex filter
+const recentActiveCount = await collection.countDocuments({
+  status: 'active',
+  createdAt: { $gte: new Date('2024-01-01') }
+})
+```
+
+**Parameters:**
+- `filter` (optional) - Query filter (defaults to `{}` for all documents)
+
+**Returns:** `Promise<number>` - The number of matching documents
+
+### estimatedDocumentCount
+
+Get an estimated count of documents in the collection. This method is faster than `countDocuments()` as it uses collection metadata rather than scanning documents.
+
+```typescript
+// Fast count using collection metadata
+const estimatedCount = await collection.estimatedDocumentCount()
+console.log(`Approximately ${estimatedCount} documents in collection`)
+```
+
+**Note:** This count may not be perfectly accurate if there are ongoing writes to the collection. Use `countDocuments()` when you need an exact count.
+
+**Returns:** `Promise<number>` - The estimated number of documents
+
+### distinct
+
+Get distinct (unique) values for a specified field across all documents.
+
+```typescript
+// Get all unique status values
+const statuses = await collection.distinct('status')
+console.log(statuses)
+// ['active', 'inactive', 'pending']
+
+// Get distinct values with a filter
+const activeCategories = await collection.distinct('category', { status: 'active' })
+console.log(activeCategories)
+// ['electronics', 'clothing', 'food']
+
+// Get distinct nested field values
+const cities = await collection.distinct('address.city')
+```
+
+**Parameters:**
+- `field` - The field name to get distinct values for
+- `filter` (optional) - Query filter to limit which documents are considered
+
+**Returns:** `Promise<T[]>` - Array of distinct values
+
+**TypeScript Usage:**
+```typescript
+// With type parameter for type safety
+const ages = await collection.distinct<number>('age')
+const names = await collection.distinct<string>('name', { status: 'active' })
 ```
 
 ---
@@ -631,3 +708,127 @@ try {
 ```
 
 See the [Transactions Guide](/docs/guides/transactions) for more details.
+
+---
+
+## TypeScript Type Definitions
+
+MondoDB provides full TypeScript support with typed collections and results.
+
+### Typed Collections
+
+```typescript
+// Define your document schema
+interface User {
+  _id?: ObjectId
+  name: string
+  email: string
+  age: number
+  status: 'active' | 'inactive'
+  createdAt: Date
+}
+
+// Create a typed collection
+const users = db.collection<User>('users')
+
+// TypeScript will enforce correct types
+await users.insertOne({
+  name: 'John',
+  email: 'john@example.com',
+  age: 30,
+  status: 'active',
+  createdAt: new Date()
+})
+
+// Type-safe queries
+const user = await users.findOne({ email: 'john@example.com' })
+// user is typed as (User & { _id: ObjectId }) | null
+```
+
+### Result Types
+
+```typescript
+// InsertOneResult
+interface InsertOneResult {
+  acknowledged: boolean
+  insertedId: ObjectId
+}
+
+// InsertManyResult
+interface InsertManyResult {
+  acknowledged: boolean
+  insertedCount: number
+  insertedIds: Record<number, ObjectId>
+}
+
+// UpdateResult
+interface UpdateResult {
+  acknowledged: boolean
+  matchedCount: number
+  modifiedCount: number
+  upsertedId?: ObjectId
+  upsertedCount?: number
+}
+
+// DeleteResult
+interface DeleteResult {
+  acknowledged: boolean
+  deletedCount: number
+}
+```
+
+### Filter Types
+
+```typescript
+// Filters are type-safe based on your document schema
+const filter: Filter<User> = {
+  age: { $gte: 25 },
+  status: 'active'  // TypeScript knows this must be 'active' | 'inactive'
+}
+
+// Update operations are also typed
+const update: UpdateFilter<User> = {
+  $set: { status: 'inactive' },
+  $inc: { age: 1 }
+}
+```
+
+---
+
+## Collection Management
+
+### drop
+
+Drop (delete) the entire collection and all its documents.
+
+```typescript
+await collection.drop()
+```
+
+**Warning:** This operation is irreversible and deletes all data in the collection.
+
+---
+
+## Aggregation
+
+For complex queries involving grouping, transformations, and multi-stage processing, see the [Aggregation Guide](/docs/guides/aggregation).
+
+```typescript
+// Simple aggregation example
+const results = await collection.aggregate([
+  { $match: { status: 'active' } },
+  { $group: { _id: '$category', count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+]).toArray()
+```
+
+---
+
+## Related Guides
+
+- [Query & Filter Syntax](/docs/guides/queries) - Complete guide to query operators
+- [Bulk Write Operations](/docs/guides/bulk-write) - Batch multiple operations
+- [Aggregation Pipeline](/docs/guides/aggregation) - Complex data transformations
+- [Cursors](/docs/guides/cursors) - Working with query cursors
+- [Transactions](/docs/guides/transactions) - Multi-document transactions
+- [Indexing](/docs/guides/indexing) - Improve query performance

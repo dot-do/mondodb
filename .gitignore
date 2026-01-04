@@ -1,4 +1,25 @@
 node_modules/
 dist/
+dist-node/
 *.log
 bun.lock
+
+# Build artifacts
+.next/
+.source/
+.turbo/
+*.tsbuildinfo
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

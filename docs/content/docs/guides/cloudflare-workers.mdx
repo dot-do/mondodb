@@ -585,6 +585,75 @@ Enable observability in your wrangler configuration:
 - **Vectorize batch limits** - Maximum 100 vectors per upsert operation
 - **Worker Loader availability** - `$function` operator requires closed beta access
 
+## MCP Protocol Integration
+
+MondoDB exposes an MCP (Model Context Protocol) endpoint at `/mcp` on each Durable Object, allowing AI agents to interact with your database:
+
+```typescript
+// MCP is automatically available on the Durable Object
+// Access via: https://your-worker.workers.dev/mcp
+```
+
+The MCP endpoint provides three tools:
+
+| Tool | Description |
+|------|-------------|
+| `search` | Query documents with MongoDB-style filters |
+| `fetch` | Retrieve full documents by ID |
+| `do` | Execute JavaScript code in a sandbox (requires LOADER binding) |
+
+See the [MCP Protocol Guide](/docs/guides/mcp-protocol) for detailed usage.
+
+---
+
+## Schema and Migrations
+
+MondoDB uses an automatic migration system for SQLite schema management:
+
+### Schema Structure
+
+The SQLite schema consists of two main tables:
+
+```sql
+-- Collections table
+CREATE TABLE collections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  options TEXT DEFAULT '{}',
+  indexes TEXT DEFAULT '[]',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Documents table
+CREATE TABLE documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collection_id INTEGER NOT NULL,
+  _id TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(collection_id, _id),
+  FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE
+);
+```
+
+### Automatic Migrations
+
+Schema migrations run automatically when the Durable Object initializes:
+
+```typescript
+// Inside MondoDatabase constructor
+this.state.blockConcurrencyWhile(async () => {
+  await this.schemaManager.initializeSchema()
+  this.initialized = true
+})
+```
+
+The `blockConcurrencyWhile()` ensures atomic schema initialization, preventing race conditions when multiple requests arrive simultaneously.
+
+---
+
 ## Troubleshooting
 
 ### Common Issues
@@ -616,6 +685,10 @@ interface Env {
 
 Check that `nodejs_compat` is enabled in compatibility flags.
 
+**Database initializing (503 error)**
+
+If you receive a 503 error with "Database initializing", the Durable Object is still running schema migrations. This is normal on first access and should resolve quickly.
+
 ### Debug Endpoints
 
 In development, enable debug endpoints for troubleshooting:
@@ -630,3 +703,5 @@ curl http://localhost:8787/internal/dump
 # Reset database (dev only)
 curl -X POST http://localhost:8787/internal/reset
 ```
+
+**Important**: Debug endpoints are gated behind the `ENABLE_DEBUG_ENDPOINTS` environment variable. Never enable this in production as it exposes sensitive database operations.

@@ -338,3 +338,42 @@ console.log(`Collections: ${stats.collections}`)
 console.log(`Total Objects: ${stats.objects}`)
 console.log(`Data Size: ${(stats.dataSize / 1024).toFixed(2)} KB`)
 ```
+
+---
+
+## Connection Modes
+
+The `Database` class behavior differs based on how `MongoClient` was initialized:
+
+### Durable Objects Mode (`new MongoClient(env)`)
+
+- Returns `Database` class instances
+- Collections return `Collection` class with `HttpFindCursor`
+- Operations are proxied to Durable Objects via HTTP
+- Each database name maps to a separate Durable Object instance
+
+```typescript
+// Each call creates/retrieves a Durable Object by name
+const userDb = client.db('users')    // DO with id from name "users"
+const orderDb = client.db('orders')  // Separate DO with id from name "orders"
+```
+
+### URI Mode (`new MongoClient('mondodb://...')`)
+
+- Returns `MongoDatabase` class instances
+- Collections return `MongoCollection` class with `FindCursor`
+- Operations run in-memory (useful for testing)
+- Default database extracted from URI path
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/myapp')
+const db = client.db() // Uses 'myapp' from URI
+const testDb = client.db('test') // Override with different name
+```
+
+---
+
+## Related
+
+- [MongoClient](/docs/api-reference/client) - Client class reference
+- [Collection](/docs/api-reference/collection) - Collection class reference

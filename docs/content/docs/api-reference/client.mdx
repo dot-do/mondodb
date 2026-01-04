@@ -315,6 +315,75 @@ async function transferFunds(
 }
 ```
 
+---
+
+## URI Parsing
+
+MondoDB supports both `mondodb://` and `mongodb://` URI schemes:
+
+```
+mondodb://[username:password@]host[:port][/database][?options]
+```
+
+### Supported URI Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `maxPoolSize` | number | Maximum connection pool size (URI mode) |
+| `minPoolSize` | number | Minimum connection pool size (URI mode) |
+
+### Parsing Examples
+
+```typescript
+// Basic connection
+new MongoClient('mondodb://localhost/mydb')
+// host: localhost, port: 27017, database: mydb
+
+// With port
+new MongoClient('mondodb://localhost:27018/mydb')
+
+// With authentication
+new MongoClient('mondodb://user:pass@localhost/mydb')
+
+// With options
+new MongoClient('mondodb://localhost/mydb?maxPoolSize=50')
+```
+
+---
+
+## Env Interface
+
+When using Durable Objects mode, the environment must include the `MONDO_DATABASE` binding:
+
+```typescript
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace
+  LOADER?: WorkerLoader  // Optional: for $function operator
+}
+```
+
+---
+
+## Connection Lifecycle
+
+```typescript
+const client = new MongoClient(env)
+
+// connect() is optional - connections are lazy
+await client.connect()
+
+// Perform operations
+const db = client.db('myapp')
+await db.collection('users').find({}).toArray()
+
+// Always close when done (clears caches)
+await client.close()
+```
+
+**Note**: In Cloudflare Workers, connection state is per-request. The `close()` method clears internal caches but doesn't affect Durable Object connections.
+
+---
+
 ## Related
 
 - [MongoClient & Connection Guide](/docs/guides/connection) - Detailed guide on connection management

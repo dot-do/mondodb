@@ -1,0 +1,431 @@
+---
+title: Text Search
+description: Full-text search capabilities in MondoDB using SQLite FTS5
+---
+
+# Text Search
+
+MondoDB provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
+
+## Overview
+
+Full-text search in MondoDB enables:
+
+- **Natural language search** - Find documents matching search terms
+- **Phrase matching** - Search for exact phrases
+- **Wildcard queries** - Match partial terms with prefix matching
+- **Autocomplete** - Build type-ahead search functionality
+- **Boolean operators** - Combine search terms with AND, OR, NOT logic
+- **Relevance scoring** - Results ranked by BM25 algorithm
+
+## Creating Text Indexes
+
+Before you can search, create a text index on the fields you want to search.
+
+### Single Field Index
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://your-worker.workers.dev')
+await client.connect()
+
+const db = client.db('mydb')
+const articles = db.collection('articles')
+
+// Create a text index on the content field
+await articles.createIndex({ content: 'text' })
+```
+
+### Multi-Field Index
+
+Index multiple fields for searching across different parts of your documents:
+
+```typescript
+// Create a text index on multiple fields
+await articles.createIndex({
+  title: 'text',
+  content: 'text',
+  tags: 'text'
+})
+```
+
+### Weighted Fields
+
+Assign weights to fields to control their importance in search ranking:
+
+```typescript
+await articles.createIndex(
+  { title: 'text', content: 'text', tags: 'text' },
+  {
+    weights: {
+      title: 10,    // Title matches are 10x more important
+      content: 5,   // Content matches are 5x more important
+      tags: 1       // Tags are baseline importance
+    }
+  }
+)
+```
+
+**Important:** Only one text index per collection is allowed.
+
+---
+
+## The $text Query Operator
+
+Use the `$text` operator in find queries to perform text search:
+
+```typescript
+// Basic text search
+const results = await articles.find({
+  $text: { $search: 'mongodb database' }
+}).toArray()
+
+// Search with score
+const results = await articles.find({
+  $text: { $search: 'mongodb tutorial' }
+}, {
+  projection: {
+    title: 1,
+    score: { $meta: 'textScore' }
+  }
+}).sort({ score: { $meta: 'textScore' } }).toArray()
+```
+
+### $text Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `$search` | string | The search query string |
+| `$language` | string | Language for stemming (default: 'english') |
+| `$caseSensitive` | boolean | Case-sensitive search (default: false) |
+| `$diacriticSensitive` | boolean | Diacritic-sensitive search (default: false) |
+
+### Search Syntax
+
+The `$search` string supports several operators:
+
+```typescript
+// Match all terms (AND)
+{ $text: { $search: 'mongodb database' } }
+
+// Match exact phrase
+{ $text: { $search: '"mongodb database"' } }
+
+// Exclude terms
+{ $text: { $search: 'mongodb -deprecated' } }
+
+// Combine operators
+{ $text: { $search: '"machine learning" tutorial -advanced' } }
+```
+
+---
+
+## The $search Aggregation Stage
+
+For more advanced search capabilities, use the `$search` aggregation stage. It must be the first stage in a pipeline.
+
+### Basic Text Search
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: {
+        query: 'mongodb database',
+        path: 'content'
+      }
+    }
+  }
+]).toArray()
+```
+
+### Searching Multiple Fields
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: {
+        query: 'javascript tutorial',
+        path: ['title', 'content', 'tags']
+      }
+    }
+  }
+]).toArray()
+```
+
+---
+
+## Search Operators
+
+### text Operator
+
+Standard full-text search:
+
+```typescript
+{
+  $search: {
+    text: {
+      query: 'search terms',
+      path: 'fieldName',
+      fuzzy: {
+        maxEdits: 2,
+        prefixLength: 3
+      },
+      score: {
+        boost: 2.5
+      }
+    }
+  }
+}
+```
+
+### phrase Operator
+
+Search for exact phrases:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      phrase: {
+        query: 'machine learning algorithms',
+        path: 'content',
+        slop: 2  // Allow up to 2 words between terms
+      }
+    }
+  }
+]).toArray()
+```
+
+### wildcard Operator
+
+Match terms using wildcard patterns:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      wildcard: {
+        query: 'data*',
+        path: 'content'
+      }
+    }
+  }
+]).toArray()
+```
+
+**Note:** Only prefix matching (trailing `*`) is supported.
+
+### autocomplete Operator
+
+Build type-ahead search functionality:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      autocomplete: {
+        query: 'mach',
+        path: 'title',
+        tokenOrder: 'sequential'
+      }
+    }
+  },
+  { $limit: 10 }
+]).toArray()
+// Matches: "machine", "machinery", "machining", etc.
+```
+
+### compound Operator
+
+Combine multiple search clauses with boolean logic:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      compound: {
+        must: [
+          { text: { query: 'javascript', path: 'tags' } }
+        ],
+        should: [
+          { text: { query: 'tutorial beginner', path: 'title' } }
+        ],
+        mustNot: [
+          { text: { query: 'advanced expert', path: 'tags' } }
+        ],
+        filter: [
+          { text: { query: 'published', path: 'status' } }
+        ]
+      }
+    }
+  }
+]).toArray()
+```
+
+| Clause | Description | Affects Score |
+|--------|-------------|---------------|
+| `must` | All clauses must match | Yes |
+| `should` | At least one should match | Yes |
+| `mustNot` | No clauses can match | No |
+| `filter` | All clauses must match | No |
+
+---
+
+## Scoring and Ranking
+
+MondoDB uses the BM25 algorithm for relevance scoring. Results are automatically sorted by score (highest first).
+
+### Including Search Score
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: { query: 'mongodb tutorial', path: 'content' }
+    }
+  },
+  {
+    $project: {
+      title: 1,
+      content: 1,
+      score: { $meta: 'searchScore' }
+    }
+  }
+]).toArray()
+```
+
+---
+
+## Common Patterns
+
+### Basic Search Box
+
+```typescript
+async function search(query: string) {
+  return articles.aggregate([
+    {
+      $search: {
+        text: {
+          query,
+          path: ['title', 'content']
+        }
+      }
+    },
+    { $limit: 20 },
+    {
+      $project: {
+        title: 1,
+        excerpt: { $substr: ['$content', 0, 200] },
+        score: { $meta: 'searchScore' }
+      }
+    }
+  ]).toArray()
+}
+```
+
+### Type-Ahead Autocomplete
+
+```typescript
+async function autocomplete(partial: string) {
+  if (partial.length < 2) return []
+
+  return articles.aggregate([
+    {
+      $search: {
+        autocomplete: {
+          query: partial,
+          path: 'title',
+          tokenOrder: 'sequential'
+        }
+      }
+    },
+    { $limit: 10 },
+    { $project: { title: 1, _id: 0 } }
+  ]).toArray()
+}
+```
+
+### Faceted Search
+
+```typescript
+async function facetedSearch(query: string, category?: string) {
+  const pipeline: any[] = [
+    {
+      $search: {
+        compound: {
+          must: [
+            { text: { query, path: ['title', 'content'] } }
+          ],
+          filter: category ? [
+            { text: { query: category, path: 'category' } }
+          ] : []
+        }
+      }
+    }
+  ]
+
+  return articles.aggregate([
+    ...pipeline,
+    {
+      $facet: {
+        results: [
+          { $limit: 20 },
+          { $project: { title: 1, category: 1 } }
+        ],
+        categories: [
+          { $group: { _id: '$category', count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ]
+      }
+    }
+  ]).toArray()
+}
+```
+
+---
+
+## FTS5 Implementation Details
+
+MondoDB translates search operators to SQLite FTS5 MATCH syntax:
+
+| MondoDB Operator | FTS5 Syntax | Example |
+|------------------|-------------|---------|
+| text (single term) | `term` | `mongodb` |
+| text (multiple terms) | `term1 term2` | `mongodb database` |
+| text (with path) | `column:term` | `title:mongodb` |
+| phrase | `"phrase"` | `"mongodb database"` |
+| wildcard (prefix) | `term*` | `data*` |
+| compound must | `term1 AND term2` | `mongodb AND tutorial` |
+| compound should | `term1 OR term2` | `mongodb OR postgres` |
+| compound mustNot | `NOT term` | `NOT deprecated` |
+
+---
+
+## Performance Tips
+
+1. **Create appropriate text indexes** - Only index fields you need to search
+2. **Use path restrictions** - Searching specific fields is faster than all fields
+3. **Limit results early** - Add `$limit` after `$search` to stop processing
+4. **Use filter clauses** - `filter` in compound queries can be optimized
+5. **Weight important fields** - Improve relevance without post-processing
+
+---
+
+## Limitations
+
+- Only one text index per collection
+- Wildcard queries only support prefix matching (trailing `*`)
+- FTS5 uses Unicode61 tokenizer - may not handle all languages optimally
+- Fuzzy matching has limited edit distance (1-2)
+- `$search` must be the first stage in an aggregation pipeline
+
+---
+
+## Next Steps
+
+- [Full-Text Search](/docs/guides/full-text-search) - Comprehensive full-text search guide
+- [Aggregation Pipeline](/docs/guides/aggregation) - Learn about other pipeline stages
+- [Vector Search](/docs/guides/vector-search) - Semantic similarity search
