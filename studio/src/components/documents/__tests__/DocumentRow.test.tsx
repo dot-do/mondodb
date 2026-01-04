@@ -270,8 +270,10 @@ describe('DocumentRow', () => {
     })
 
     it('adds clickable styles when onClick provided', () => {
-      renderDocumentRow({ onClick: vi.fn() })
-      expect(screen.getByRole('button')).toBeInTheDocument()
+      renderDocumentRow({ onClick: vi.fn(), expandable: false })
+      // The row itself becomes a button when onClick is provided
+      const row = screen.getByTestId('document-row-test-doc-123')
+      expect(row).toHaveAttribute('role', 'button')
     })
 
     it('handles keyboard navigation with Enter', async () => {
