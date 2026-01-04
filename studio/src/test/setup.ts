@@ -1,5 +1,17 @@
+import { afterEach, vi } from 'vitest'
+
+// Mock focus-trap to prevent errors in jsdom - MUST be before any @testing-library imports
+vi.mock('focus-trap', () => ({
+  createFocusTrap: () => ({
+    activate: () => {},
+    deactivate: () => {},
+    pause: () => {},
+    unpause: () => {},
+    updateContainerElements: () => {},
+  }),
+}))
+
 import '@testing-library/jest-dom'
-import { afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
 // Cleanup after each test

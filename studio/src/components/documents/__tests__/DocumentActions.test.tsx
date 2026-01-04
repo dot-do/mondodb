@@ -224,7 +224,7 @@ describe('DocumentActions', () => {
       await user.click(screen.getByTestId('document-actions-menu'))
       await user.click(screen.getByTestId('menu-action-edit'))
 
-      expect(screen.getByText('Edit Document')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Edit Document' })).toBeInTheDocument()
     })
 
     it('opens delete modal', async () => {
@@ -235,7 +235,7 @@ describe('DocumentActions', () => {
       await user.click(screen.getByTestId('document-actions-menu'))
       await user.click(screen.getByTestId('menu-action-delete'))
 
-      expect(screen.getByText('Delete Document')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Delete Document' })).toBeInTheDocument()
     })
   })
 

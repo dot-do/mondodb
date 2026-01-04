@@ -59,6 +59,7 @@ export function CollectionPage() {
   }>()
   const [activeTab, setActiveTab] = useState(0)
   const [filter, setFilter] = useState<Record<string, unknown>>({})
+  const [projection, setProjection] = useState<Record<string, 0 | 1> | undefined>(undefined)
   const [sort, setSort] = useState<Record<string, 1 | -1>>({})
   const [limit, setLimit] = useState(20)
   const [skip, setSkip] = useState(0)
@@ -73,7 +74,7 @@ export function CollectionPage() {
   const { data: documents, isLoading, error, refetch } = useDocumentsQuery(
     database ?? '',
     collection ?? '',
-    { filter, sort, limit, skip }
+    { filter, projection, sort, limit, skip }
   )
   const { data: count } = useDocumentCountQuery(database ?? '', collection ?? '', filter)
 
@@ -85,8 +86,15 @@ export function CollectionPage() {
   const handleQueryExecute = useCallback(async (query: QueryOptions): Promise<{ count: number; time: number }> => {
     const startTime = performance.now()
     setFilter(query.filter)
+    if (query.projection) {
+      setProjection(query.projection as Record<string, 0 | 1>)
+    } else {
+      setProjection(undefined)
+    }
     if (query.sort) setSort(query.sort as Record<string, 1 | -1>)
     if (query.limit !== undefined) setLimit(query.limit)
+    // Reset skip when executing a new query
+    setSkip(0)
     await refetch()
     const endTime = performance.now()
     return { count: count ?? 0, time: endTime - startTime }

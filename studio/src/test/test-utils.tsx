@@ -1,8 +1,14 @@
 import { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
+import { render, RenderOptions, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import LeafyGreenProvider from '@leafygreen-ui/leafygreen-provider'
+import { afterEach } from 'vitest'
+
+// Clean up LeafyGreen portals after each test
+afterEach(() => {
+  cleanup()
+})
 
 const createTestQueryClient = () =>
   new QueryClient({
