@@ -102,22 +102,26 @@ describe('AggregationExecutor', () => {
   })
 
   describe('pipelines with $function', () => {
-    it('throws when LOADER not available', async () => {
-      // Return SQL result containing a function marker
+    it('uses fallback direct execution when LOADER not available', async () => {
+      // Return SQL result containing a function marker with a valid value reference
       mockSql.exec.mockReturnValue({
         results: [
           { data: JSON.stringify({
             _id: '1',
-            doubled: '__FUNCTION__{"__type":"function","body":"x => x * 2","argPaths":["$.value"],"literalArgs":{},"argOrder":[{"type":"field","path":"$.value"}]}'
+            value: 5,
+            doubled: '__FUNCTION__{"__type":"function","body":"(x) => x * 2","argPaths":["$.value"],"literalArgs":{},"argOrder":[{"type":"field","path":"$.value"}]}'
           }) }
         ]
       })
 
       const executor = new AggregationExecutor(mockSql, {})
+      const results = await executor.execute('users', [
+        { $addFields: { doubled: { $function: { body: '(x) => x * 2', args: ['$value'], lang: 'js' } } } }
+      ])
 
-      await expect(executor.execute('users', [
-        { $addFields: { doubled: { $function: { body: 'x => x * 2', args: ['$value'], lang: 'js' } } } }
-      ])).rejects.toThrow('$function requires worker_loaders binding')
+      // Should use fallback direct evaluation and compute 5 * 2 = 10
+      expect(results).toHaveLength(1)
+      expect(results[0]).toEqual({ _id: '1', value: 5, doubled: 10 })
     })
 
     it('executes $addFields with $function', async () => {

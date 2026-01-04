@@ -84,14 +84,18 @@ export class QueryTranslator {
       if (value === null) {
         return `${this.jsonExtract(path)} IS NULL`;
       }
-      params.push(value);
+      // SQLite's json_extract returns 1/0 for booleans, so convert JS booleans
+      const sqlValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+      params.push(sqlValue);
       return `${this.jsonExtract(path)} = ?`;
     },
     $ne: (path, value, params) => {
       if (value === null) {
         return `${this.jsonExtract(path)} IS NOT NULL`;
       }
-      params.push(value);
+      // SQLite's json_extract returns 1/0 for booleans, so convert JS booleans
+      const sqlValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+      params.push(sqlValue);
       return `${this.jsonExtract(path)} != ?`;
     },
     $gt: (path, value, params) => {
@@ -545,18 +549,24 @@ export class QueryTranslator {
     params: unknown[]
   ): string {
     switch (op) {
-      case '$eq':
+      case '$eq': {
         if (value === null) {
           return `${path} IS NULL`;
         }
-        params.push(value);
+        // SQLite's json_extract returns 1/0 for booleans, so convert JS booleans
+        const eqValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+        params.push(eqValue);
         return `${path} = ?`;
-      case '$ne':
+      }
+      case '$ne': {
         if (value === null) {
           return `${path} IS NOT NULL`;
         }
-        params.push(value);
+        // SQLite's json_extract returns 1/0 for booleans, so convert JS booleans
+        const neValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+        params.push(neValue);
         return `${path} != ?`;
+      }
       case '$gt':
         params.push(value);
         return `${path} > ?`;

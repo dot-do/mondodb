@@ -50,7 +50,8 @@ describe('QueryTranslator', () => {
         const result = translator.translate(query);
 
         expect(result.sql).toBe("json_extract(data, '$.active') = ?");
-        expect(result.params).toEqual([true]);
+        // SQLite json_extract returns 1/0 for booleans, so we convert true to 1
+        expect(result.params).toEqual([1]);
       });
     });
 
@@ -379,7 +380,8 @@ describe('QueryTranslator', () => {
 
         expect(result.sql).toContain('AND');
         expect(result.sql).toContain('OR');
-        expect(result.params).toEqual([true, 'admin', 'moderator']);
+        // SQLite json_extract returns 1/0 for booleans, so we convert true to 1
+        expect(result.params).toEqual([1, 'admin', 'moderator']);
       });
 
       it('should handle $or with nested $and', () => {

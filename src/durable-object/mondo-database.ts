@@ -584,6 +584,7 @@ export class MondoDatabase {
   async aggregate(collection: string, pipeline: PipelineStage[]): Promise<unknown[]> {
     // Ensure collection exists - create view for documents
     const collectionId = this.getCollectionId(collection);
+
     if (collectionId === undefined) {
       // Return empty for non-existent collection
       return [];
@@ -594,14 +595,23 @@ export class MondoDatabase {
       exec: (query: string, ...params: unknown[]) => {
         // The AggregationTranslator generates SQL that selects from collection name directly
         // We need to replace the collection name with a subquery that filters by collection_id
-        const modifiedQuery = query.replace(
-          new RegExp(`FROM\\s+${collection}\\b`, 'gi'),
-          `FROM documents WHERE collection_id = ${collectionId}`
-        );
+        // Handle both cases: with and without existing WHERE clause
+        let modifiedQuery: string;
+        const fromPattern = new RegExp(`FROM\\s+${collection}\\b(\\s+WHERE\\s+)?`, 'gi');
+        modifiedQuery = query.replace(fromPattern, (match, hasWhere) => {
+          if (hasWhere) {
+            // There's an existing WHERE clause, use AND to combine conditions
+            return `FROM documents WHERE collection_id = ${collectionId} AND `;
+          } else {
+            // No existing WHERE clause
+            return `FROM documents WHERE collection_id = ${collectionId}`;
+          }
+        });
         const result = this.state.storage.sql.exec(modifiedQuery, ...params);
+        const array = result.toArray();
         return {
-          results: result.toArray(),
-          toArray: () => result.toArray()
+          results: array,
+          toArray: () => array
         };
       }
     };

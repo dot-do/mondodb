@@ -16,6 +16,7 @@ import { translateUnwindStage } from './stages/unwind-stage'
 import { translateAddFieldsStage } from './stages/add-fields-stage'
 import { translateBucketStage } from './stages/bucket-stage'
 import { translateFacetStage, FacetTranslator } from './stages/facet-stage'
+import { translateSearchStage, type SearchStageInput, type SearchStageContext } from './stages/search-stage'
 import { optimizePipeline } from './stages/optimizer'
 
 export interface TranslatorOptions {
@@ -71,14 +72,14 @@ export class AggregationTranslator implements FacetTranslator {
   private needsCtePipeline(pipeline: PipelineStage[]): boolean {
     // Need CTEs for:
     // 1. Multiple stages that transform data shape
-    // 2. $lookup, $unwind stages
+    // 2. $lookup, $unwind, $search stages
     // 3. $project followed by other stages
     let shapeTransformCount = 0
 
     for (const stage of pipeline) {
       const stageType = this.getStageType(stage)
 
-      if (['$lookup', '$unwind', '$facet'].includes(stageType)) {
+      if (['$lookup', '$unwind', '$facet', '$search'].includes(stageType)) {
         return true
       }
 
@@ -213,6 +214,23 @@ export class AggregationTranslator implements FacetTranslator {
           currentSource = cteName
           cteIndex++
         }
+      } else if (stageType === '$search') {
+        // $search stage requires FTS join - must be first stage
+        flushPendingCte()
+
+        context.cteIndex = cteIndex
+        const result = this.translateStage(stage, context) as StageResult & { ftsJoin?: string; ftsTable?: string; ftsMatch?: string }
+        params.push(...result.params)
+
+        // Build CTE with FTS join
+        const ftsTable = result.ftsTable || `${this.collection}_fts`
+        const selectClause = result.selectClause || 'documents.*'
+        const cteSql = `SELECT ${selectClause} FROM documents JOIN ${ftsTable} ON documents.id = ${ftsTable}.rowid WHERE ${result.whereClause}`
+
+        const cteName = `stage_${cteIndex}`
+        ctes.push(`${cteName} AS (${cteSql})`)
+        currentSource = cteName
+        cteIndex++
       } else if (stageType === '$facet') {
         flushPendingCte()
 
@@ -321,6 +339,12 @@ export class AggregationTranslator implements FacetTranslator {
           stageValue as Record<string, PipelineStage[]>,
           context,
           this
+        )
+
+      case '$search':
+        return translateSearchStage(
+          stageValue as SearchStageInput,
+          context as SearchStageContext
         )
 
       default:

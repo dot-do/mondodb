@@ -6,6 +6,39 @@
 import type { StageResult, StageContext } from './types'
 import { translateExpression, isFieldReference, getFieldPath } from './expression-translator'
 
+/**
+ * Recursively collect all field references from a $function expression's args
+ */
+function collectFunctionFieldRefs(expr: unknown): string[] {
+  if (!expr || typeof expr !== 'object') return []
+
+  const fields: string[] = []
+  const exprObj = expr as Record<string, unknown>
+
+  // Check if this is a $function expression
+  if ('$function' in exprObj) {
+    const fnSpec = exprObj.$function as { args?: unknown[] }
+    if (fnSpec.args && Array.isArray(fnSpec.args)) {
+      for (const arg of fnSpec.args) {
+        if (isFieldReference(arg)) {
+          // Extract field name from $fieldName reference
+          const fieldName = (arg as string).substring(1).split('.')[0]
+          fields.push(fieldName)
+        }
+      }
+    }
+  }
+
+  // Recursively check nested objects
+  for (const value of Object.values(exprObj)) {
+    if (value && typeof value === 'object') {
+      fields.push(...collectFunctionFieldRefs(value))
+    }
+  }
+
+  return fields
+}
+
 export function translateProjectStage(
   projection: Record<string, unknown>,
   context: StageContext
@@ -54,7 +87,20 @@ function translateInclusionProject(
 ): StageResult {
   const jsonParts: string[] = []
 
+  // Collect all field references needed by $function expressions
+  // These need to be included in the output so the function executor can extract them
+  const functionFieldRefs = new Set<string>()
   for (const [key, value] of Object.entries(projection)) {
+    if (typeof value === 'object' && value !== null) {
+      const refs = collectFunctionFieldRefs(value)
+      refs.forEach(ref => functionFieldRefs.add(ref))
+    }
+  }
+
+  // First, add the explicitly projected fields
+  const explicitFields = new Set<string>()
+  for (const [key, value] of Object.entries(projection)) {
+    explicitFields.add(key)
     if (value === 1) {
       // Include existing field
       jsonParts.push(`'${key}', json_extract(data, '$.${key}')`)
@@ -74,6 +120,14 @@ function translateInclusionProject(
       } else if (typeof value === 'number' || typeof value === 'boolean') {
         jsonParts.push(`'${key}', ${JSON.stringify(value)}`)
       }
+    }
+  }
+
+  // Add source fields needed by $function that aren't already projected
+  // These will be used by the function executor to extract argument values
+  for (const fieldRef of functionFieldRefs) {
+    if (!explicitFields.has(fieldRef)) {
+      jsonParts.push(`'${fieldRef}', json_extract(data, '$.${fieldRef}')`)
     }
   }
 

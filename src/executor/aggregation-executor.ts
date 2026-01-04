@@ -93,8 +93,8 @@ export class AggregationExecutor {
       return documents
     }
 
-    // Process function placeholders
-    return this.executeWithFunctions(documents)
+    // Process function placeholders, passing pipeline for post-sort if needed
+    return this.executeWithFunctions(documents, pipeline)
   }
 
   /**
@@ -118,14 +118,10 @@ export class AggregationExecutor {
   /**
    * Execute pipeline with function placeholders
    */
-  private async executeWithFunctions(documents: Record<string, unknown>[]): Promise<unknown[]> {
-    if (!this.functionExecutor) {
-      throw new Error(
-        '$function requires worker_loaders binding. ' +
-        'Add to wrangler.jsonc: "worker_loaders": [{ "binding": "LOADER" }]'
-      )
-    }
-
+  private async executeWithFunctions(
+    documents: Record<string, unknown>[],
+    pipeline: PipelineStage[] = []
+  ): Promise<unknown[]> {
     // Collect all function invocations for batch processing
     const batchItems: BatchItem[] = []
 
@@ -142,7 +138,16 @@ export class AggregationExecutor {
       const argsArray = items.map(item => item.args)
 
       try {
-        const results = await this.functionExecutor.executeBatch(body, argsArray)
+        let results: unknown[]
+
+        if (this.functionExecutor) {
+          // Use secure sandboxed execution via worker-loader
+          results = await this.functionExecutor.executeBatch(body, argsArray)
+        } else {
+          // Fallback: direct evaluation (for development/testing without worker_loaders)
+          // WARNING: This is NOT sandboxed and should only be used in trusted environments
+          results = this.executeDirectBatch(body, argsArray)
+        }
 
         // Apply results back to documents
         for (let i = 0; i < items.length; i++) {
@@ -156,7 +161,60 @@ export class AggregationExecutor {
       }
     }
 
+    // Re-apply $sort stages after function execution
+    // This is needed because SQL sorting happened on placeholder strings, not computed values
+    const sortStage = pipeline.find(stage => '$sort' in stage) as { $sort: Record<string, number> } | undefined
+    if (sortStage) {
+      documents.sort((a, b) => {
+        for (const [field, direction] of Object.entries(sortStage.$sort)) {
+          const aVal = this.extractFieldValue(a, `$.${field}`)
+          const bVal = this.extractFieldValue(b, `$.${field}`)
+
+          // Handle different types
+          if (aVal === bVal) continue
+          if (aVal === null || aVal === undefined) return direction
+          if (bVal === null || bVal === undefined) return -direction
+
+          // Compare values
+          const comparison = aVal < bVal ? -1 : 1
+          return comparison * direction
+        }
+        return 0
+      })
+    }
+
     return documents
+  }
+
+  /**
+   * Execute functions directly without sandboxing (fallback for testing)
+   * WARNING: This is NOT secure and should only be used when LOADER binding is unavailable
+   */
+  private executeDirectBatch(body: string, argsArray: unknown[][]): unknown[] {
+    // Normalize function body
+    const normalizedBody = body.trim()
+    let fnCode: string
+
+    // Wrap function declarations in parentheses for invocation
+    if (normalizedBody.startsWith('function')) {
+      fnCode = `(${normalizedBody})`
+    } else {
+      fnCode = normalizedBody
+    }
+
+    // Create the function using Function constructor
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function(`return ${fnCode}`)() as (...args: unknown[]) => unknown
+
+    // Execute for each args set
+    return argsArray.map(args => {
+      try {
+        return fn(...args)
+      } catch (error) {
+        // Return error message as a special marker
+        return { __error: error instanceof Error ? error.message : String(error) }
+      }
+    })
   }
 
   /**

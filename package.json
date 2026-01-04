@@ -22,6 +22,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "bson": "^6.10.0",
     "capnweb": "^0.1.0"
   },
   "devDependencies": {
@@ -32,7 +33,7 @@
     "mongodb-memory-server": "^11.0.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
-    "wrangler": "^3.80.0"
+    "wrangler": "^4.54.0"
   },
   "keywords": [
     "mongodb",

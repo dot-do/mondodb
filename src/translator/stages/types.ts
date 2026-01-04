@@ -54,6 +54,21 @@ export type PipelineStage =
   | { $addFields: Record<string, unknown> }
   | { $bucket: BucketStage }
   | { $facet: Record<string, PipelineStage[]> }
+  | { $search: SearchStage }
+  | { $vectorSearch: VectorSearchPipelineStage }
+
+export interface SearchStage {
+  index?: string
+  text?: { query: string; path?: string | string[] }
+  phrase?: { query: string; path?: string | string[] }
+  wildcard?: { query: string; path?: string | string[] }
+  compound?: {
+    must?: SearchStage[]
+    should?: SearchStage[]
+    mustNot?: SearchStage[]
+    filter?: SearchStage[]
+  }
+}
 
 export interface GroupStage {
   _id: null | string | Record<string, string>
@@ -80,4 +95,27 @@ export interface BucketStage {
   boundaries: number[]
   default?: string
   output?: Record<string, unknown>
+}
+
+/**
+ * $vectorSearch pipeline stage for vector similarity search
+ * Compatible with MongoDB Atlas vector search
+ */
+export interface VectorSearchPipelineStage {
+  /** Name of the vector search index */
+  index: string
+  /** Path to the vector field in documents */
+  path: string
+  /** The query vector to search for */
+  queryVector: number[]
+  /** Number of candidates to consider (default: limit * 10) */
+  numCandidates?: number
+  /** Maximum number of results to return */
+  limit: number
+  /** Optional filter to apply before vector search */
+  filter?: Record<string, unknown>
+  /** Whether to perform exact search (slower but more accurate) */
+  exact?: boolean
+  /** Field name to store the similarity score (default: 'score') */
+  scoreField?: string
 }

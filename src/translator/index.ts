@@ -6,3 +6,5 @@
 
 export { QueryTranslator } from './query-translator'
 export { UpdateTranslator } from './update-translator'
+export { SearchTranslator } from './search-translator'
+export { HybridSearchTranslator } from './hybrid-translator'
