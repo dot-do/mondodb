@@ -1,0 +1,520 @@
+---
+title: MongoClient & Connection
+description: Connect to MondoDB and manage database connections
+---
+
+# MongoClient & Connection
+
+The `MongoClient` class is the main entry point for connecting to MondoDB. It provides a MongoDB-compatible API that works in two distinct modes:
+
+1. **URI Mode** - For testing and in-memory development
+2. **Env Mode** - For Cloudflare Workers with Durable Objects (production)
+
+## Installation
+
+```bash
+npm install mondodb
+```
+
+## Basic Usage
+
+### URI Mode (Testing/Development)
+
+Use a connection string for local development and testing:
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://localhost:27017/mydb')
+await client.connect()
+
+const db = client.db('mydb')
+const users = db.collection('users')
+```
+
+### Env Mode (Cloudflare Workers)
+
+Pass your Cloudflare Workers environment bindings for production:
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env)
+    await client.connect()
+
+    const db = client.db('mydb')
+    const users = db.collection('users')
+
+    // ... perform operations
+
+    await client.close()
+    return new Response('OK')
+  }
+}
+```
+
+## MongoClient Constructor
+
+```typescript
+class MongoClient {
+  constructor(uriOrEnv: string | Env, options?: MongoClientOptions)
+}
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uriOrEnv` | `string \| Env` | Connection URI string or Cloudflare Workers environment |
+| `options` | `MongoClientOptions` | Optional connection configuration |
+
+### MongoClientOptions
+
+```typescript
+interface MongoClientOptions {
+  /** Application name for connection metadata */
+  appName?: string
+
+  /** Host for the connection (URI mode) */
+  host?: string
+
+  /** Port for the connection (URI mode) */
+  port?: number
+
+  /** Maximum connection pool size (URI mode) */
+  maxPoolSize?: number
+
+  /** Minimum connection pool size (URI mode) */
+  minPoolSize?: number
+
+  /** Connection timeout in milliseconds */
+  connectTimeoutMS?: number
+
+  /** Socket timeout in milliseconds */
+  socketTimeoutMS?: number
+}
+```
+
+## Connection String Format
+
+MondoDB supports both `mondodb://` and `mongodb://` URI schemes:
+
+```
+mondodb://[username:password@]host[:port][/database][?options]
+```
+
+### URI Components
+
+| Component | Description | Default |
+|-----------|-------------|---------|
+| `scheme` | Protocol (`mondodb://` or `mongodb://`) | Required |
+| `username` | Optional authentication username | - |
+| `password` | Optional authentication password | - |
+| `host` | Server hostname | `localhost` |
+| `port` | Server port | `27017` |
+| `database` | Default database name | `test` |
+| `options` | Query string options | - |
+
+### Examples
+
+```typescript
+// Minimal connection
+const client = new MongoClient('mondodb://localhost')
+
+// With port
+const client = new MongoClient('mondodb://localhost:27017')
+
+// With database
+const client = new MongoClient('mondodb://localhost:27017/myapp')
+
+// With authentication
+const client = new MongoClient('mondodb://admin:secret@localhost:27017/myapp')
+
+// With options
+const client = new MongoClient('mondodb://localhost:27017/myapp?maxPoolSize=50&minPoolSize=5')
+```
+
+### Query String Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `maxPoolSize` | number | Maximum connections in pool |
+| `minPoolSize` | number | Minimum connections in pool |
+
+## Connection Lifecycle
+
+### connect()
+
+Establishes the connection to the database. In MondoDB, connections are handled lazily, so this primarily initializes the client state.
+
+```typescript
+async connect(): Promise<MongoClient>
+```
+
+**Returns:** The client instance for method chaining
+
+**Example:**
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017')
+
+// Method chaining
+await client.connect()
+
+// Or chain directly
+const db = (await client.connect()).db('mydb')
+```
+
+### close()
+
+Closes the connection and releases resources.
+
+```typescript
+async close(): Promise<void>
+```
+
+**Example:**
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017')
+await client.connect()
+
+// ... perform operations
+
+await client.close()
+```
+
+### isConnected
+
+Property to check connection status:
+
+```typescript
+get isConnected(): boolean
+```
+
+**Example:**
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017')
+
+console.log(client.isConnected) // false
+
+await client.connect()
+console.log(client.isConnected) // true
+
+await client.close()
+console.log(client.isConnected) // false
+```
+
+## Database Selection
+
+### db()
+
+Get a database instance by name.
+
+```typescript
+db(dbName?: string): MongoDatabase | Database
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dbName` | `string` | Database name. In URI mode, defaults to the database from the connection string |
+
+**Return Type:**
+- **URI Mode:** Returns `MongoDatabase` (in-memory implementation)
+- **Env Mode:** Returns `Database` (Durable Objects implementation)
+
+**Example:**
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/defaultdb')
+await client.connect()
+
+// Use default database from URI
+const defaultDb = client.db()
+console.log(defaultDb.databaseName) // 'defaultdb'
+
+// Specify a different database
+const otherDb = client.db('analytics')
+console.log(otherDb.databaseName) // 'analytics'
+```
+
+### defaultDatabase
+
+Get the default database name from the connection URI:
+
+```typescript
+get defaultDatabase(): string
+```
+
+**Example:**
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/myapp')
+console.log(client.defaultDatabase) // 'myapp'
+
+const client2 = new MongoClient('mondodb://localhost:27017')
+console.log(client2.defaultDatabase) // 'test' (default)
+```
+
+## Collection Access
+
+Access collections through the database instance:
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017')
+await client.connect()
+
+const db = client.db('myapp')
+
+// Get a collection
+const users = db.collection('users')
+
+// With TypeScript generics for type safety
+interface User {
+  _id?: string
+  name: string
+  email: string
+}
+
+const typedUsers = db.collection<User>('users')
+```
+
+## Database Operations
+
+### listCollections()
+
+List all collections in a database:
+
+```typescript
+const collections = await db.listCollections()
+// Returns: [{ name: 'users', type: 'collection' }, ...]
+```
+
+### createCollection()
+
+Create a new collection:
+
+```typescript
+await db.createCollection('logs')
+```
+
+### dropCollection()
+
+Drop a collection:
+
+```typescript
+const dropped = await db.dropCollection('logs')
+// Returns: true if dropped, false if didn't exist
+```
+
+### stats()
+
+Get database statistics (Env mode only):
+
+```typescript
+const stats = await db.stats()
+// Returns: { db: 'myapp', collections: 5, objects: 1000, dataSize: 50000 }
+```
+
+## Client Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isConnected` | `boolean` | Connection status |
+| `mode` | `'uri' \| 'env'` | Current connection mode |
+| `uri` | `string \| undefined` | Connection URI (URI mode only) |
+| `options` | `Readonly<MongoClientOptions>` | Client configuration |
+| `defaultDatabase` | `string` | Default database name |
+
+## Sessions and Transactions
+
+MondoDB supports MongoDB-compatible sessions for transaction management:
+
+```typescript
+const session = client.startSession()
+
+try {
+  session.startTransaction()
+
+  const users = db.collection('users')
+  await users.insertOne({ name: 'Alice' }, { session })
+  await users.updateOne({ name: 'Bob' }, { $set: { active: true } }, { session })
+
+  await session.commitTransaction()
+} catch (error) {
+  await session.abortTransaction()
+  throw error
+} finally {
+  await session.endSession()
+}
+```
+
+### withTransaction Helper
+
+Use the convenience method for automatic commit/rollback:
+
+```typescript
+const session = client.startSession()
+
+await session.withTransaction(async (session) => {
+  const users = db.collection('users')
+  await users.insertOne({ name: 'Alice' }, { session })
+  await users.updateOne({ name: 'Bob' }, { $set: { active: true } }, { session })
+  // Automatically commits on success, aborts on error
+})
+
+await session.endSession()
+```
+
+### Session Options
+
+```typescript
+interface ClientSessionOptions {
+  /** Default options for transactions started in this session */
+  defaultTransactionOptions?: TransactionOptions
+
+  /** Enable causal consistency */
+  causalConsistency?: boolean
+
+  /** Enable snapshot reads */
+  snapshot?: boolean
+}
+
+interface TransactionOptions {
+  /** Read concern level */
+  readConcern?: ReadConcern
+
+  /** Write concern configuration */
+  writeConcern?: WriteConcern
+
+  /** Maximum time for commit in milliseconds */
+  maxCommitTimeMS?: number
+}
+
+interface ReadConcern {
+  level: 'local' | 'available' | 'majority' | 'linearizable' | 'snapshot'
+}
+
+interface WriteConcern {
+  w?: number | 'majority'
+  wtimeoutMS?: number
+  journal?: boolean
+}
+```
+
+## Cloudflare Workers Environment
+
+When using Env mode, your `wrangler.jsonc` must define the Durable Object binding:
+
+```jsonc
+{
+  "name": "my-app",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  }
+}
+```
+
+### Env Interface
+
+```typescript
+interface Env {
+  /** Durable Object namespace for MondoDatabase instances */
+  MONDO_DATABASE: DurableObjectNamespace
+
+  /** Optional Vectorize index for vector search */
+  VECTORIZE?: VectorizeIndex
+
+  /** Optional Workers AI binding for embeddings */
+  AI?: Ai
+
+  /** Optional embedding model (e.g., '@cf/baai/bge-m3') */
+  EMBEDDING_MODEL?: string
+
+  /** Enable/disable automatic embedding generation */
+  EMBEDDING_ENABLED?: string
+}
+```
+
+## Complete Example
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+interface Product {
+  _id?: string
+  name: string
+  price: number
+  category: string
+}
+
+// For Cloudflare Workers
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env)
+
+    try {
+      await client.connect()
+
+      const db = client.db('ecommerce')
+      const products = db.collection<Product>('products')
+
+      // Insert a product
+      const result = await products.insertOne({
+        name: 'Widget',
+        price: 29.99,
+        category: 'electronics'
+      })
+
+      // Find products
+      const electronics = await products
+        .find({ category: 'electronics' })
+        .sort({ price: 1 })
+        .limit(10)
+        .toArray()
+
+      return Response.json({ products: electronics })
+    } finally {
+      await client.close()
+    }
+  }
+}
+```
+
+## Error Handling
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017')
+
+try {
+  await client.connect()
+
+  const db = client.db('myapp')
+  const users = db.collection('users')
+
+  // Duplicate key error
+  await users.insertOne({ _id: 'existing-id', name: 'Test' })
+} catch (error) {
+  if ((error as any).code === 11000) {
+    console.error('Duplicate key error:', error.message)
+  }
+} finally {
+  await client.close()
+}
+```
+
+## Best Practices
+
+1. **Always close connections** - Use `try/finally` to ensure `client.close()` is called
+2. **Reuse clients** - Create one client per request in serverless, or share in long-running processes
+3. **Use TypeScript generics** - Define document interfaces for type safety
+4. **Handle errors gracefully** - Check for specific error codes like duplicate keys
+5. **Use transactions for atomicity** - Wrap related operations in transactions

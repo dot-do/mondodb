@@ -1,0 +1,169 @@
+---
+title: Collection
+description: API reference for the Collection class
+---
+
+# Collection
+
+The `Collection` class provides methods for CRUD operations and queries on documents.
+
+## Insert Methods
+
+### insertOne()
+
+Insert a single document.
+
+```typescript
+await collection.insertOne(doc: Document): Promise<InsertOneResult>
+```
+
+#### Example
+
+```typescript
+const result = await users.insertOne({
+  name: 'Alice',
+  email: 'alice@example.com',
+});
+
+console.log(result.insertedId);
+```
+
+### insertMany()
+
+Insert multiple documents.
+
+```typescript
+await collection.insertMany(docs: Document[]): Promise<InsertManyResult>
+```
+
+## Find Methods
+
+### findOne()
+
+Find a single document.
+
+```typescript
+await collection.findOne(filter: Filter, options?: FindOptions): Promise<Document | null>
+```
+
+### find()
+
+Find multiple documents.
+
+```typescript
+collection.find(filter: Filter, options?: FindOptions): Cursor
+```
+
+#### Example
+
+```typescript
+// Find all users
+const allUsers = await users.find({}).toArray();
+
+// Find with filter
+const activeUsers = await users.find({ status: 'active' }).toArray();
+
+// Find with projection
+const names = await users.find({}, { projection: { name: 1 } }).toArray();
+```
+
+## Update Methods
+
+### updateOne()
+
+Update a single document.
+
+```typescript
+await collection.updateOne(
+  filter: Filter,
+  update: UpdateFilter,
+  options?: UpdateOptions
+): Promise<UpdateResult>
+```
+
+### updateMany()
+
+Update multiple documents.
+
+```typescript
+await collection.updateMany(
+  filter: Filter,
+  update: UpdateFilter,
+  options?: UpdateOptions
+): Promise<UpdateResult>
+```
+
+### replaceOne()
+
+Replace a single document.
+
+```typescript
+await collection.replaceOne(
+  filter: Filter,
+  replacement: Document,
+  options?: ReplaceOptions
+): Promise<UpdateResult>
+```
+
+## Delete Methods
+
+### deleteOne()
+
+Delete a single document.
+
+```typescript
+await collection.deleteOne(filter: Filter): Promise<DeleteResult>
+```
+
+### deleteMany()
+
+Delete multiple documents.
+
+```typescript
+await collection.deleteMany(filter: Filter): Promise<DeleteResult>
+```
+
+## Aggregation
+
+### aggregate()
+
+Run an aggregation pipeline.
+
+```typescript
+collection.aggregate(pipeline: Document[]): AggregationCursor
+```
+
+#### Example
+
+```typescript
+const results = await users.aggregate([
+  { $match: { status: 'active' } },
+  { $group: { _id: '$department', count: { $sum: 1 } } },
+]).toArray();
+```
+
+## Other Methods
+
+### countDocuments()
+
+Count documents matching a filter.
+
+```typescript
+await collection.countDocuments(filter?: Filter): Promise<number>
+```
+
+### distinct()
+
+Get distinct values for a field.
+
+```typescript
+await collection.distinct(field: string, filter?: Filter): Promise<any[]>
+```
+
+### createIndex()
+
+Create an index on the collection.
+
+```typescript
+await collection.createIndex(keys: IndexSpec, options?: IndexOptions): Promise<string>
+```

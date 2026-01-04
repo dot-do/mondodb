@@ -1,0 +1,340 @@
+---
+title: Database
+description: API reference for the Database and MongoDatabase classes
+---
+
+# Database
+
+The `Database` and `MongoDatabase` classes represent a MondoDB database and provide methods for working with collections. `Database` is used with Cloudflare Durable Objects (production), while `MongoDatabase` is used with URI connections (testing/in-memory).
+
+## Import
+
+```typescript
+import { Database, MongoDatabase } from 'mondodb'
+```
+
+## Database Class (Durable Objects Mode)
+
+The `Database` class provides collection access and database-level operations when using Cloudflare Durable Objects.
+
+### Properties
+
+#### databaseName
+
+```typescript
+get databaseName(): string
+```
+
+Returns the name of the database.
+
+### Methods
+
+#### collection()
+
+Get a collection instance.
+
+```typescript
+collection<TDocument>(name: string): Collection<TDocument>
+```
+
+**Type Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `TDocument` | Document type for the collection (default: `Record<string, unknown>`) |
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | The name of the collection |
+
+**Returns:** A `Collection<TDocument>` instance.
+
+**Example:**
+```typescript
+// Untyped collection
+const users = db.collection('users')
+
+// Typed collection
+interface User {
+  _id: string
+  name: string
+  email: string
+}
+
+const typedUsers = db.collection<User>('users')
+```
+
+#### listCollections()
+
+List all collections in the database.
+
+```typescript
+async listCollections(): Promise<{ name: string; type: string }[]>
+```
+
+**Returns:** Array of collection information objects.
+
+**Example:**
+```typescript
+const collections = await db.listCollections()
+// [{ name: 'users', type: 'collection' }, { name: 'posts', type: 'collection' }]
+```
+
+#### createCollection()
+
+Create a new collection.
+
+```typescript
+async createCollection(name: string): Promise<void>
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | The name of the collection to create |
+
+**Example:**
+```typescript
+await db.createCollection('logs')
+```
+
+#### dropCollection()
+
+Drop a collection from the database.
+
+```typescript
+async dropCollection(name: string): Promise<boolean>
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | The name of the collection to drop |
+
+**Returns:** `true` if collection was dropped, `false` if it didn't exist.
+
+**Example:**
+```typescript
+const dropped = await db.dropCollection('oldData')
+```
+
+#### stats()
+
+Get database statistics.
+
+```typescript
+async stats(): Promise<{
+  db: string
+  collections: number
+  objects: number
+  dataSize: number
+}>
+```
+
+**Returns:** Database statistics object.
+
+**Example:**
+```typescript
+const stats = await db.stats()
+console.log(`Database ${stats.db} has ${stats.collections} collections`)
+```
+
+## MongoDatabase Class (In-Memory Mode)
+
+The `MongoDatabase` class provides an in-memory database implementation for testing and development.
+
+### Properties
+
+#### databaseName
+
+```typescript
+get databaseName(): string
+```
+
+Returns the name of the database.
+
+### Methods
+
+#### collection()
+
+Get a collection instance.
+
+```typescript
+collection<TSchema>(name: string): MongoCollection<TSchema>
+```
+
+**Returns:** A `MongoCollection<TSchema>` instance.
+
+#### listCollections()
+
+List all collections in the database.
+
+```typescript
+listCollections(filter?: { name?: string }): ListCollectionsCursor
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filter` | `{ name?: string }` | Optional filter by collection name |
+
+**Returns:** A `ListCollectionsCursor` for iterating over collection info.
+
+**Example:**
+```typescript
+const collections = await db.listCollections().toArray()
+```
+
+#### createCollection()
+
+Create a new collection.
+
+```typescript
+async createCollection<TSchema>(
+  name: string,
+  options?: CreateCollectionOptions
+): Promise<MongoCollection<TSchema>>
+```
+
+**Options:**
+```typescript
+interface CreateCollectionOptions {
+  /** Create a capped collection */
+  capped?: boolean
+
+  /** Size limit in bytes (for capped collections) */
+  size?: number
+
+  /** Maximum number of documents (for capped collections) */
+  max?: number
+
+  /** Document validator */
+  validator?: object
+
+  /** Validation level */
+  validationLevel?: 'off' | 'strict' | 'moderate'
+
+  /** Validation action */
+  validationAction?: 'error' | 'warn'
+}
+```
+
+**Returns:** The created `MongoCollection<TSchema>` instance.
+
+#### dropCollection()
+
+Drop a collection from the database.
+
+```typescript
+async dropCollection(name: string): Promise<boolean>
+```
+
+#### dropDatabase()
+
+Drop the entire database.
+
+```typescript
+async dropDatabase(): Promise<boolean>
+```
+
+**Example:**
+```typescript
+await db.dropDatabase()
+```
+
+## Collection Info Types
+
+### CollectionInfo
+
+```typescript
+interface CollectionInfo {
+  /** Collection name */
+  name: string
+
+  /** Collection type (always 'collection') */
+  type: 'collection'
+
+  /** Collection options */
+  options: Record<string, unknown>
+
+  /** Collection info */
+  info: {
+    readOnly: boolean
+  }
+}
+```
+
+## Usage Examples
+
+### Basic Database Operations
+
+```typescript
+const db = client.db('myapp')
+
+// List all collections
+const collections = await db.listCollections()
+console.log('Collections:', collections.map(c => c.name))
+
+// Create a new collection
+await db.createCollection('audit_logs')
+
+// Get collection reference
+const users = db.collection('users')
+
+// Drop a collection
+const dropped = await db.dropCollection('temporary_data')
+if (dropped) {
+  console.log('Collection dropped successfully')
+}
+```
+
+### Typed Collections
+
+```typescript
+// Define your document types
+interface User {
+  _id: string
+  name: string
+  email: string
+  role: 'admin' | 'user'
+  createdAt: Date
+}
+
+interface Post {
+  _id: string
+  title: string
+  content: string
+  authorId: string
+  tags: string[]
+  publishedAt?: Date
+}
+
+// Get typed collections
+const db = client.db('blog')
+const users = db.collection<User>('users')
+const posts = db.collection<Post>('posts')
+
+// TypeScript knows the document shape
+const user = await users.findOne({ email: 'alice@example.com' })
+if (user) {
+  console.log(user.name) // string
+  console.log(user.role) // 'admin' | 'user'
+}
+```
+
+### Database Stats
+
+```typescript
+const db = client.db('analytics')
+const stats = await db.stats()
+
+console.log(`Database: ${stats.db}`)
+console.log(`Collections: ${stats.collections}`)
+console.log(`Total Objects: ${stats.objects}`)
+console.log(`Data Size: ${(stats.dataSize / 1024).toFixed(2)} KB`)
+```

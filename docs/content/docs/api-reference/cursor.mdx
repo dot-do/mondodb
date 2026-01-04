@@ -1,0 +1,143 @@
+---
+title: Cursor
+description: API reference for the Cursor class
+---
+
+# Cursor
+
+The `Cursor` class represents a pointer to the result set of a query. It provides methods for iterating over and manipulating query results.
+
+## Methods
+
+### toArray()
+
+Return all documents as an array.
+
+```typescript
+await cursor.toArray(): Promise<Document[]>
+```
+
+#### Example
+
+```typescript
+const users = await collection.find({ status: 'active' }).toArray();
+```
+
+### forEach()
+
+Iterate over each document.
+
+```typescript
+await cursor.forEach(callback: (doc: Document) => void): Promise<void>
+```
+
+### next()
+
+Get the next document in the cursor.
+
+```typescript
+await cursor.next(): Promise<Document | null>
+```
+
+### hasNext()
+
+Check if there are more documents.
+
+```typescript
+await cursor.hasNext(): Promise<boolean>
+```
+
+### close()
+
+Close the cursor.
+
+```typescript
+await cursor.close(): Promise<void>
+```
+
+## Query Modifiers
+
+### filter()
+
+Add additional filter criteria.
+
+```typescript
+cursor.filter(filter: Filter): Cursor
+```
+
+### sort()
+
+Sort the results.
+
+```typescript
+cursor.sort(sort: SortSpec): Cursor
+```
+
+#### Example
+
+```typescript
+// Sort by name ascending
+const users = await collection.find({}).sort({ name: 1 }).toArray();
+
+// Sort by multiple fields
+const users = await collection.find({}).sort({ status: 1, createdAt: -1 }).toArray();
+```
+
+### limit()
+
+Limit the number of results.
+
+```typescript
+cursor.limit(limit: number): Cursor
+```
+
+### skip()
+
+Skip a number of results.
+
+```typescript
+cursor.skip(skip: number): Cursor
+```
+
+#### Example
+
+```typescript
+// Pagination: page 2 with 10 items per page
+const page2 = await collection
+  .find({})
+  .skip(10)
+  .limit(10)
+  .toArray();
+```
+
+### project()
+
+Specify which fields to include or exclude.
+
+```typescript
+cursor.project(projection: Projection): Cursor
+```
+
+#### Example
+
+```typescript
+// Only return name and email fields
+const users = await collection
+  .find({})
+  .project({ name: 1, email: 1, _id: 0 })
+  .toArray();
+```
+
+## Chaining
+
+All query modifiers return the cursor, allowing for method chaining:
+
+```typescript
+const results = await collection
+  .find({ status: 'active' })
+  .sort({ createdAt: -1 })
+  .skip(20)
+  .limit(10)
+  .project({ name: 1, email: 1 })
+  .toArray();
+```

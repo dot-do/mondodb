@@ -1,0 +1,481 @@
+---
+title: Indexing
+description: Create and manage indexes for optimal query performance in MondoDB
+---
+
+# Indexing
+
+Indexes are essential for efficient query execution in MondoDB. This guide covers how to create, manage, and optimize indexes for your collections.
+
+## Overview
+
+MondoDB uses SQLite's indexing capabilities under the hood, with `json_extract` expressions to enable efficient querying on document fields. Every collection automatically has an index on the `_id` field, and you can create additional indexes to optimize your queries.
+
+## Index Types
+
+MondoDB supports several index types:
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| **Single Field** | Index on one document field | Simple equality/range queries |
+| **Compound** | Index on multiple fields | Multi-field queries and sorting |
+| **Text** | Full-text search index | Text search with natural language |
+| **Unique** | Ensures no duplicate values | Enforcing uniqueness constraints |
+| **Sparse** | Only indexes documents with the field | Optional fields with queries |
+| **TTL** | Time-To-Live for auto-expiration | Session data, logs, caches |
+
+## Creating Indexes
+
+### createIndex()
+
+Use the `createIndex()` method to create an index on a collection.
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://your-worker.workers.dev')
+await client.connect()
+
+const db = client.db('mydb')
+const collection = db.collection('users')
+
+// Create a single-field ascending index
+await collection.createIndex({ email: 1 })
+
+// Create a descending index
+await collection.createIndex({ createdAt: -1 })
+```
+
+### Index Specification
+
+The index specification is an object where:
+- Keys are field names (including nested paths like `"address.city"`)
+- Values are:
+  - `1` for ascending order
+  - `-1` for descending order
+  - `'text'` for text indexes
+
+```typescript
+// Single field index
+{ fieldName: 1 }
+
+// Compound index
+{ firstName: 1, lastName: 1 }
+
+// Descending index
+{ createdAt: -1 }
+
+// Text index
+{ description: 'text' }
+```
+
+### Index Options
+
+The `createIndex()` method accepts an options object as the second parameter:
+
+```typescript
+interface CreateIndexOptions {
+  // Custom name for the index (auto-generated if not provided)
+  name?: string
+
+  // Create a unique index
+  unique?: boolean
+
+  // Only index documents that have the indexed field
+  sparse?: boolean
+
+  // Create index in background (currently no-op, included for compatibility)
+  background?: boolean
+
+  // Partial filter expression for partial indexes
+  partialFilterExpression?: Record<string, unknown>
+
+  // TTL in seconds - documents expire after this time
+  expireAfterSeconds?: number
+
+  // Weights for text index fields (higher = more important)
+  weights?: Record<string, number>
+
+  // Default language for text index (e.g., 'english', 'none')
+  default_language?: string
+}
+```
+
+## Single Field Indexes
+
+The most common index type, created on a single field.
+
+```typescript
+// Index on email field
+await collection.createIndex({ email: 1 })
+
+// Index on nested field
+await collection.createIndex({ 'address.zipCode': 1 })
+
+// Descending index for sorting newest first
+await collection.createIndex({ createdAt: -1 })
+```
+
+**When to use:**
+- Queries filtering on a single field
+- Sorting by a single field
+- Range queries (`$gt`, `$lt`, etc.) on a field
+
+## Compound Indexes
+
+Index multiple fields together for queries that filter or sort on multiple fields.
+
+```typescript
+// Compound index on firstName and lastName
+await collection.createIndex({ firstName: 1, lastName: 1 })
+
+// Compound index with mixed sort orders
+await collection.createIndex({ category: 1, price: -1 })
+```
+
+**When to use:**
+- Queries filtering on multiple fields
+- Queries that both filter and sort
+- The index field order matters - put equality fields first, then range/sort fields
+
+```typescript
+// Good: equality field first, then sort field
+await collection.createIndex({ status: 1, createdAt: -1 })
+
+// Query uses this index efficiently
+await collection.find({ status: 'active' }).sort({ createdAt: -1 })
+```
+
+## Unique Indexes
+
+Enforce uniqueness constraints on a field or combination of fields.
+
+```typescript
+// Ensure email is unique across all documents
+await collection.createIndex(
+  { email: 1 },
+  { unique: true }
+)
+
+// Compound unique index
+await collection.createIndex(
+  { tenantId: 1, username: 1 },
+  { unique: true }
+)
+```
+
+**Behavior:**
+- Insert or update operations that would create a duplicate value will fail
+- `null` values are treated as equal (only one document can have `null`)
+
+## Sparse Indexes
+
+Only index documents that contain the indexed field. Documents without the field are excluded from the index.
+
+```typescript
+// Only index documents with an optionalField
+await collection.createIndex(
+  { optionalField: 1 },
+  { sparse: true }
+)
+```
+
+**When to use:**
+- Fields that exist only in some documents
+- Combined with `unique` for optional unique fields
+
+```typescript
+// Optional but unique secondary email
+await collection.createIndex(
+  { secondaryEmail: 1 },
+  { unique: true, sparse: true }
+)
+```
+
+## Text Indexes
+
+Full-text search indexes using SQLite's FTS5 (Full-Text Search 5) engine.
+
+```typescript
+// Create a text index on the description field
+await collection.createIndex({ description: 'text' })
+
+// Text index on multiple fields
+await collection.createIndex({
+  title: 'text',
+  content: 'text'
+})
+
+// With field weights (higher = more relevant)
+await collection.createIndex(
+  { title: 'text', content: 'text' },
+  {
+    weights: { title: 10, content: 1 }
+  }
+)
+```
+
+**Limitations:**
+- Only one text index per collection
+- Creating a second text index will throw an error
+
+**Querying text indexes:**
+
+```typescript
+// Use $text operator for full-text search
+const results = await collection.find({
+  $text: { $search: 'mongodb database' }
+}).toArray()
+```
+
+### Text Index Options
+
+```typescript
+await collection.createIndex(
+  { description: 'text' },
+  {
+    // Language for stemming (default: 'english')
+    default_language: 'english',
+
+    // Use 'none' to disable stemming
+    // default_language: 'none',
+
+    // Field weights for relevance scoring
+    weights: { title: 10, body: 5, tags: 1 }
+  }
+)
+```
+
+## TTL (Time-To-Live) Indexes
+
+Automatically expire and delete documents after a specified time period.
+
+```typescript
+// Documents expire 24 hours after the createdAt timestamp
+await collection.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 86400 } // 24 hours
+)
+
+// Sessions expire 1 hour after lastAccess
+await collection.createIndex(
+  { lastAccess: 1 },
+  { expireAfterSeconds: 3600 } // 1 hour
+)
+```
+
+**Important notes:**
+- TTL indexes must be on a **single field** containing a Date value
+- Only one TTL index per collection is allowed
+- The field value must be a valid date (ISO string, Date object, or Unix timestamp)
+- Documents without the TTL field, or with invalid dates, will not expire
+- Cleanup runs periodically in the background (default: every 60 seconds)
+
+**Use cases:**
+- Session management
+- Log rotation
+- Cache expiration
+- Temporary data cleanup
+
+```typescript
+// Insert a session that will auto-expire
+await collection.insertOne({
+  sessionId: 'abc123',
+  userId: 'user1',
+  createdAt: new Date(), // Will expire after expireAfterSeconds
+  data: { /* session data */ }
+})
+```
+
+## Listing Indexes
+
+Retrieve all indexes on a collection.
+
+```typescript
+const indexes = await collection.listIndexes()
+
+console.log(indexes)
+// [
+//   { name: '_id_', key: { _id: 1 }, v: 2 },
+//   { name: 'email_1', key: { email: 1 }, v: 2, unique: true },
+//   { name: 'createdAt_-1', key: { createdAt: -1 }, v: 2 }
+// ]
+```
+
+### IndexInfo Structure
+
+```typescript
+interface IndexInfo {
+  name: string                    // Index name
+  key: Record<string, 1 | -1 | 'text'>  // Index specification
+  v: number                       // Index version (always 2)
+  unique?: boolean               // Whether unique
+  sparse?: boolean               // Whether sparse
+  expireAfterSeconds?: number    // TTL value if set
+  textIndexVersion?: number      // Present for text indexes
+  weights?: Record<string, number>  // Text index weights
+  default_language?: string      // Text index language
+}
+```
+
+## Dropping Indexes
+
+### Drop a Specific Index
+
+```typescript
+// Drop an index by name
+await collection.dropIndex('email_1')
+```
+
+**Note:** You cannot drop the `_id_` index - it's always present.
+
+```typescript
+// This will throw an error
+await collection.dropIndex('_id_')  // Error: cannot drop _id index
+```
+
+## Index Naming
+
+### Auto-generated Names
+
+If you don't specify a name, MondoDB generates one based on the fields and directions:
+
+```typescript
+{ email: 1 }           // name: 'collectionName_email_1'
+{ name: 1, age: -1 }   // name: 'collectionName_name_1_age_-1'
+{ bio: 'text' }        // name: 'collectionName_bio_text'
+```
+
+### Custom Names
+
+Specify a custom name for easier management:
+
+```typescript
+await collection.createIndex(
+  { email: 1 },
+  { name: 'unique_email_index' }
+)
+```
+
+## Query Optimization
+
+### Index Selection
+
+MondoDB's query optimizer selects the best index for each query. To help it:
+
+1. **Create indexes for your query patterns:**
+
+```typescript
+// If you frequently query by status and sort by date
+await collection.createIndex({ status: 1, createdAt: -1 })
+
+// The query will use this index
+await collection.find({ status: 'active' }).sort({ createdAt: -1 })
+```
+
+2. **Order compound index fields appropriately:**
+   - Put equality filters first
+   - Put range filters and sort fields after
+
+```typescript
+// For queries like: { category: 'books', price: { $lt: 20 } }
+// Good index:
+await collection.createIndex({ category: 1, price: 1 })
+```
+
+3. **Consider index selectivity:**
+   - High selectivity (many unique values) = more efficient
+   - Put high-selectivity fields first in compound indexes
+
+### Covered Queries
+
+When possible, create indexes that cover all fields in your query and projection:
+
+```typescript
+// Index covers both query and projection
+await collection.createIndex({ userId: 1, status: 1 })
+
+// This query only needs the index, not the documents
+const statuses = await collection.find(
+  { userId: 'user123' },
+  { projection: { status: 1, _id: 0 } }
+).toArray()
+```
+
+## Best Practices
+
+### Do:
+
+- Create indexes for frequently executed queries
+- Use compound indexes for multi-field queries
+- Put high-selectivity fields first in compound indexes
+- Use sparse indexes for optional fields
+- Use TTL indexes for auto-expiring data
+- Monitor index usage and remove unused indexes
+
+### Don't:
+
+- Create too many indexes (each index has write overhead)
+- Create indexes on low-selectivity fields alone (e.g., boolean fields)
+- Create multiple text indexes on the same collection
+- Create compound TTL indexes (not supported)
+
+## Complete Example
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+async function setupIndexes() {
+  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  await client.connect()
+
+  const db = client.db('myapp')
+  const users = db.collection('users')
+  const sessions = db.collection('sessions')
+  const posts = db.collection('posts')
+
+  // Unique email index
+  await users.createIndex(
+    { email: 1 },
+    { unique: true, name: 'unique_email' }
+  )
+
+  // Compound index for user lookups
+  await users.createIndex(
+    { status: 1, createdAt: -1 },
+    { name: 'status_created' }
+  )
+
+  // TTL index for session expiration (1 hour)
+  await sessions.createIndex(
+    { lastAccess: 1 },
+    { expireAfterSeconds: 3600, name: 'session_ttl' }
+  )
+
+  // Text index for post search
+  await posts.createIndex(
+    { title: 'text', content: 'text' },
+    {
+      weights: { title: 10, content: 1 },
+      name: 'post_search'
+    }
+  )
+
+  // Sparse index for optional field
+  await posts.createIndex(
+    { featuredAt: 1 },
+    { sparse: true, name: 'featured_posts' }
+  )
+
+  // List all indexes
+  console.log('Users indexes:', await users.listIndexes())
+  console.log('Sessions indexes:', await sessions.listIndexes())
+  console.log('Posts indexes:', await posts.listIndexes())
+}
+```
+
+## Related
+
+- [CRUD Operations](/docs/guides/crud) - Basic document operations
+- [Aggregation](/docs/guides/aggregation) - Data processing pipelines
+- [API Reference: Collection](/docs/api-reference/collection) - Full API documentation

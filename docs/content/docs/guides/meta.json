@@ -1,0 +1,4 @@
+{
+  "title": "Guides",
+  "pages": ["index", "crud", "aggregation", "indexing", "transactions", "connection"]
+}

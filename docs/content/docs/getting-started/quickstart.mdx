@@ -1,0 +1,291 @@
+---
+title: Quick Start
+description: Get up and running with MondoDB in minutes
+---
+
+# Quick Start
+
+This guide walks you through building a simple REST API with MondoDB in under 5 minutes.
+
+## Create a New Project
+
+Start by creating a new Cloudflare Workers project:
+
+```bash
+npm create cloudflare@latest my-mondodb-app -- --type hello-world
+cd my-mondodb-app
+npm install mondodb
+```
+
+## Configure Wrangler
+
+Update your `wrangler.toml` (or create `wrangler.jsonc`):
+
+```toml
+name = "my-mondodb-app"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "MONDO_DATABASE"
+class_name = "MondoDatabase"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MondoDatabase"]
+```
+
+## Build Your API
+
+Replace the contents of `src/index.ts` with this complete example:
+
+```typescript
+import { MongoClient, MondoDatabase } from 'mondodb';
+
+// Export the Durable Object class for Wrangler
+export { MondoDatabase };
+
+// Define environment type
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace;
+}
+
+// Define your document types
+interface User {
+  _id?: string;
+  name: string;
+  email: string;
+  age?: number;
+  createdAt: Date;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const client = new MongoClient(env);
+    const db = client.db('myapp');
+    const users = db.collection<User>('users');
+
+    try {
+      // Route: GET /users - List all users
+      if (request.method === 'GET' && url.pathname === '/users') {
+        const allUsers = await users.find({}).toArray();
+        return Response.json(allUsers);
+      }
+
+      // Route: POST /users - Create a new user
+      if (request.method === 'POST' && url.pathname === '/users') {
+        const body = await request.json() as Partial<User>;
+        const result = await users.insertOne({
+          name: body.name!,
+          email: body.email!,
+          age: body.age,
+          createdAt: new Date()
+        });
+        return Response.json({ insertedId: result.insertedId }, { status: 201 });
+      }
+
+      // Route: GET /users/:id - Get a single user
+      const userMatch = url.pathname.match(/^\/users\/([a-f0-9]+)$/);
+      if (request.method === 'GET' && userMatch) {
+        const user = await users.findOne({ _id: userMatch[1] });
+        if (!user) {
+          return Response.json({ error: 'User not found' }, { status: 404 });
+        }
+        return Response.json(user);
+      }
+
+      // Route: PUT /users/:id - Update a user
+      if (request.method === 'PUT' && userMatch) {
+        const body = await request.json() as Partial<User>;
+        const result = await users.updateOne(
+          { _id: userMatch[1] },
+          { $set: body }
+        );
+        return Response.json({ modifiedCount: result.modifiedCount });
+      }
+
+      // Route: DELETE /users/:id - Delete a user
+      if (request.method === 'DELETE' && userMatch) {
+        const result = await users.deleteOne({ _id: userMatch[1] });
+        return Response.json({ deletedCount: result.deletedCount });
+      }
+
+      return Response.json({ error: 'Not found' }, { status: 404 });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : 'Unknown error' },
+        { status: 500 }
+      );
+    }
+  }
+};
+```
+
+## Run the Development Server
+
+```bash
+npm run dev
+```
+
+Your API is now running at `http://localhost:8787`.
+
+## Test Your API
+
+Use curl or any HTTP client to test the endpoints:
+
+```bash
+# Create a user
+curl -X POST http://localhost:8787/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice", "email": "alice@example.com", "age": 30}'
+
+# List all users
+curl http://localhost:8787/users
+
+# Get a specific user (replace ID with actual value)
+curl http://localhost:8787/users/507f1f77bcf86cd799439011
+
+# Update a user
+curl -X PUT http://localhost:8787/users/507f1f77bcf86cd799439011 \
+  -H "Content-Type: application/json" \
+  -d '{"age": 31}'
+
+# Delete a user
+curl -X DELETE http://localhost:8787/users/507f1f77bcf86cd799439011
+```
+
+## CRUD Operations Reference
+
+Here's a quick reference for common database operations:
+
+### Create Documents
+
+```typescript
+// Insert one document
+const result = await collection.insertOne({
+  name: 'Alice',
+  email: 'alice@example.com'
+});
+console.log(result.insertedId);
+
+// Insert many documents
+const results = await collection.insertMany([
+  { name: 'Bob', email: 'bob@example.com' },
+  { name: 'Charlie', email: 'charlie@example.com' }
+]);
+console.log(results.insertedCount); // 2
+```
+
+### Read Documents
+
+```typescript
+// Find one document
+const user = await collection.findOne({ email: 'alice@example.com' });
+
+// Find with query operators
+const adults = await collection.find({
+  age: { $gte: 18 }
+}).toArray();
+
+// Find with projection (select specific fields)
+const names = await collection.find({}, {
+  projection: { name: 1, email: 1 }
+}).toArray();
+
+// Find with sorting, skip, and limit
+const paginated = await collection.find({})
+  .sort({ createdAt: -1 })
+  .skip(10)
+  .limit(10)
+  .toArray();
+
+// Count documents
+const count = await collection.countDocuments({ active: true });
+```
+
+### Update Documents
+
+```typescript
+// Update one document with $set
+await collection.updateOne(
+  { email: 'alice@example.com' },
+  { $set: { name: 'Alice Smith', updatedAt: new Date() } }
+);
+
+// Increment a numeric field
+await collection.updateOne(
+  { _id: userId },
+  { $inc: { loginCount: 1 } }
+);
+
+// Update many documents
+await collection.updateMany(
+  { status: 'pending' },
+  { $set: { status: 'active', activatedAt: new Date() } }
+);
+
+// Upsert (update or insert)
+await collection.updateOne(
+  { email: 'new@example.com' },
+  { $set: { name: 'New User' } },
+  { upsert: true }
+);
+```
+
+### Delete Documents
+
+```typescript
+// Delete one document
+await collection.deleteOne({ email: 'alice@example.com' });
+
+// Delete many documents
+await collection.deleteMany({ status: 'inactive' });
+
+// Delete all documents in a collection
+await collection.deleteMany({});
+```
+
+## Using Aggregation Pipelines
+
+MondoDB supports MongoDB aggregation pipelines for complex queries:
+
+```typescript
+// Group users by status and count
+const stats = await collection.aggregate([
+  { $group: {
+    _id: '$status',
+    count: { $sum: 1 },
+    avgAge: { $avg: '$age' }
+  }},
+  { $sort: { count: -1 } }
+]).toArray();
+
+// Filter, project, and limit
+const recentActive = await collection.aggregate([
+  { $match: { status: 'active' } },
+  { $project: { name: 1, email: 1, _id: 0 } },
+  { $sort: { createdAt: -1 } },
+  { $limit: 10 }
+]).toArray();
+```
+
+## Deploy to Production
+
+When you're ready to deploy:
+
+```bash
+npm run deploy
+# or
+wrangler deploy
+```
+
+Your MondoDB-powered API is now live on Cloudflare's global network!
+
+## Next Steps
+
+- **[Configuration](/docs/getting-started/configuration)** - Environment variables and advanced options
+- **[CRUD Operations](/docs/guides/crud)** - Deep dive into all database operations
+- **[Aggregation](/docs/guides/aggregation)** - Master complex data pipelines
+- **[API Reference](/docs/api-reference)** - Complete API documentation

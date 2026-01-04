@@ -1,0 +1,184 @@
+---
+title: Transactions
+description: Use multi-document transactions for atomic operations
+---
+
+# Transactions
+
+MondoDB supports multi-document transactions for operations that need to be atomic across multiple documents or collections.
+
+## Starting a Transaction
+
+Use `startSession()` to begin a transaction:
+
+```typescript
+const session = client.startSession();
+
+try {
+  session.startTransaction();
+
+  // Perform operations within the transaction
+  await collection.insertOne({ name: 'Alice' }, { session });
+  await collection.updateOne({ name: 'Bob' }, { $inc: { balance: -100 } }, { session });
+
+  // Commit the transaction
+  await session.commitTransaction();
+} catch (error) {
+  // If an error occurs, abort the transaction
+  await session.abortTransaction();
+  throw error;
+} finally {
+  // Always end the session
+  await session.endSession();
+}
+```
+
+## Using withTransaction Helper
+
+The `withTransaction()` helper manages commit and abort automatically:
+
+```typescript
+const session = client.startSession();
+
+try {
+  await session.withTransaction(async () => {
+    const accounts = db.collection('accounts');
+
+    // Transfer funds between accounts
+    await accounts.updateOne(
+      { userId: 'alice' },
+      { $inc: { balance: -100 } },
+      { session }
+    );
+
+    await accounts.updateOne(
+      { userId: 'bob' },
+      { $inc: { balance: 100 } },
+      { session }
+    );
+  });
+} finally {
+  await session.endSession();
+}
+```
+
+## Transaction Options
+
+Configure transactions with read and write concerns:
+
+```typescript
+const session = client.startSession({
+  defaultTransactionOptions: {
+    readConcern: { level: 'snapshot' },
+    writeConcern: { w: 'majority' },
+    maxCommitTimeMS: 5000,
+  },
+});
+```
+
+## Use Cases
+
+### Money Transfer
+
+```typescript
+async function transferFunds(
+  from: string,
+  to: string,
+  amount: number
+) {
+  const session = client.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      const accounts = db.collection('accounts');
+
+      // Check balance
+      const source = await accounts.findOne(
+        { userId: from },
+        { session }
+      );
+
+      if (!source || source.balance < amount) {
+        throw new Error('Insufficient funds');
+      }
+
+      // Debit source
+      await accounts.updateOne(
+        { userId: from },
+        { $inc: { balance: -amount } },
+        { session }
+      );
+
+      // Credit destination
+      await accounts.updateOne(
+        { userId: to },
+        { $inc: { balance: amount } },
+        { session }
+      );
+
+      // Log transaction
+      await db.collection('transactions').insertOne({
+        from,
+        to,
+        amount,
+        timestamp: new Date(),
+      }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+```
+
+### Order Processing
+
+```typescript
+async function processOrder(order: Order) {
+  const session = client.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      const orders = db.collection('orders');
+      const inventory = db.collection('inventory');
+
+      // Create the order
+      await orders.insertOne(order, { session });
+
+      // Update inventory for each item
+      for (const item of order.items) {
+        const result = await inventory.updateOne(
+          { productId: item.productId, quantity: { $gte: item.quantity } },
+          { $inc: { quantity: -item.quantity } },
+          { session }
+        );
+
+        if (result.modifiedCount === 0) {
+          throw new Error(`Insufficient inventory for ${item.productId}`);
+        }
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+```
+
+## Best Practices
+
+1. **Keep transactions short** - Long-running transactions can impact performance
+2. **Handle errors gracefully** - Always use try/catch/finally
+3. **Use withTransaction()** - It handles retries and error handling automatically
+4. **Pass session to all operations** - Ensure all operations within a transaction use the session
+5. **End sessions** - Always call `endSession()` in a finally block
+
+## Limitations
+
+- Transactions in MondoDB are scoped to a single Durable Object
+- Cross-database transactions are not supported
+- Large transactions may have performance implications
+
+## Next Steps
+
+- Learn about [CRUD Operations](/docs/guides/crud)
+- Explore [Aggregation Pipelines](/docs/guides/aggregation)
+- Understand [Indexing](/docs/guides/indexing) for performance

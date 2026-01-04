@@ -1,0 +1,322 @@
+---
+title: MongoClient
+description: API reference for the MongoClient class
+---
+
+# MongoClient
+
+The `MongoClient` class is the main entry point for connecting to MondoDB. It provides a MongoDB-compatible API for database operations and supports both URI-based connections (for testing) and Cloudflare Workers environment bindings (for production).
+
+## Import
+
+```typescript
+import { MongoClient } from 'mondodb'
+```
+
+## Constructor
+
+```typescript
+new MongoClient(uriOrEnv: string | Env, options?: MongoClientOptions)
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uriOrEnv` | `string \| Env` | Either a connection URI string or Cloudflare Workers environment |
+| `options` | `MongoClientOptions` | Optional connection options |
+
+### Connection Modes
+
+**URI Mode (Testing/In-Memory):**
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/mydb')
+```
+
+**Environment Mode (Cloudflare Durable Objects):**
+```typescript
+const client = new MongoClient(env)
+```
+
+## MongoClientOptions
+
+```typescript
+interface MongoClientOptions {
+  /** Application name for connection metadata */
+  appName?: string
+
+  /** Host for the connection (URI mode) */
+  host?: string
+
+  /** Port for the connection (URI mode) */
+  port?: number
+
+  /** Maximum connection pool size (URI mode) */
+  maxPoolSize?: number
+
+  /** Minimum connection pool size (URI mode) */
+  minPoolSize?: number
+
+  /** Connection timeout in milliseconds */
+  connectTimeoutMS?: number
+
+  /** Socket timeout in milliseconds */
+  socketTimeoutMS?: number
+}
+```
+
+## Properties
+
+### options
+
+```typescript
+get options(): Readonly<MongoClientOptions>
+```
+
+Returns the client configuration options.
+
+### isConnected
+
+```typescript
+get isConnected(): boolean
+```
+
+Returns `true` if the client is currently connected.
+
+### mode
+
+```typescript
+get mode(): 'uri' | 'env'
+```
+
+Returns the connection mode.
+
+### uri
+
+```typescript
+get uri(): string | undefined
+```
+
+Returns the connection URI (URI mode only).
+
+### defaultDatabase
+
+```typescript
+get defaultDatabase(): string
+```
+
+Returns the default database name from the connection URI.
+
+## Methods
+
+### connect()
+
+Connect to the database. In MondoDB, connections are handled lazily, so this is mostly a no-op.
+
+```typescript
+async connect(): Promise<MongoClient>
+```
+
+**Returns:** The client instance for chaining.
+
+**Example:**
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/mydb')
+await client.connect()
+```
+
+### close()
+
+Close the connection and clear database caches.
+
+```typescript
+async close(): Promise<void>
+```
+
+**Example:**
+```typescript
+await client.close()
+```
+
+### db()
+
+Get a database instance.
+
+```typescript
+db(dbName?: string): MongoDatabase | Database
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dbName` | `string` | Database name (optional, uses default from URI) |
+
+**Returns:** A `MongoDatabase` (URI mode) or `Database` (Env mode) instance.
+
+**Example:**
+```typescript
+const db = client.db('myapp')
+const collection = db.collection('users')
+```
+
+### startSession()
+
+Start a client session for transaction support.
+
+```typescript
+startSession(options?: ClientSessionOptions): ClientSession
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `options` | `ClientSessionOptions` | Session options including default transaction options |
+
+**Returns:** A new `ClientSession` instance.
+
+**Example:**
+```typescript
+const session = client.startSession()
+
+try {
+  session.startTransaction()
+
+  await collection.insertOne({ name: 'Alice' }, { session })
+  await collection.updateOne({ name: 'Bob' }, { $inc: { balance: -100 } }, { session })
+
+  await session.commitTransaction()
+} catch (error) {
+  await session.abortTransaction()
+  throw error
+} finally {
+  await session.endSession()
+}
+```
+
+## Session Types
+
+### ClientSessionOptions
+
+```typescript
+interface ClientSessionOptions {
+  /** Default options for transactions started in this session */
+  defaultTransactionOptions?: TransactionOptions
+
+  /** Enable causal consistency */
+  causalConsistency?: boolean
+
+  /** Enable snapshot reads */
+  snapshot?: boolean
+}
+```
+
+### TransactionOptions
+
+```typescript
+interface TransactionOptions {
+  /** Read concern for the transaction */
+  readConcern?: ReadConcern
+
+  /** Write concern for the transaction */
+  writeConcern?: WriteConcern
+
+  /** Maximum time for commit operation in milliseconds */
+  maxCommitTimeMS?: number
+}
+```
+
+### ReadConcern
+
+```typescript
+interface ReadConcern {
+  level: 'local' | 'available' | 'majority' | 'linearizable' | 'snapshot'
+}
+```
+
+### WriteConcern
+
+```typescript
+interface WriteConcern {
+  w?: number | 'majority'
+  wtimeoutMS?: number
+  journal?: boolean
+}
+```
+
+## Complete Usage Example
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env)
+
+    try {
+      await client.connect()
+
+      const db = client.db('myapp')
+      const collection = db.collection('users')
+
+      // Insert a document
+      await collection.insertOne({
+        name: 'John Doe',
+        email: 'john@example.com',
+        createdAt: new Date()
+      })
+
+      // Find all users
+      const users = await collection.find({}).toArray()
+
+      return Response.json(users)
+    } finally {
+      await client.close()
+    }
+  }
+}
+```
+
+## Transaction Example
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+async function transferFunds(
+  client: MongoClient,
+  from: string,
+  to: string,
+  amount: number
+) {
+  const session = client.startSession()
+
+  try {
+    await session.withTransaction(async (session) => {
+      const accounts = client.db('bank').collection('accounts')
+
+      // Debit from source account
+      await accounts.updateOne(
+        { _id: from },
+        { $inc: { balance: -amount } },
+        { session }
+      )
+
+      // Credit to destination account
+      await accounts.updateOne(
+        { _id: to },
+        { $inc: { balance: amount } },
+        { session }
+      )
+    })
+  } finally {
+    await session.endSession()
+  }
+}
+```
+
+## Related
+
+- [MongoClient & Connection Guide](/docs/guides/connection) - Detailed guide on connection management
+- [Database](/docs/api-reference/database) - Database class reference
+- [Collection](/docs/api-reference/collection) - Collection class reference

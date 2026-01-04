@@ -1,0 +1,633 @@
+---
+title: CRUD Operations
+description: Create, Read, Update, and Delete documents in MondoDB
+---
+
+# CRUD Operations
+
+MondoDB provides MongoDB-compatible CRUD (Create, Read, Update, Delete) operations for managing documents in your collections. This guide covers all available operations with examples.
+
+## Create Operations
+
+### insertOne
+
+Insert a single document into a collection. If no `_id` is provided, one will be automatically generated.
+
+```typescript
+const result = await collection.insertOne({
+  name: 'John Doe',
+  email: 'john@example.com',
+  age: 30,
+  createdAt: new Date()
+})
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   insertedId: ObjectId("...")
+// }
+```
+
+**Parameters:**
+- `doc` - The document to insert
+- `options` (optional) - Insert options
+  - `session` - Client session for transaction support
+
+**Returns:** `InsertOneResult`
+- `acknowledged: boolean` - Whether the operation was acknowledged
+- `insertedId: ObjectId` - The `_id` of the inserted document
+
+### insertMany
+
+Insert multiple documents into a collection.
+
+```typescript
+const result = await collection.insertMany([
+  { name: 'Alice', email: 'alice@example.com', age: 25 },
+  { name: 'Bob', email: 'bob@example.com', age: 35 },
+  { name: 'Carol', email: 'carol@example.com', age: 28 }
+])
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   insertedCount: 3,
+//   insertedIds: {
+//     0: ObjectId("..."),
+//     1: ObjectId("..."),
+//     2: ObjectId("...")
+//   }
+// }
+```
+
+**Parameters:**
+- `docs` - Array of documents to insert
+- `options` (optional) - Insert options
+
+**Returns:** `InsertManyResult`
+- `acknowledged: boolean` - Whether the operation was acknowledged
+- `insertedCount: number` - Number of documents inserted
+- `insertedIds: Record<number, ObjectId>` - Map of index to inserted `_id`
+
+---
+
+## Read Operations
+
+### findOne
+
+Find a single document matching the filter. Returns `null` if no document matches.
+
+```typescript
+// Find by field value
+const user = await collection.findOne({ email: 'john@example.com' })
+
+// Find by _id
+const userById = await collection.findOne({ _id: someObjectId })
+
+// With projection (select specific fields)
+const userWithProjection = await collection.findOne(
+  { email: 'john@example.com' },
+  { projection: { name: 1, email: 1 } }
+)
+```
+
+**Parameters:**
+- `filter` - Query filter (see [Filter Operators](#filter-operators))
+- `options` (optional) - Find options
+  - `projection` - Fields to include (1) or exclude (0)
+  - `sort` - Sort order for determining which document to return
+  - `skip` - Number of documents to skip
+  - `limit` - Maximum number of documents to consider
+
+**Returns:** The matching document or `null`
+
+### find
+
+Find all documents matching the filter. Returns a cursor for lazy evaluation.
+
+```typescript
+// Basic find with toArray
+const users = await collection.find({ age: { $gte: 25 } }).toArray()
+
+// Using async iterator
+for await (const user of collection.find({ status: 'active' })) {
+  console.log(user.name)
+}
+
+// Chainable cursor methods
+const results = await collection.find({})
+  .sort({ name: 1 })        // Sort ascending by name
+  .skip(10)                  // Skip first 10 documents
+  .limit(5)                  // Return only 5 documents
+  .project({ name: 1 })      // Only include name field
+  .toArray()
+```
+
+**Cursor Methods:**
+- `sort(spec)` - Set sort order: `{ field: 1 }` (ascending) or `{ field: -1 }` (descending)
+- `limit(count)` - Maximum documents to return
+- `skip(count)` - Number of documents to skip
+- `project(spec)` - Fields to include/exclude
+- `toArray()` - Execute query and return all documents as array
+- `forEach(callback)` - Execute callback for each document
+- `count()` - Count matching documents
+- `hasNext()` - Check if more documents exist
+- `next()` - Get next document
+- `map(fn)` - Transform documents
+
+---
+
+## Filter Operators
+
+MondoDB supports standard MongoDB query operators:
+
+### Comparison Operators
+
+```typescript
+// Equality
+{ status: 'active' }
+{ status: { $eq: 'active' } }
+
+// Not equal
+{ status: { $ne: 'inactive' } }
+
+// Greater than / Greater than or equal
+{ age: { $gt: 25 } }
+{ age: { $gte: 25 } }
+
+// Less than / Less than or equal
+{ age: { $lt: 50 } }
+{ age: { $lte: 50 } }
+
+// In array of values
+{ status: { $in: ['active', 'pending'] } }
+
+// Not in array
+{ status: { $nin: ['deleted', 'archived'] } }
+```
+
+### Logical Operators
+
+```typescript
+// AND - all conditions must match
+{ $and: [{ age: { $gte: 25 } }, { status: 'active' }] }
+
+// OR - at least one condition must match
+{ $or: [{ status: 'active' }, { priority: 'high' }] }
+
+// NOR - none of the conditions can match
+{ $nor: [{ status: 'deleted' }, { status: 'archived' }] }
+
+// NOT - negate a condition
+{ age: { $not: { $lt: 25 } } }
+```
+
+### Element Operators
+
+```typescript
+// Field exists
+{ email: { $exists: true } }
+
+// Field type
+{ age: { $type: 'number' } }
+```
+
+### Array Operators
+
+```typescript
+// Array contains value
+{ tags: 'mongodb' }
+
+// Array contains all values
+{ tags: { $all: ['mongodb', 'database'] } }
+
+// Array size
+{ tags: { $size: 3 } }
+
+// Element match (for arrays of objects)
+{ items: { $elemMatch: { qty: { $gt: 5 }, price: { $lt: 10 } } } }
+```
+
+### String Operators
+
+```typescript
+// Regular expression match
+{ name: { $regex: '^John' } }
+{ email: { $regex: '@example\\.com$' } }
+```
+
+### Dot Notation
+
+Access nested fields using dot notation:
+
+```typescript
+// Match nested field
+{ 'address.city': 'New York' }
+
+// With operators
+{ 'address.zipcode': { $regex: '^100' } }
+```
+
+---
+
+## Update Operations
+
+### updateOne
+
+Update a single document matching the filter.
+
+```typescript
+const result = await collection.updateOne(
+  { email: 'john@example.com' },
+  { $set: { age: 31, updatedAt: new Date() } }
+)
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   matchedCount: 1,
+//   modifiedCount: 1
+// }
+```
+
+**Parameters:**
+- `filter` - Query filter to find the document
+- `update` - Update operations (see [Update Operators](#update-operators))
+- `options` (optional) - Update options
+  - `upsert` - Insert if no document matches (default: `false`)
+  - `arrayFilters` - Filters for array update operations
+
+**Returns:** `UpdateResult`
+- `matchedCount: number` - Number of documents matched
+- `modifiedCount: number` - Number of documents modified
+- `upsertedId?: ObjectId` - The `_id` if upserted
+- `upsertedCount?: number` - 1 if upserted, otherwise 0
+
+### updateMany
+
+Update all documents matching the filter.
+
+```typescript
+const result = await collection.updateMany(
+  { status: 'pending' },
+  { $set: { status: 'processed', processedAt: new Date() } }
+)
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   matchedCount: 15,
+//   modifiedCount: 15
+// }
+```
+
+### Upsert
+
+When `upsert: true`, the operation inserts a new document if no match is found:
+
+```typescript
+const result = await collection.updateOne(
+  { email: 'new@example.com' },
+  { $set: { name: 'New User', createdAt: new Date() } },
+  { upsert: true }
+)
+
+// If no document matched, a new one is created
+if (result.upsertedId) {
+  console.log('Created new document:', result.upsertedId)
+}
+```
+
+---
+
+## Update Operators
+
+### Field Operators
+
+```typescript
+// $set - Set field values
+{ $set: { name: 'Jane', age: 30 } }
+
+// $unset - Remove fields
+{ $unset: { temporaryField: '' } }
+
+// $inc - Increment numeric values
+{ $inc: { views: 1, score: 5 } }
+
+// $mul - Multiply numeric values
+{ $mul: { price: 1.1 } }  // Increase by 10%
+
+// $min - Update if new value is less than current
+{ $min: { lowScore: 50 } }
+
+// $max - Update if new value is greater than current
+{ $max: { highScore: 100 } }
+
+// $rename - Rename a field
+{ $rename: { oldFieldName: 'newFieldName' } }
+
+// $currentDate - Set to current date
+{ $currentDate: { lastModified: true } }
+{ $currentDate: { lastModified: { $type: 'timestamp' } } }
+```
+
+### Array Operators
+
+```typescript
+// $push - Add element to array
+{ $push: { tags: 'new-tag' } }
+
+// $push with $each - Add multiple elements
+{ $push: { tags: { $each: ['tag1', 'tag2', 'tag3'] } } }
+
+// $addToSet - Add only if not exists
+{ $addToSet: { tags: 'unique-tag' } }
+
+// $addToSet with $each
+{ $addToSet: { tags: { $each: ['tag1', 'tag2'] } } }
+
+// $pull - Remove matching elements
+{ $pull: { tags: 'remove-me' } }
+
+// $pop - Remove first or last element
+{ $pop: { tags: 1 } }   // Remove last
+{ $pop: { tags: -1 } }  // Remove first
+```
+
+### Nested Field Updates
+
+```typescript
+// Update nested field
+{ $set: { 'address.city': 'Los Angeles' } }
+
+// Update array element by index
+{ $set: { 'items.0.qty': 10 } }
+```
+
+---
+
+## Replace Operation
+
+### replaceOne
+
+Replace an entire document (preserves `_id`).
+
+```typescript
+const result = await collection.replaceOne(
+  { _id: someObjectId },
+  {
+    name: 'Complete Replacement',
+    email: 'replaced@example.com',
+    status: 'new'
+    // Note: This replaces ALL fields except _id
+  }
+)
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   matchedCount: 1,
+//   modifiedCount: 1
+// }
+```
+
+**Parameters:**
+- `filter` - Query filter to find the document
+- `replacement` - The replacement document (must not contain update operators)
+- `options` (optional) - Replace options
+  - `upsert` - Insert if no document matches
+
+---
+
+## Delete Operations
+
+### deleteOne
+
+Delete a single document matching the filter.
+
+```typescript
+const result = await collection.deleteOne({ email: 'john@example.com' })
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   deletedCount: 1
+// }
+```
+
+**Parameters:**
+- `filter` - Query filter
+- `options` (optional) - Delete options
+
+**Returns:** `DeleteResult`
+- `acknowledged: boolean` - Whether the operation was acknowledged
+- `deletedCount: number` - Number of documents deleted
+
+### deleteMany
+
+Delete all documents matching the filter.
+
+```typescript
+// Delete all inactive users
+const result = await collection.deleteMany({ status: 'inactive' })
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   deletedCount: 42
+// }
+
+// Delete all documents (empty filter)
+const clearResult = await collection.deleteMany({})
+```
+
+---
+
+## Find-and-Modify Operations
+
+These operations atomically find and modify documents, returning the document before or after the modification.
+
+### findOneAndUpdate
+
+Find a document and update it, returning the document.
+
+```typescript
+// Return document AFTER update
+const updated = await collection.findOneAndUpdate(
+  { email: 'john@example.com' },
+  { $inc: { loginCount: 1 }, $set: { lastLogin: new Date() } },
+  { returnDocument: 'after' }
+)
+
+// Return document BEFORE update (default)
+const original = await collection.findOneAndUpdate(
+  { email: 'john@example.com' },
+  { $set: { status: 'active' } },
+  { returnDocument: 'before' }
+)
+
+// With sort (update first matching after sort)
+const newest = await collection.findOneAndUpdate(
+  { status: 'pending' },
+  { $set: { status: 'processing' } },
+  { sort: { createdAt: -1 }, returnDocument: 'after' }
+)
+
+// With upsert
+const upserted = await collection.findOneAndUpdate(
+  { email: 'new@example.com' },
+  { $set: { name: 'New User' } },
+  { upsert: true, returnDocument: 'after' }
+)
+```
+
+**Options:**
+- `projection` - Fields to include/exclude in returned document
+- `sort` - Sort order for determining which document to update
+- `upsert` - Insert if no document matches
+- `returnDocument` - Return `'before'` (default) or `'after'` modification
+
+### findOneAndDelete
+
+Find a document and delete it, returning the deleted document.
+
+```typescript
+const deleted = await collection.findOneAndDelete(
+  { status: 'expired' },
+  { sort: { expiresAt: 1 } }  // Delete oldest expired first
+)
+
+if (deleted) {
+  console.log('Deleted:', deleted.name)
+}
+```
+
+**Options:**
+- `projection` - Fields to include/exclude in returned document
+- `sort` - Sort order for determining which document to delete
+
+### findOneAndReplace
+
+Find a document and replace it, returning the document.
+
+```typescript
+const replaced = await collection.findOneAndReplace(
+  { _id: someObjectId },
+  {
+    name: 'Replaced Document',
+    email: 'replaced@example.com',
+    version: 2
+  },
+  { returnDocument: 'after' }
+)
+```
+
+**Options:**
+- `projection` - Fields to include/exclude in returned document
+- `sort` - Sort order for determining which document to replace
+- `upsert` - Insert if no document matches
+- `returnDocument` - Return `'before'` (default) or `'after'` replacement
+
+---
+
+## Counting Documents
+
+### countDocuments
+
+Count documents matching a filter.
+
+```typescript
+const count = await collection.countDocuments({ status: 'active' })
+console.log(`Active users: ${count}`)
+
+// Count all documents
+const total = await collection.countDocuments({})
+```
+
+---
+
+## Projection
+
+Control which fields are returned in query results.
+
+### Include Fields
+
+```typescript
+// Only return name and email
+const users = await collection.find(
+  { status: 'active' },
+  { projection: { name: 1, email: 1 } }
+).toArray()
+
+// Result: [{ _id: ..., name: 'John', email: 'john@...' }, ...]
+```
+
+### Exclude Fields
+
+```typescript
+// Return all fields except password
+const users = await collection.find(
+  { status: 'active' },
+  { projection: { password: 0, secret: 0 } }
+).toArray()
+```
+
+### Exclude _id
+
+```typescript
+// Return name and email without _id
+const users = await collection.find(
+  { status: 'active' },
+  { projection: { _id: 0, name: 1, email: 1 } }
+).toArray()
+
+// Result: [{ name: 'John', email: 'john@...' }, ...]
+```
+
+---
+
+## Error Handling
+
+### Duplicate Key Error
+
+When inserting a document with an `_id` that already exists:
+
+```typescript
+try {
+  await collection.insertOne({ _id: existingId, name: 'Duplicate' })
+} catch (error) {
+  if (error.code === 11000) {
+    console.log('Document with this _id already exists')
+  }
+}
+```
+
+---
+
+## Transaction Support
+
+CRUD operations can be executed within transactions using sessions:
+
+```typescript
+const session = client.startSession()
+
+try {
+  session.startTransaction()
+
+  await collection.insertOne({ name: 'User 1' }, { session })
+  await collection.updateOne(
+    { name: 'User 2' },
+    { $inc: { balance: -100 } },
+    { session }
+  )
+
+  await session.commitTransaction()
+} catch (error) {
+  await session.abortTransaction()
+  throw error
+} finally {
+  session.endSession()
+}
+```
+
+See the [Transactions Guide](/docs/guides/transactions) for more details.

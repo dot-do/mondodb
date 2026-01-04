@@ -1,0 +1,716 @@
+---
+title: Aggregation Pipeline
+description: Learn how to use MongoDB-style aggregation pipelines in MondoDB
+---
+
+# Aggregation Pipeline
+
+MondoDB supports MongoDB's aggregation pipeline framework, allowing you to process and transform documents through a series of stages. Aggregation pipelines are powerful tools for data analysis, reporting, and complex transformations.
+
+## Basic Usage
+
+Use the `aggregate()` method on a collection to execute an aggregation pipeline:
+
+```typescript
+const results = await collection.aggregate([
+  { $match: { status: 'active' } },
+  { $group: { _id: '$category', count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+]).toArray();
+```
+
+The `aggregate()` method returns a cursor that supports:
+- Async iteration with `for await (const doc of cursor)`
+- Converting to array with `await cursor.toArray()`
+- forEach iteration with `await cursor.forEach(callback)`
+
+## Supported Pipeline Stages
+
+MondoDB supports the following aggregation pipeline stages:
+
+| Stage | Description |
+|-------|-------------|
+| [`$match`](#match) | Filters documents based on conditions |
+| [`$project`](#project) | Reshapes documents by including, excluding, or computing fields |
+| [`$group`](#group) | Groups documents by a key and applies accumulators |
+| [`$sort`](#sort) | Sorts documents by specified fields |
+| [`$limit`](#limit) | Limits the number of documents |
+| [`$skip`](#skip) | Skips a number of documents |
+| [`$count`](#count) | Counts documents and returns the count |
+| [`$addFields`](#addfields) | Adds new fields to documents |
+| [`$set`](#addfields) | Alias for `$addFields` |
+| [`$lookup`](#lookup) | Performs a left outer join with another collection |
+| [`$unwind`](#unwind) | Deconstructs an array field into multiple documents |
+| [`$bucket`](#bucket) | Categorizes documents into buckets |
+| [`$facet`](#facet) | Processes multiple pipelines in a single stage |
+| [`$search`](#search) | Full-text search (Atlas Search compatible) |
+| [`$vectorSearch`](#vectorsearch) | Vector similarity search |
+
+---
+
+## $match
+
+Filters documents to pass only those that match the specified condition(s).
+
+```typescript
+// Simple match
+await collection.aggregate([
+  { $match: { status: 'active' } }
+]).toArray();
+
+// Match with comparison operators
+await collection.aggregate([
+  { $match: { age: { $gte: 18, $lte: 65 } } }
+]).toArray();
+
+// Match with logical operators
+await collection.aggregate([
+  {
+    $match: {
+      $or: [
+        { status: 'active' },
+        { priority: 'high' }
+      ]
+    }
+  }
+]).toArray();
+```
+
+### Supported Query Operators in $match
+
+**Comparison Operators:**
+- `$eq`, `$ne` - Equal, not equal
+- `$gt`, `$gte`, `$lt`, `$lte` - Greater/less than comparisons
+- `$in`, `$nin` - Match any value in/not in array
+- `$regex` - Regular expression matching
+- `$mod` - Modulo operation
+
+**Logical Operators:**
+- `$and`, `$or`, `$nor`, `$not`
+
+**Element Operators:**
+- `$exists` - Check if field exists
+- `$type` - Check field type
+
+**Array Operators:**
+- `$all` - Match arrays containing all specified elements
+- `$elemMatch` - Match arrays where at least one element matches conditions
+- `$size` - Match arrays of a specific size
+
+---
+
+## $project
+
+Reshapes documents by including, excluding, or computing new fields.
+
+```typescript
+// Include specific fields
+await collection.aggregate([
+  { $project: { name: 1, email: 1, _id: 0 } }
+]).toArray();
+
+// Exclude specific fields
+await collection.aggregate([
+  { $project: { password: 0, sensitiveData: 0 } }
+]).toArray();
+
+// Rename fields
+await collection.aggregate([
+  { $project: {
+    username: '$name',
+    userEmail: '$email'
+  } }
+]).toArray();
+
+// Computed fields
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    totalPrice: { $multiply: ['$price', '$quantity'] },
+    discountedPrice: { $subtract: ['$price', '$discount'] }
+  } }
+]).toArray();
+
+// Conditional fields
+await collection.aggregate([
+  { $project: {
+    name: 1,
+    status: {
+      $cond: {
+        if: { $gte: ['$score', 70] },
+        then: 'pass',
+        else: 'fail'
+      }
+    }
+  } }
+]).toArray();
+```
+
+---
+
+## $group
+
+Groups documents by a specified expression and applies accumulator expressions.
+
+```typescript
+// Group by a single field
+await collection.aggregate([
+  { $group: {
+    _id: '$category',
+    count: { $sum: 1 },
+    totalRevenue: { $sum: '$price' }
+  } }
+]).toArray();
+
+// Group by multiple fields (compound _id)
+await collection.aggregate([
+  { $group: {
+    _id: {
+      year: '$year',
+      month: '$month'
+    },
+    totalSales: { $sum: '$amount' }
+  } }
+]).toArray();
+
+// Total aggregation (null _id)
+await collection.aggregate([
+  { $group: {
+    _id: null,
+    totalDocuments: { $sum: 1 },
+    averagePrice: { $avg: '$price' }
+  } }
+]).toArray();
+```
+
+### Supported Accumulator Operators
+
+| Operator | Description |
+|----------|-------------|
+| `$sum` | Sums numeric values or counts documents with `$sum: 1` |
+| `$avg` | Calculates the average of numeric values |
+| `$min` | Returns the minimum value |
+| `$max` | Returns the maximum value |
+| `$first` | Returns the first value in the group |
+| `$last` | Returns the last value in the group |
+| `$push` | Returns an array of all values |
+| `$addToSet` | Returns an array of unique values |
+| `$count` | Counts the number of documents |
+
+```typescript
+// Using various accumulators
+await collection.aggregate([
+  { $group: {
+    _id: '$department',
+    employeeCount: { $sum: 1 },
+    avgSalary: { $avg: '$salary' },
+    minSalary: { $min: '$salary' },
+    maxSalary: { $max: '$salary' },
+    employees: { $push: '$name' },
+    uniqueRoles: { $addToSet: '$role' }
+  } }
+]).toArray();
+```
+
+---
+
+## $sort
+
+Sorts documents by the specified field(s).
+
+```typescript
+// Ascending sort
+await collection.aggregate([
+  { $sort: { name: 1 } }
+]).toArray();
+
+// Descending sort
+await collection.aggregate([
+  { $sort: { createdAt: -1 } }
+]).toArray();
+
+// Multiple sort fields
+await collection.aggregate([
+  { $sort: { category: 1, price: -1 } }
+]).toArray();
+```
+
+---
+
+## $limit
+
+Limits the number of documents passed to the next stage.
+
+```typescript
+// Get top 10 documents
+await collection.aggregate([
+  { $sort: { score: -1 } },
+  { $limit: 10 }
+]).toArray();
+```
+
+---
+
+## $skip
+
+Skips the specified number of documents.
+
+```typescript
+// Pagination example
+const page = 2;
+const pageSize = 10;
+
+await collection.aggregate([
+  { $sort: { createdAt: -1 } },
+  { $skip: (page - 1) * pageSize },
+  { $limit: pageSize }
+]).toArray();
+```
+
+---
+
+## $count
+
+Counts the number of documents and returns a single document with the count.
+
+```typescript
+const result = await collection.aggregate([
+  { $match: { status: 'active' } },
+  { $count: 'activeCount' }
+]).toArray();
+// Returns: [{ activeCount: 42 }]
+```
+
+---
+
+## $addFields
+
+Adds new fields to documents. The `$set` stage is an alias for `$addFields`.
+
+```typescript
+// Add computed fields
+await collection.aggregate([
+  { $addFields: {
+    fullName: { $concat: ['$firstName', ' ', '$lastName'] },
+    totalValue: { $multiply: ['$price', '$quantity'] }
+  } }
+]).toArray();
+
+// Using $set (alias)
+await collection.aggregate([
+  { $set: {
+    lastModified: new Date(),
+    isActive: true
+  } }
+]).toArray();
+```
+
+---
+
+## $lookup
+
+Performs a left outer join with another collection.
+
+```typescript
+// Simple lookup
+await collection.aggregate([
+  { $lookup: {
+    from: 'orders',
+    localField: 'customerId',
+    foreignField: 'customerId',
+    as: 'customerOrders'
+  } }
+]).toArray();
+
+// Pipeline lookup (advanced)
+await collection.aggregate([
+  { $lookup: {
+    from: 'orders',
+    let: { custId: '$_id' },
+    pipeline: [
+      { $match: { status: 'completed' } }
+    ],
+    as: 'completedOrders'
+  } }
+]).toArray();
+```
+
+---
+
+## $unwind
+
+Deconstructs an array field, outputting one document for each element.
+
+```typescript
+// Basic unwind
+await collection.aggregate([
+  { $unwind: '$tags' }
+]).toArray();
+
+// With options
+await collection.aggregate([
+  { $unwind: {
+    path: '$items',
+    includeArrayIndex: 'itemIndex',
+    preserveNullAndEmptyArrays: true
+  } }
+]).toArray();
+```
+
+### Unwind Options
+
+| Option | Description |
+|--------|-------------|
+| `path` | The array field path to unwind (required) |
+| `includeArrayIndex` | Name of a field to store the array index |
+| `preserveNullAndEmptyArrays` | If true, output document even if array is null/empty |
+
+---
+
+## $bucket
+
+Categorizes documents into groups (buckets) based on a specified expression and boundaries.
+
+```typescript
+// Bucket by price ranges
+await collection.aggregate([
+  { $bucket: {
+    groupBy: '$price',
+    boundaries: [0, 50, 100, 200, 500],
+    default: 'Other',
+    output: {
+      count: { $sum: 1 },
+      products: { $push: '$name' }
+    }
+  } }
+]).toArray();
+// Returns buckets: 0-50, 50-100, 100-200, 200-500, Other
+```
+
+---
+
+## $facet
+
+Processes multiple aggregation pipelines within a single stage, returning a document where each field contains the results of a different pipeline.
+
+```typescript
+await collection.aggregate([
+  { $facet: {
+    categoryCounts: [
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ],
+    priceStats: [
+      { $group: {
+        _id: null,
+        avgPrice: { $avg: '$price' },
+        minPrice: { $min: '$price' },
+        maxPrice: { $max: '$price' }
+      } }
+    ],
+    topProducts: [
+      { $sort: { sales: -1 } },
+      { $limit: 5 },
+      { $project: { name: 1, sales: 1 } }
+    ]
+  } }
+]).toArray();
+```
+
+---
+
+## $search
+
+Performs full-text search using FTS5. Must be the first stage in a pipeline.
+
+```typescript
+// Text search
+await collection.aggregate([
+  { $search: {
+    text: {
+      query: 'mongodb database',
+      path: 'description'
+    }
+  } }
+]).toArray();
+
+// Phrase search
+await collection.aggregate([
+  { $search: {
+    phrase: {
+      query: 'exact phrase match',
+      path: 'content'
+    }
+  } }
+]).toArray();
+
+// Compound search
+await collection.aggregate([
+  { $search: {
+    compound: {
+      must: [
+        { text: { query: 'required term', path: 'title' } }
+      ],
+      should: [
+        { text: { query: 'optional boost', path: 'description' } }
+      ],
+      mustNot: [
+        { text: { query: 'excluded', path: 'tags' } }
+      ]
+    }
+  } }
+]).toArray();
+```
+
+---
+
+## $vectorSearch
+
+Performs vector similarity search. Must be the first stage in a pipeline.
+
+```typescript
+await collection.aggregate([
+  { $vectorSearch: {
+    index: 'vector_index',
+    path: 'embedding',
+    queryVector: [0.1, 0.2, 0.3, ...], // Your query vector
+    numCandidates: 100,
+    limit: 10
+  } }
+]).toArray();
+```
+
+### Vector Search Options
+
+| Option | Description |
+|--------|-------------|
+| `index` | Name of the vector search index |
+| `path` | Path to the vector field in documents |
+| `queryVector` | The query vector to search for |
+| `numCandidates` | Number of candidates to consider (default: limit * 10) |
+| `limit` | Maximum number of results to return |
+| `filter` | Optional pre-filter before vector search |
+| `exact` | If true, performs exact search (slower but more accurate) |
+
+---
+
+## Expression Operators
+
+Expression operators can be used within stages like `$project`, `$addFields`, and `$group`.
+
+### Arithmetic Operators
+
+```typescript
+{
+  sum: { $add: ['$price', '$tax'] },
+  difference: { $subtract: ['$total', '$discount'] },
+  product: { $multiply: ['$quantity', '$unitPrice'] },
+  quotient: { $divide: ['$total', '$count'] },
+  remainder: { $mod: ['$value', 10] }
+}
+```
+
+### String Operators
+
+```typescript
+{
+  fullName: { $concat: ['$firstName', ' ', '$lastName'] },
+  excerpt: { $substr: ['$content', 0, 100] },
+  lowercase: { $toLower: '$email' },
+  uppercase: { $toUpper: '$code' }
+}
+```
+
+### Conditional Operators
+
+```typescript
+// $cond - if/then/else
+{
+  status: {
+    $cond: {
+      if: { $gte: ['$score', 70] },
+      then: 'pass',
+      else: 'fail'
+    }
+  }
+}
+
+// $cond - array form [condition, trueValue, falseValue]
+{
+  status: { $cond: [{ $gte: ['$score', 70] }, 'pass', 'fail'] }
+}
+
+// $ifNull - default value for null
+{
+  displayName: { $ifNull: ['$nickname', '$name'] }
+}
+
+// $switch - multiple conditions
+{
+  grade: {
+    $switch: {
+      branches: [
+        { case: { $gte: ['$score', 90] }, then: 'A' },
+        { case: { $gte: ['$score', 80] }, then: 'B' },
+        { case: { $gte: ['$score', 70] }, then: 'C' }
+      ],
+      default: 'F'
+    }
+  }
+}
+```
+
+### Comparison Operators (in expressions)
+
+```typescript
+{
+  isEqual: { $eq: ['$field1', '$field2'] },
+  isNotEqual: { $ne: ['$status', 'inactive'] },
+  isGreater: { $gt: ['$score', 100] },
+  isGreaterOrEqual: { $gte: ['$age', 18] },
+  isLess: { $lt: ['$price', 50] },
+  isLessOrEqual: { $lte: ['$quantity', 0] }
+}
+```
+
+### Logical Operators (in expressions)
+
+```typescript
+{
+  bothTrue: { $and: [{ $gte: ['$age', 18] }, { $eq: ['$status', 'active'] }] },
+  eitherTrue: { $or: [{ $eq: ['$role', 'admin'] }, { $eq: ['$role', 'manager'] }] },
+  isNotTrue: { $not: { $eq: ['$deleted', true] } }
+}
+```
+
+---
+
+## Common Patterns
+
+### Pagination
+
+```typescript
+const page = 1;
+const pageSize = 20;
+
+const results = await collection.aggregate([
+  { $match: { status: 'published' } },
+  { $sort: { createdAt: -1 } },
+  { $skip: (page - 1) * pageSize },
+  { $limit: pageSize }
+]).toArray();
+```
+
+### Group by Date Parts
+
+```typescript
+await collection.aggregate([
+  { $group: {
+    _id: {
+      year: '$year',
+      month: '$month'
+    },
+    count: { $sum: 1 },
+    totalRevenue: { $sum: '$amount' }
+  } },
+  { $sort: { '_id.year': -1, '_id.month': -1 } }
+]).toArray();
+```
+
+### Top N per Group
+
+```typescript
+// Get top 3 products per category
+await collection.aggregate([
+  { $sort: { sales: -1 } },
+  { $group: {
+    _id: '$category',
+    products: { $push: { name: '$name', sales: '$sales' } }
+  } },
+  { $project: {
+    category: '$_id',
+    topProducts: { $slice: ['$products', 3] }
+  } }
+]).toArray();
+```
+
+### Running Totals and Statistics
+
+```typescript
+await collection.aggregate([
+  { $group: {
+    _id: null,
+    totalOrders: { $sum: 1 },
+    totalRevenue: { $sum: '$amount' },
+    averageOrderValue: { $avg: '$amount' },
+    minOrder: { $min: '$amount' },
+    maxOrder: { $max: '$amount' }
+  } }
+]).toArray();
+```
+
+### Join with Related Data
+
+```typescript
+await collection.aggregate([
+  // Match orders from last 30 days
+  { $match: {
+    orderDate: { $gte: thirtyDaysAgo }
+  } },
+  // Join with customer data
+  { $lookup: {
+    from: 'customers',
+    localField: 'customerId',
+    foreignField: '_id',
+    as: 'customer'
+  } },
+  // Unwind the customer array (lookup returns array)
+  { $unwind: '$customer' },
+  // Project only needed fields
+  { $project: {
+    orderId: 1,
+    amount: 1,
+    customerName: '$customer.name',
+    customerEmail: '$customer.email'
+  } }
+]).toArray();
+```
+
+---
+
+## Performance Tips
+
+1. **Place $match early**: Filter documents as early as possible to reduce the data processed by subsequent stages.
+
+2. **Use indexes**: Ensure fields used in `$match` and `$sort` are indexed.
+
+3. **Limit fields with $project**: Project only the fields you need to reduce memory usage.
+
+4. **Combine stages when possible**: Multiple `$match` stages can often be combined.
+
+5. **Use $limit for exploratory queries**: When testing, add `$limit` to avoid processing all documents.
+
+```typescript
+// Good: $match early, only needed fields
+await collection.aggregate([
+  { $match: { status: 'active' } },      // Filter first
+  { $project: { name: 1, email: 1 } },   // Only needed fields
+  { $sort: { name: 1 } },
+  { $limit: 100 }
+]).toArray();
+
+// Less efficient: processing all documents before filtering
+await collection.aggregate([
+  { $project: { name: 1, email: 1, status: 1 } },
+  { $sort: { name: 1 } },
+  { $match: { status: 'active' } }  // Filter too late
+]).toArray();
+```
+
+---
+
+## Next Steps
+
+- [CRUD Operations](/docs/guides/crud) - Basic document operations
+- [Indexing](/docs/guides/indexing) - Create indexes for better performance
+- [Vector Search](/docs/guides/vector-search) - Semantic similarity search

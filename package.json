@@ -2,9 +2,26 @@
   "name": "mondodb",
   "version": "0.1.0",
   "description": "MongoDB-compatible database backed by Cloudflare Durable Objects SQLite",
+  "author": "Nathan Clevenger",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nathanclevenger/mondodb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nathanclevenger/mondodb/issues"
+  },
+  "homepage": "https://github.com/nathanclevenger/mondodb#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "mondodb": "./src/cli/index.ts"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -14,35 +31,39 @@
   "scripts": {
     "build": "tsc",
     "dev": "wrangler dev",
-    "server": "bun run src/server.ts",
-    "server:verbose": "bun run src/server.ts --verbose",
+    "start": "bun run src/cli/index.ts",
+    "start:verbose": "bun run src/cli/index.ts --verbose",
+    "server": "bun run src/cli/index.ts",
+    "server:verbose": "bun run src/cli/index.ts --verbose",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:compat": "vitest run --config vitest.config.compat.ts",
     "test:compat:watch": "vitest --config vitest.config.compat.ts",
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "prepublishOnly": "npm run build && npm run test"
   },
   "dependencies": {
-    "@types/js-yaml": "^4.0.9",
     "bson": "^6.10.0",
     "capnweb": "^0.1.0",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.5.0",
+    "@cloudflare/vitest-pool-workers": "^0.11.1",
     "@cloudflare/workers-types": "^4.20240925.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
     "@types/bun": "^1.2.4",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.27",
     "@vitejs/plugin-react": "^5.1.2",
     "jsdom": "^27.4.0",
     "mongodb": "^7.0.0",
     "mongodb-memory-server": "^11.0.1",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.9",
+    "vitest": "^3.2.4",
     "wrangler": "^4.54.0"
   },
   "keywords": [

@@ -1,0 +1,320 @@
+---
+title: Configuration
+description: Configure MondoDB for your application
+---
+
+# Configuration
+
+This guide covers all configuration options for MondoDB, from Wrangler settings to client options.
+
+## Wrangler Configuration
+
+MondoDB requires specific Durable Object configuration in your Wrangler settings.
+
+### Minimal Configuration
+
+The minimum required configuration for MondoDB:
+
+```jsonc
+{
+  "name": "my-mondodb-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MondoDatabase"]
+    }
+  ]
+}
+```
+
+### Full Configuration
+
+A complete configuration with all options:
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-mondodb-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+
+  // Required for Node.js APIs (Buffer, crypto, etc.)
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  },
+
+  // SQLite-backed Durable Objects migration
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MondoDatabase"]
+    }
+  ],
+
+  // Optional: Worker Loader for $function operator
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+
+  // Optional: Observability for debugging
+  "observability": {
+    "enabled": true
+  },
+
+  // Development server settings
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http"
+  },
+
+  // Environment-specific configurations
+  "env": {
+    "production": {
+      "name": "my-app-production",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    },
+    "staging": {
+      "name": "my-app-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    }
+  }
+}
+```
+
+### TOML Format
+
+If you prefer TOML format:
+
+```toml
+name = "my-mondodb-app"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "MONDO_DATABASE"
+class_name = "MondoDatabase"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MondoDatabase"]
+
+[dev]
+port = 8787
+local_protocol = "http"
+```
+
+## MongoClient Options
+
+When creating a MongoClient, you can pass configuration options:
+
+```typescript
+import { MongoClient } from 'mondodb';
+
+// Production: Using environment binding
+const client = new MongoClient(env, {
+  appName: 'my-application',
+  connectTimeoutMS: 30000,
+  socketTimeoutMS: 30000
+});
+
+// Testing: Using URI string
+const testClient = new MongoClient('mondodb://localhost:27017/testdb', {
+  maxPoolSize: 100,
+  minPoolSize: 0
+});
+```
+
+### Client Options Reference
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `appName` | `string` | Application name for connection metadata |
+| `host` | `string` | Host for URI mode connections |
+| `port` | `number` | Port for URI mode connections |
+| `maxPoolSize` | `number` | Maximum connection pool size (URI mode) |
+| `minPoolSize` | `number` | Minimum connection pool size (URI mode) |
+| `connectTimeoutMS` | `number` | Connection timeout in milliseconds |
+| `socketTimeoutMS` | `number` | Socket timeout in milliseconds |
+
+## Connection Modes
+
+MondoDB supports two connection modes:
+
+### Environment Mode (Production)
+
+For Cloudflare Workers in production, pass the environment object:
+
+```typescript
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace;
+}
+
+const client = new MongoClient(env);
+await client.connect();
+```
+
+This mode:
+- Uses Cloudflare Durable Objects with SQLite storage
+- Provides global distribution and strong consistency
+- Automatically scales with your worker
+
+### URI Mode (Development/Testing)
+
+For local development and testing, use a connection URI:
+
+```typescript
+const client = new MongoClient('mondodb://localhost:27017/mydb');
+await client.connect();
+```
+
+Supported URI formats:
+- `mondodb://localhost:27017/dbname`
+- `mongodb://localhost:27017/dbname` (also accepted)
+- `mondodb://user:pass@localhost:27017/dbname?options`
+
+This mode:
+- Uses in-memory storage
+- Ideal for unit tests and local development
+- Does not persist data between restarts
+
+## Database Configuration
+
+Access databases with optional configuration:
+
+```typescript
+// Get database with default name from connection
+const db = client.db();
+
+// Get specific database
+const db = client.db('myapp');
+```
+
+## Collection Configuration
+
+Collections are accessed from a database:
+
+```typescript
+// Get a collection
+const users = db.collection('users');
+
+// Get a typed collection
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+}
+const typedUsers = db.collection<User>('users');
+```
+
+## TypeScript Configuration
+
+For full TypeScript support, define your environment types:
+
+```typescript
+// src/env.d.ts
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace;
+  ENVIRONMENT?: string;
+}
+```
+
+And configure your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+```
+
+## Session Configuration
+
+For transaction support, configure sessions:
+
+```typescript
+const session = client.startSession({
+  defaultTransactionOptions: {
+    readConcern: { level: 'snapshot' },
+    writeConcern: { w: 'majority' }
+  }
+});
+
+try {
+  session.startTransaction();
+
+  await collection.insertOne({ name: 'Alice' }, { session });
+  await collection.updateOne(
+    { name: 'Bob' },
+    { $set: { updated: true } },
+    { session }
+  );
+
+  await session.commitTransaction();
+} catch (error) {
+  await session.abortTransaction();
+  throw error;
+} finally {
+  session.endSession();
+}
+```
+
+## Advanced: Worker Loaders
+
+For using the `$function` aggregation operator, enable Worker Loaders:
+
+```jsonc
+{
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "compatibility_flags": ["nodejs_compat", "enable_ctx_exports"]
+}
+```
+
+This enables secure, sandboxed execution of user-defined JavaScript functions within aggregation pipelines.
+
+## Next Steps
+
+- **[Quick Start](/docs/getting-started/quickstart)** - Build your first application
+- **[CRUD Operations](/docs/guides/crud)** - Learn database operations
+- **[API Reference](/docs/api-reference)** - Complete API documentation

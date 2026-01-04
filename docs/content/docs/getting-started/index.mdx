@@ -1,0 +1,154 @@
+---
+title: Getting Started
+description: Get up and running with MondoDB in your Cloudflare Workers project
+---
+
+# Getting Started with MondoDB
+
+MondoDB is a MongoDB-compatible database built for Cloudflare Workers. It provides a familiar MongoDB API while running entirely on Cloudflare's edge network, backed by Durable Objects and SQLite for persistent storage.
+
+## Why MondoDB?
+
+- **MongoDB-compatible API** - Use familiar operations like `find`, `insertOne`, `updateMany`, and `aggregate`
+- **Edge-native** - Built on Cloudflare Durable Objects for low-latency global access
+- **No infrastructure** - No servers to manage, scales automatically with your Workers
+- **TypeScript-first** - Full type definitions included out of the box
+
+## Quick Overview
+
+Here's what using MondoDB looks like in a Cloudflare Worker:
+
+```typescript
+import { MongoClient } from 'mondodb';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Connect using your Durable Object binding
+    const client = new MongoClient(env);
+    const db = client.db('myapp');
+    const users = db.collection('users');
+
+    // Insert a document
+    const result = await users.insertOne({
+      name: 'Alice',
+      email: 'alice@example.com',
+      createdAt: new Date()
+    });
+
+    // Find documents
+    const allUsers = await users.find({ active: true }).toArray();
+
+    return Response.json({ inserted: result.insertedId, users: allUsers });
+  }
+};
+```
+
+## In This Section
+
+<Cards>
+  <Card title="Installation" href="/docs/getting-started/installation">
+    Install MondoDB and configure your Cloudflare Workers project
+  </Card>
+  <Card title="Quick Start" href="/docs/getting-started/quickstart">
+    Build your first application with MondoDB in 5 minutes
+  </Card>
+  <Card title="Configuration" href="/docs/getting-started/configuration">
+    Learn about environment configuration and advanced options
+  </Card>
+</Cards>
+
+## Connection Modes
+
+MondoDB supports two connection modes:
+
+### Production Mode (Durable Objects)
+
+For production Cloudflare Workers, connect using your environment binding:
+
+```typescript
+import { MongoClient } from 'mondodb';
+
+// Connect via Durable Object binding
+const client = new MongoClient(env);
+await client.connect();
+const db = client.db('myDatabase');
+```
+
+This mode uses Cloudflare Durable Objects with SQLite for persistent storage, providing:
+- Global distribution across Cloudflare's edge network
+- Strong consistency guarantees
+- Automatic scaling and durability
+
+### URI Mode (Testing/Local Development)
+
+For testing and local development, connect using a URI string:
+
+```typescript
+import { MongoClient } from 'mondodb';
+
+// Connect via URI (in-memory storage)
+const client = new MongoClient('mondodb://localhost:27017/testdb');
+await client.connect();
+const db = client.db('testdb');
+```
+
+This mode uses in-memory storage and is ideal for:
+- Unit tests
+- Local development with `wrangler dev`
+- Integration testing
+
+## Supported Operations
+
+MondoDB supports a comprehensive set of MongoDB operations:
+
+### CRUD Operations
+
+| Operation | Description |
+|-----------|-------------|
+| `insertOne()` | Insert a single document |
+| `insertMany()` | Insert multiple documents |
+| `findOne()` | Find a single document |
+| `find()` | Find multiple documents (returns cursor) |
+| `updateOne()` | Update a single document |
+| `updateMany()` | Update multiple documents |
+| `deleteOne()` | Delete a single document |
+| `deleteMany()` | Delete multiple documents |
+| `replaceOne()` | Replace a single document |
+| `countDocuments()` | Count matching documents |
+| `distinct()` | Get distinct field values |
+
+### Query Operators
+
+MondoDB supports standard MongoDB query operators including:
+- Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`
+- Logical: `$and`, `$or`, `$not`, `$nor`
+- Element: `$exists`, `$type`
+- Array: `$elemMatch`, `$size`, `$all`
+- Evaluation: `$regex`
+
+### Update Operators
+
+Supported update operators include:
+- Field: `$set`, `$unset`, `$inc`, `$mul`, `$min`, `$max`, `$rename`, `$currentDate`
+- Array: `$push`, `$pull`, `$pop`, `$addToSet`
+
+### Aggregation Pipeline
+
+MondoDB supports common aggregation stages:
+- `$match` - Filter documents
+- `$project` - Reshape documents
+- `$group` - Group and aggregate
+- `$sort` - Sort documents
+- `$limit` / `$skip` - Pagination
+- `$unwind` - Deconstruct arrays
+- `$lookup` - Join collections
+- `$addFields` / `$set` - Add computed fields
+- `$count` - Count documents
+- `$facet` - Multi-faceted aggregation
+
+## Next Steps
+
+1. **[Install MondoDB](/docs/getting-started/installation)** - Set up your development environment
+2. **[Quick Start Tutorial](/docs/getting-started/quickstart)** - Build your first app
+3. **[Explore Guides](/docs/guides)** - Learn advanced patterns and best practices
+4. **[API Reference](/docs/api-reference)** - Detailed API documentation

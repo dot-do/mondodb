@@ -1,0 +1,14 @@
+{
+  "root": true,
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "getting-started/...",
+    "---API Reference---",
+    "api-reference/...",
+    "---Guides---",
+    "guides/...",
+    "---Reference---",
+    "reference/..."
+  ]
+}

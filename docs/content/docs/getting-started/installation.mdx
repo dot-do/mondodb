@@ -1,0 +1,202 @@
+---
+title: Installation
+description: How to install and set up MondoDB in your project
+---
+
+# Installation
+
+This guide covers how to install MondoDB and set it up for use with Cloudflare Workers.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Node.js 18 or later** - Required for running Wrangler and development tools
+- **A Cloudflare account** - [Sign up for free](https://dash.cloudflare.com/sign-up) if you don't have one
+- **Wrangler CLI** - Cloudflare's command-line tool for Workers development
+
+Install Wrangler globally if you haven't already:
+
+```bash
+npm install -g wrangler
+```
+
+## Install MondoDB
+
+Install MondoDB using your preferred package manager:
+
+```bash
+npm install mondodb
+```
+
+Or with other package managers:
+
+```bash
+# Using pnpm
+pnpm add mondodb
+
+# Using yarn
+yarn add mondodb
+
+# Using bun
+bun add mondodb
+```
+
+## Configure Wrangler
+
+MondoDB uses Cloudflare Durable Objects with SQLite storage. You can configure your project using either JSONC or TOML format.
+
+### Using wrangler.jsonc (Recommended)
+
+Create or update your `wrangler.jsonc`:
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-mondodb-app",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  },
+
+  // Migration for SQLite-backed Durable Objects
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MondoDatabase"]
+    }
+  ]
+}
+```
+
+### Using wrangler.toml
+
+Alternatively, use TOML format:
+
+```toml
+name = "my-mondodb-app"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "MONDO_DATABASE"
+class_name = "MondoDatabase"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MondoDatabase"]
+```
+
+## Set Up Your Worker Entry Point
+
+Create your worker entry point that exports the MondoDB Durable Object:
+
+```typescript
+// src/index.ts
+import { MondoEntrypoint, MondoDatabase } from 'mondodb';
+
+// Export the Durable Object class
+export { MondoDatabase };
+
+// Export the default entrypoint
+export default MondoEntrypoint;
+```
+
+Or create a custom handler:
+
+```typescript
+// src/index.ts
+import { MongoClient, MondoDatabase } from 'mondodb';
+
+// Export the Durable Object class
+export { MondoDatabase };
+
+// Environment type definition
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace;
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env);
+    const db = client.db('myapp');
+
+    // Your application logic here
+    const collection = db.collection('items');
+    const items = await collection.find({}).toArray();
+
+    return Response.json(items);
+  }
+};
+```
+
+## TypeScript Configuration
+
+If you're using TypeScript, ensure your `tsconfig.json` includes the Cloudflare Workers types:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "types": ["@cloudflare/workers-types"]
+  }
+}
+```
+
+Install the types package:
+
+```bash
+npm install -D @cloudflare/workers-types
+```
+
+## Verify Installation
+
+Start the development server to verify everything is configured correctly:
+
+```bash
+npm run dev
+# or
+wrangler dev
+```
+
+You should see output indicating the worker is running:
+
+```
+ ⛅ wrangler 3.x.x
+-------------------
+Ready on http://localhost:8787
+```
+
+## Project Structure
+
+A typical MondoDB project structure looks like:
+
+```
+my-mondodb-app/
+├── src/
+│   └── index.ts        # Worker entry point
+├── package.json
+├── tsconfig.json
+└── wrangler.jsonc      # Wrangler configuration
+```
+
+## Next Steps
+
+Now that MondoDB is installed and configured:
+
+1. **[Quick Start](/docs/getting-started/quickstart)** - Build your first application
+2. **[Configuration](/docs/getting-started/configuration)** - Learn about advanced configuration options
+3. **[CRUD Operations](/docs/guides/crud)** - Deep dive into database operations

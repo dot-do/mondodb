@@ -1,0 +1,580 @@
+---
+title: Query & Filter Syntax
+description: Complete guide to MondoDB query operators and filter syntax
+---
+
+# Query & Filter Syntax
+
+MondoDB supports MongoDB-compatible query syntax for filtering documents. This guide covers all supported query operators with examples.
+
+## Basic Query Structure
+
+Queries are JSON objects where keys are field names and values specify the conditions to match:
+
+```javascript
+// Find documents where status equals "active"
+await collection.find({ status: "active" });
+
+// Find documents matching multiple conditions (implicit AND)
+await collection.find({ status: "active", priority: 1 });
+```
+
+## Comparison Operators
+
+### $eq (Equals)
+
+Matches values that are equal to a specified value. This is the default operator when you provide a direct value.
+
+```javascript
+// Explicit $eq
+await collection.find({ status: { $eq: "active" } });
+
+// Implicit $eq (shorthand)
+await collection.find({ status: "active" });
+
+// Match null values
+await collection.find({ deletedAt: { $eq: null } });
+
+// Match boolean values
+await collection.find({ isPublished: { $eq: true } });
+```
+
+### $ne (Not Equal)
+
+Matches values that are not equal to the specified value.
+
+```javascript
+// Find documents where status is not "archived"
+await collection.find({ status: { $ne: "archived" } });
+
+// Find documents where field is not null
+await collection.find({ email: { $ne: null } });
+```
+
+### $gt (Greater Than)
+
+Matches values that are greater than the specified value.
+
+```javascript
+// Find documents where age is greater than 21
+await collection.find({ age: { $gt: 21 } });
+
+// Works with dates (as ISO strings or timestamps)
+await collection.find({ createdAt: { $gt: "2024-01-01" } });
+```
+
+### $gte (Greater Than or Equal)
+
+Matches values that are greater than or equal to the specified value.
+
+```javascript
+// Find documents where score is 90 or higher
+await collection.find({ score: { $gte: 90 } });
+```
+
+### $lt (Less Than)
+
+Matches values that are less than the specified value.
+
+```javascript
+// Find documents where price is under 100
+await collection.find({ price: { $lt: 100 } });
+```
+
+### $lte (Less Than or Equal)
+
+Matches values that are less than or equal to the specified value.
+
+```javascript
+// Find documents where quantity is 10 or less
+await collection.find({ quantity: { $lte: 10 } });
+```
+
+### $in (In Array)
+
+Matches any value that exists in the specified array.
+
+```javascript
+// Find documents where status is one of the specified values
+await collection.find({ status: { $in: ["pending", "approved", "processing"] } });
+
+// Find documents with specific IDs
+await collection.find({ _id: { $in: ["id1", "id2", "id3"] } });
+```
+
+**Note:** An empty array `{ $in: [] }` will match no documents.
+
+### $nin (Not In Array)
+
+Matches values that do not exist in the specified array.
+
+```javascript
+// Find documents where status is not in the specified values
+await collection.find({ status: { $nin: ["archived", "deleted"] } });
+
+// Find documents not in a category list
+await collection.find({ category: { $nin: ["spam", "test"] } });
+```
+
+**Note:** An empty array `{ $nin: [] }` will match all documents.
+
+## Logical Operators
+
+### $and
+
+Joins query clauses with a logical AND. All conditions must be true.
+
+```javascript
+// Explicit $and
+await collection.find({
+  $and: [
+    { status: "active" },
+    { priority: { $gte: 5 } },
+    { category: "urgent" }
+  ]
+});
+
+// Implicit $and (multiple conditions on same document)
+await collection.find({
+  status: "active",
+  priority: { $gte: 5 }
+});
+
+// Use explicit $and for multiple conditions on the same field
+await collection.find({
+  $and: [
+    { price: { $gte: 10 } },
+    { price: { $lte: 100 } }
+  ]
+});
+```
+
+### $or
+
+Joins query clauses with a logical OR. At least one condition must be true.
+
+```javascript
+// Find documents matching any condition
+await collection.find({
+  $or: [
+    { status: "pending" },
+    { priority: { $gt: 8 } }
+  ]
+});
+
+// Combine $or with other conditions
+await collection.find({
+  type: "task",
+  $or: [
+    { status: "pending" },
+    { assignee: null }
+  ]
+});
+```
+
+### $not
+
+Inverts the effect of a query expression.
+
+```javascript
+// Find documents where price is NOT greater than 100
+await collection.find({
+  price: { $not: { $gt: 100 } }
+});
+
+// Negate a regex match
+await collection.find({
+  name: { $not: { $regex: "^test" } }
+});
+```
+
+### $nor
+
+Joins query clauses with a logical NOR. Returns documents that fail all conditions.
+
+```javascript
+// Find documents that match neither condition
+await collection.find({
+  $nor: [
+    { status: "archived" },
+    { status: "deleted" }
+  ]
+});
+
+// More complex $nor
+await collection.find({
+  $nor: [
+    { price: { $lt: 10 } },
+    { quantity: { $lte: 0 } },
+    { discontinued: true }
+  ]
+});
+```
+
+## Element Operators
+
+### $exists
+
+Matches documents that have (or do not have) the specified field.
+
+```javascript
+// Find documents that have an email field (including null values)
+await collection.find({ email: { $exists: true } });
+
+// Find documents missing the optional field
+await collection.find({ nickname: { $exists: false } });
+
+// Combine with other operators
+await collection.find({
+  profile: { $exists: true },
+  "profile.verified": true
+});
+```
+
+**Important:** `$exists: true` matches documents where the field exists, including fields explicitly set to `null`. Use `{ field: { $ne: null } }` to find documents where the field exists AND is not null.
+
+### $type
+
+Matches documents where the field is of the specified type.
+
+```javascript
+// Find documents where age is a number
+await collection.find({ age: { $type: "number" } });
+
+// Find documents where tags is an array
+await collection.find({ tags: { $type: "array" } });
+
+// Find documents where metadata is an object
+await collection.find({ metadata: { $type: "object" } });
+
+// Find string values
+await collection.find({ name: { $type: "string" } });
+
+// Find boolean values
+await collection.find({ isActive: { $type: "bool" } });
+
+// Find null values
+await collection.find({ deletedAt: { $type: "null" } });
+```
+
+Supported types:
+- `"string"` - String values
+- `"number"` - Numeric values (integers and floats)
+- `"bool"` or `"boolean"` - Boolean values (true/false)
+- `"array"` - Array values
+- `"object"` - Object/document values
+- `"null"` - Null values
+
+## Array Operators
+
+### $size
+
+Matches arrays with the specified number of elements.
+
+```javascript
+// Find documents with exactly 3 tags
+await collection.find({ tags: { $size: 3 } });
+
+// Find documents with empty arrays
+await collection.find({ items: { $size: 0 } });
+```
+
+### $all
+
+Matches arrays that contain all specified elements.
+
+```javascript
+// Find documents containing all specified tags
+await collection.find({
+  tags: { $all: ["javascript", "typescript", "nodejs"] }
+});
+
+// Order doesn't matter - matches if all values exist
+await collection.find({
+  categories: { $all: ["electronics", "sale"] }
+});
+```
+
+**Note:** An empty array `{ $all: [] }` matches all documents with the field.
+
+### $elemMatch
+
+Matches documents that contain an array element matching all specified conditions.
+
+```javascript
+// Find documents with an array element matching multiple criteria
+await collection.find({
+  scores: {
+    $elemMatch: {
+      subject: "math",
+      score: { $gte: 90 }
+    }
+  }
+});
+
+// Match nested objects in arrays
+await collection.find({
+  orders: {
+    $elemMatch: {
+      status: "shipped",
+      total: { $gt: 100 }
+    }
+  }
+});
+
+// Combine multiple operators
+await collection.find({
+  items: {
+    $elemMatch: {
+      quantity: { $gte: 5 },
+      price: { $lte: 50 },
+      inStock: true
+    }
+  }
+});
+```
+
+**When to use $elemMatch:** Use `$elemMatch` when you need multiple conditions to be satisfied by the **same** array element. Without `$elemMatch`, conditions can be satisfied by different elements.
+
+```javascript
+// Without $elemMatch - conditions can match different elements
+await collection.find({
+  "scores.subject": "math",
+  "scores.score": { $gte: 90 }
+});
+// This matches if ANY element has subject="math" AND ANY element has score>=90
+
+// With $elemMatch - conditions must match the SAME element
+await collection.find({
+  scores: {
+    $elemMatch: {
+      subject: "math",
+      score: { $gte: 90 }
+    }
+  }
+});
+// This matches only if an element has BOTH subject="math" AND score>=90
+```
+
+## Evaluation Operators
+
+### $regex
+
+Matches documents where a string field matches a regular expression pattern.
+
+```javascript
+// Case-insensitive search
+await collection.find({
+  name: { $regex: "john", $options: "i" }
+});
+
+// Starts with pattern
+await collection.find({
+  email: { $regex: "^admin" }
+});
+
+// Ends with pattern
+await collection.find({
+  filename: { $regex: "\\.pdf$" }
+});
+
+// Contains pattern
+await collection.find({
+  description: { $regex: "important" }
+});
+
+// Using RegExp object
+await collection.find({
+  title: { $regex: /^The .* Book$/i }
+});
+```
+
+Supported regex patterns:
+- `^pattern` - Matches strings starting with "pattern"
+- `pattern$` - Matches strings ending with "pattern"
+- `.*` - Matches any characters (zero or more)
+- `.+` - Matches any characters (one or more)
+- `.` - Matches any single character
+- `[0-9]` - Character classes
+
+Regex options:
+- `i` - Case-insensitive matching
+- `m` - Multiline mode
+
+### $mod
+
+Matches documents where a field value divided by a divisor has the specified remainder.
+
+```javascript
+// Find documents where quantity is even (divisible by 2)
+await collection.find({
+  quantity: { $mod: [2, 0] }
+});
+
+// Find documents where ID ends in 5 (remainder 5 when divided by 10)
+await collection.find({
+  numericId: { $mod: [10, 5] }
+});
+```
+
+**Syntax:** `{ field: { $mod: [divisor, remainder] } }`
+
+## Nested Field Queries (Dot Notation)
+
+Use dot notation to query fields in embedded documents.
+
+```javascript
+// Query nested object fields
+await collection.find({
+  "address.city": "New York"
+});
+
+// Multiple levels of nesting
+await collection.find({
+  "user.profile.settings.theme": "dark"
+});
+
+// Combine with operators
+await collection.find({
+  "metrics.views": { $gte: 1000 },
+  "metrics.likes": { $gte: 100 }
+});
+
+// Query array elements by index
+await collection.find({
+  "items.0.name": "First Item"
+});
+
+// Combine nested queries with logical operators
+await collection.find({
+  $or: [
+    { "billing.country": "US" },
+    { "shipping.country": "US" }
+  ]
+});
+```
+
+## Full-Text Search
+
+### $text
+
+Performs a text search on fields with a text index.
+
+```javascript
+// Basic text search
+await collection.find({
+  $text: { $search: "coffee shop" }
+});
+
+// Search for exact phrase
+await collection.find({
+  $text: { $search: '"coffee shop"' }
+});
+
+// Exclude terms with negation
+await collection.find({
+  $text: { $search: "coffee -decaf" }
+});
+
+// Combine with other query conditions
+await collection.find({
+  $text: { $search: "organic coffee" },
+  category: "beverages",
+  inStock: true
+});
+```
+
+## Combining Multiple Operators
+
+You can combine multiple operators on the same field:
+
+```javascript
+// Range query (between 10 and 100)
+await collection.find({
+  price: { $gte: 10, $lte: 100 }
+});
+
+// Exclude specific values within a range
+await collection.find({
+  score: { $gte: 0, $lte: 100, $nin: [42, 69] }
+});
+
+// Type check with value condition
+await collection.find({
+  value: { $type: "number", $gt: 0 }
+});
+```
+
+## Query Optimization
+
+MondoDB automatically optimizes queries:
+
+- **Logical operator flattening:** Nested `$and`/`$or` of the same type are merged for efficiency
+- **CTE optimization:** Multiple array operations on the same field use Common Table Expressions
+- **Parameterized queries:** All values are parameterized to prevent SQL injection
+
+```javascript
+// These are equivalent and both optimized:
+await collection.find({
+  $and: [
+    { $and: [{ a: 1 }, { b: 2 }] },
+    { c: 3 }
+  ]
+});
+
+// Internally optimized to:
+await collection.find({
+  $and: [{ a: 1 }, { b: 2 }, { c: 3 }]
+});
+```
+
+## Complete Example
+
+Here's a complex query using multiple operator types:
+
+```javascript
+const results = await collection.find({
+  // Logical combination
+  $and: [
+    // Status must be active
+    { status: "active" },
+
+    // Category check
+    { category: { $in: ["electronics", "computers"] } },
+
+    // Price range
+    { price: { $gte: 100, $lte: 1000 } },
+
+    // Has reviews
+    { "reviews.count": { $gte: 5 } },
+
+    // Rating requirements
+    { "reviews.average": { $gte: 4.0 } },
+
+    // Either in stock or available for preorder
+    {
+      $or: [
+        { inStock: true },
+        { preorderAvailable: true }
+      ]
+    },
+
+    // Tags contain all required values
+    { tags: { $all: ["featured", "bestseller"] } },
+
+    // Has at least one variant meeting criteria
+    {
+      variants: {
+        $elemMatch: {
+          color: { $in: ["black", "white"] },
+          size: "large",
+          quantity: { $gt: 0 }
+        }
+      }
+    }
+  ],
+
+  // Not discontinued
+  discontinued: { $ne: true }
+});
+```
