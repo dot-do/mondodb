@@ -127,12 +127,12 @@ export class UpdateCommand implements CommandHandler {
     let upserted: Array<{ index: number; _id: unknown }> = []
 
     for (let i = 0; i < updates.length; i++) {
-      const op = updates[i]
-      const filter = op.q as Document
-      const update = op.u as Document
-      const multi = op.multi === true
-      const upsert = op.upsert === true
-      const arrayFilters = op.arrayFilters as Document[]
+      const op = updates[i] as Document
+      const filter = op?.q as Document
+      const update = op?.u as Document
+      const multi = op?.multi === true
+      const upsert = op?.upsert === true
+      const arrayFilters = op?.arrayFilters as Document[]
 
       const result = multi
         ? await this.backend.updateMany(context.db, collection, filter, update, {
@@ -329,8 +329,7 @@ export class GetMoreCommand implements CommandHandler {
 export class KillCursorsCommand implements CommandHandler {
   constructor(private backend: MondoBackend) {}
 
-  async execute(command: Document, context: CommandContext): Promise<CommandResult> {
-    const collection = command.killCursors as string
+  async execute(command: Document, _context: CommandContext): Promise<CommandResult> {
     const cursors = command.cursors as (Long | bigint | number)[]
 
     if (!cursors || !Array.isArray(cursors)) {

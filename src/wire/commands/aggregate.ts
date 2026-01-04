@@ -30,7 +30,7 @@ export class AggregateCommand implements CommandHandler {
     }
 
     // Check for special system aggregations
-    if (collection === '1' || collection === 1) {
+    if (collection === '1' || collection === 1 as unknown) {
       // Database-level aggregation commands
       return this.handleDatabaseAggregation(pipeline, context)
     }

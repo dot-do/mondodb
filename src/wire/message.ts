@@ -8,15 +8,15 @@
  * - OP_REPLY (legacy response)
  */
 
-import { BSON, Document, Long } from 'bson'
+import { BSON, Document } from 'bson'
 import {
   type MsgHeader,
   type OpMsgMessage,
   type OpQueryMessage,
-  type OpReplyMessage,
   type Section,
   type Section0,
   type Section1,
+  type OpCodeValue,
   OpCode,
   OpMsgFlags,
 } from './types.js'
@@ -36,7 +36,7 @@ export function parseHeader(buffer: Buffer): MsgHeader {
     messageLength: buffer.readInt32LE(0),
     requestID: buffer.readInt32LE(4),
     responseTo: buffer.readInt32LE(8),
-    opCode: buffer.readInt32LE(12),
+    opCode: buffer.readInt32LE(12) as OpCodeValue,
   }
 }
 
@@ -192,7 +192,7 @@ export function serializeOpMsg(
   additionalSections?: Section1[]
 ): Buffer {
   // Serialize the body document
-  const bodyBson = BSON.serialize(body)
+  const bodyBson = Buffer.from(BSON.serialize(body))
 
   // Calculate section 0 size
   let sectionsSize = 1 + bodyBson.length // kind byte + BSON
@@ -202,7 +202,7 @@ export function serializeOpMsg(
   if (additionalSections) {
     for (const section of additionalSections) {
       const identifierBuf = Buffer.from(section.identifier + '\0', 'utf8')
-      const docsBufs = section.documents.map((doc) => BSON.serialize(doc))
+      const docsBufs = section.documents.map((doc) => Buffer.from(BSON.serialize(doc)))
       const docsSize = docsBufs.reduce((sum, buf) => sum + buf.length, 0)
       const sectionSize = 4 + identifierBuf.length + docsSize // size + identifier + docs
 
@@ -268,7 +268,7 @@ export function serializeOpReply(
   responseFlags: number = 0
 ): Buffer {
   // Serialize documents
-  const docBuffers = documents.map((doc) => BSON.serialize(doc))
+  const docBuffers = documents.map((doc) => Buffer.from(BSON.serialize(doc)))
   const docsSize = docBuffers.reduce((sum, buf) => sum + buf.length, 0)
 
   // Total message length
@@ -362,7 +362,7 @@ export function extractCommand(message: OpMsgMessage | OpQueryMessage): {
   } else {
     // OP_QUERY
     const parts = message.fullCollectionName.split('.')
-    const db = parts[0]
+    const db = parts[0] || 'admin'
     const command = message.query
 
     return { db, command, documentSequences: new Map() }
