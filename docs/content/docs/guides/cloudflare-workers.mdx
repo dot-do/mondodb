@@ -1,0 +1,632 @@
+---
+title: Cloudflare Workers Integration
+description: Deploy MondoDB on Cloudflare Workers with Durable Objects for globally distributed document storage
+---
+
+# Cloudflare Workers Integration
+
+MondoDB is designed from the ground up to run natively on Cloudflare Workers, leveraging Durable Objects with SQLite storage for globally distributed, MongoDB-compatible document storage. This guide covers everything you need to deploy and configure MondoDB on Cloudflare's edge network.
+
+## Overview
+
+MondoDB on Cloudflare Workers provides:
+
+- **Durable Objects with SQLite** - Each database instance runs as a Durable Object with persistent SQLite storage
+- **Global distribution** - Data automatically replicates to Cloudflare's global network
+- **MongoDB-compatible API** - Use familiar MongoDB queries and operations
+- **Workers RPC** - Service bindings for efficient inter-Worker communication
+- **Vectorize integration** - Optional vector search capabilities with Cloudflare Vectorize
+- **Worker Loader** - Sandboxed JavaScript execution for `$function` operator support
+
+## Architecture
+
+```
+                    +------------------+
+                    |  Your Worker     |
+                    |  (Consumer)      |
+                    +--------+---------+
+                             |
+              Service Binding / RPC
+                             |
+                    +--------v---------+
+                    |  MondoDB Worker  |
+                    |  (Entrypoint)    |
+                    +--------+---------+
+                             |
+              Durable Object Binding
+                             |
+        +--------------------+--------------------+
+        |                    |                    |
++-------v------+     +-------v------+     +-------v------+
+| MondoDatabase|     | MondoDatabase|     | MondoDatabase|
+|   (DO #1)    |     |   (DO #2)    |     |   (DO #3)    |
+|   SQLite     |     |   SQLite     |     |   SQLite     |
++--------------+     +--------------+     +--------------+
+```
+
+## Wrangler Configuration
+
+Create a `wrangler.jsonc` (or `wrangler.toml`) configuration file:
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-mondodb-app",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-06-01",
+
+  // Required compatibility flags
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+
+  // Durable Objects configuration
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONDO_DATABASE",
+        "class_name": "MondoDatabase"
+      }
+    ]
+  },
+
+  // Migrations for SQLite-backed Durable Objects
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["MondoDatabase"]
+    }
+  ],
+
+  // Development server
+  "dev": {
+    "port": 8787,
+    "local_protocol": "http"
+  }
+}
+```
+
+### With Worker Loader (for $function support)
+
+To enable the `$function` aggregation operator for executing user-defined JavaScript functions:
+
+```jsonc
+{
+  // ... other config
+
+  "compatibility_flags": [
+    "nodejs_compat",
+    "enable_ctx_exports"
+  ],
+
+  // Worker Loader binding for sandboxed execution
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ]
+}
+```
+
+### With Vectorize (for vector search)
+
+To enable vector search and automatic embeddings:
+
+```jsonc
+{
+  // ... other config
+
+  "vectorize": {
+    "bindings": [
+      {
+        "binding": "VECTORIZE",
+        "index_name": "my-vector-index"
+      }
+    ]
+  },
+
+  "ai": {
+    "binding": "AI"
+  }
+}
+```
+
+## Durable Object Setup
+
+### MondoDatabase Class
+
+The `MondoDatabase` Durable Object is the core storage engine. It provides:
+
+- MongoDB-compatible CRUD operations
+- Aggregation pipeline support
+- Index management (including TTL and text indexes)
+- SQLite-backed persistence
+- Automatic schema migrations
+
+```typescript
+import { MondoDatabase } from 'mondodb/durable-object'
+
+export { MondoDatabase }
+```
+
+### Schema and Storage
+
+MondoDB uses a unified schema with two main tables:
+
+| Table | Description |
+|-------|-------------|
+| `collections` | Stores collection metadata including name, options, and index definitions |
+| `documents` | Stores documents as JSON with `collection_id`, `_id`, and `data` columns |
+
+The schema is automatically initialized and migrated when the Durable Object starts.
+
+## Worker Entrypoint
+
+### Basic Worker Setup
+
+```typescript
+import { MongoClient, MondoDatabase } from 'mondodb'
+
+// Export the Durable Object class
+export { MondoDatabase }
+
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env)
+    await client.connect()
+
+    try {
+      const db = client.db('myapp')
+      const users = db.collection('users')
+
+      // Perform operations
+      const result = await users.find({ active: true }).toArray()
+
+      return Response.json({ users: result })
+    } finally {
+      await client.close()
+    }
+  }
+}
+```
+
+### With RPC Entrypoint
+
+For service binding support, use the `MondoEntrypoint` class:
+
+```typescript
+import { MondoEntrypoint, MondoDatabase } from 'mondodb'
+
+export { MondoDatabase, MondoEntrypoint }
+
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace
+  LOADER?: WorkerLoader
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url)
+
+    // Handle RPC requests
+    if (url.pathname.startsWith('/rpc')) {
+      const entrypoint = new MondoEntrypoint(ctx, env)
+      return entrypoint.fetch(request)
+    }
+
+    // Handle other requests...
+    return new Response('OK')
+  }
+}
+```
+
+## Environment Variables
+
+### Required Bindings
+
+| Binding | Type | Description |
+|---------|------|-------------|
+| `MONDO_DATABASE` | `DurableObjectNamespace` | The MondoDatabase Durable Object namespace |
+
+### Optional Bindings
+
+| Binding | Type | Description |
+|---------|------|-------------|
+| `LOADER` | `WorkerLoader` | Worker Loader for `$function` operator (closed beta) |
+| `VECTORIZE` | `VectorizeIndex` | Vectorize index for vector search |
+| `AI` | `Ai` | Workers AI for embedding generation |
+| `EMBEDDING_MODEL` | `string` | Embedding model (default: `@cf/baai/bge-m3`) |
+| `EMBEDDING_ENABLED` | `string` | Enable automatic embedding generation |
+| `ENABLE_DEBUG_ENDPOINTS` | `string` | Enable debug endpoints (DO NOT use in production) |
+
+### Environment-specific Configuration
+
+```jsonc
+{
+  "env": {
+    "dev": {
+      "name": "my-app-dev",
+      "vars": {
+        "ENVIRONMENT": "development",
+        "ENABLE_DEBUG_ENDPOINTS": "true"
+      }
+    },
+    "staging": {
+      "name": "my-app-staging",
+      "vars": {
+        "ENVIRONMENT": "staging"
+      }
+    },
+    "production": {
+      "name": "my-app",
+      "vars": {
+        "ENVIRONMENT": "production"
+      }
+    }
+  }
+}
+```
+
+## RPC Communication
+
+### Service Bindings
+
+Other Workers can communicate with MondoDB via service bindings:
+
+```jsonc
+// wrangler.jsonc in consuming worker
+{
+  "services": [
+    {
+      "binding": "MONDO",
+      "service": "mondodb",
+      "entrypoint": "MondoEntrypoint"
+    }
+  ]
+}
+```
+
+```typescript
+// In your consuming worker
+interface Env {
+  MONDO: MondoBindings
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Connect via service binding
+    await env.MONDO.connect('mongodb://internal/mydb')
+
+    // Get database and collection references
+    const dbRef = await env.MONDO.db('mydb')
+    const collRef = await env.MONDO.collection('mydb', 'users')
+
+    // Execute operations
+    const users = await env.MONDO.find('mydb', 'users', { active: true })
+
+    return Response.json({ users })
+  }
+}
+```
+
+### MondoBindings Interface
+
+```typescript
+interface MondoBindings {
+  /** Connect to a MongoDB-compatible connection string */
+  connect(connectionString: string): Promise<{ connected: boolean; database?: string }>
+
+  /** Get a database reference */
+  db(name: string): Promise<DatabaseRef>
+
+  /** Get a collection reference */
+  collection(dbName: string, collectionName: string): Promise<CollectionRef>
+
+  /** Execute a find operation */
+  find(dbName: string, collectionName: string, query: Record<string, unknown>): Promise<unknown[]>
+
+  /** Execute an insertOne operation */
+  insertOne(dbName: string, collectionName: string, document: Record<string, unknown>): Promise<{ insertedId: string }>
+
+  /** Execute an updateOne operation */
+  updateOne(dbName: string, collectionName: string, filter: Record<string, unknown>, update: Record<string, unknown>): Promise<{ matchedCount: number; modifiedCount: number }>
+
+  /** Execute a deleteOne operation */
+  deleteOne(dbName: string, collectionName: string, filter: Record<string, unknown>): Promise<{ deletedCount: number }>
+}
+```
+
+### HTTP RPC Endpoint
+
+MondoDB also exposes an HTTP RPC endpoint at `/rpc`:
+
+```typescript
+// Single request
+const response = await fetch('https://your-worker.workers.dev/rpc', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    id: '1',
+    method: 'find',
+    params: ['mydb', 'users', { active: true }]
+  })
+})
+
+// Batch requests
+const batchResponse = await fetch('https://your-worker.workers.dev/rpc/batch', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify([
+    { id: '1', method: 'find', params: ['mydb', 'users', {}] },
+    { id: '2', method: 'find', params: ['mydb', 'orders', {}] }
+  ])
+})
+```
+
+## Vectorize Integration
+
+MondoDB integrates with Cloudflare Vectorize for vector search capabilities.
+
+### Configuration
+
+```jsonc
+{
+  "vectorize": {
+    "bindings": [
+      {
+        "binding": "VECTORIZE",
+        "index_name": "documents-index"
+      }
+    ]
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "EMBEDDING_ENABLED": "true"
+  }
+}
+```
+
+### Embedding Manager
+
+The `EmbeddingManager` handles automatic embedding generation:
+
+```typescript
+import { EmbeddingManager } from 'mondodb/embedding'
+
+const embeddingManager = new EmbeddingManager({
+  vectorize: env.VECTORIZE,
+  ai: env.AI,
+  collection: 'articles',
+  model: '@cf/baai/bge-m3',
+  serialization: { serializer: 'yaml' }
+})
+
+// Embed a document
+const doc = { _id: '123', title: 'Hello', content: 'World' }
+await embeddingManager.embedDocument(doc)
+
+// Embed multiple documents
+await embeddingManager.embedDocuments(docs)
+
+// Delete embeddings when documents are removed
+await embeddingManager.deleteDocument('123')
+```
+
+### Vector Search in Aggregation
+
+```typescript
+const results = await collection.aggregate([
+  {
+    $vectorSearch: {
+      queryVector: [0.1, 0.2, ...], // 1024 dimensions for bge-m3
+      path: 'embedding',
+      numCandidates: 100,
+      limit: 10
+    }
+  },
+  {
+    $project: {
+      title: 1,
+      score: { $meta: 'vectorSearchScore' }
+    }
+  }
+]).toArray()
+```
+
+## Deployment
+
+### Deploy to Cloudflare
+
+```bash
+# Deploy to production
+npx wrangler deploy
+
+# Deploy to specific environment
+npx wrangler deploy --env staging
+
+# Deploy with verbose output
+npx wrangler deploy --verbose
+```
+
+### Create Vectorize Index
+
+If using vector search, create the index first:
+
+```bash
+# Create a 1024-dimension index for bge-m3 embeddings
+npx wrangler vectorize create documents-index \
+  --dimensions 1024 \
+  --metric cosine
+```
+
+### Verify Deployment
+
+```bash
+# Check worker status
+npx wrangler tail
+
+# Test health endpoint
+curl https://your-worker.workers.dev/health
+```
+
+## Development
+
+### Local Development
+
+```bash
+# Start local development server
+npx wrangler dev
+
+# With specific environment
+npx wrangler dev --env dev
+```
+
+### Testing with Miniflare
+
+MondoDB is compatible with Miniflare for local testing:
+
+```typescript
+import { Miniflare } from 'miniflare'
+
+const mf = new Miniflare({
+  modules: true,
+  script: `
+    import { MondoDatabase } from 'mondodb'
+    export { MondoDatabase }
+    export default {
+      async fetch(request, env) {
+        // ... your worker code
+      }
+    }
+  `,
+  durableObjects: {
+    MONDO_DATABASE: 'MondoDatabase'
+  }
+})
+```
+
+## Best Practices
+
+### 1. Database Naming Convention
+
+Use meaningful database names that map to Durable Object instances:
+
+```typescript
+// Each database name creates a separate Durable Object
+const userDb = client.db('users-prod')
+const analyticsDb = client.db('analytics-prod')
+```
+
+### 2. Connection Management
+
+Always close connections in serverless environments:
+
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const client = new MongoClient(env)
+
+    try {
+      await client.connect()
+      // ... operations
+      return new Response('OK')
+    } finally {
+      await client.close()
+    }
+  }
+}
+```
+
+### 3. Error Handling
+
+Handle Durable Object errors gracefully:
+
+```typescript
+try {
+  const result = await collection.insertOne(doc)
+} catch (error) {
+  if (error.message.includes('Durable Object')) {
+    // Handle DO-specific errors
+    console.error('Durable Object error:', error)
+  }
+  throw error
+}
+```
+
+### 4. Monitoring
+
+Enable observability in your wrangler configuration:
+
+```jsonc
+{
+  "observability": {
+    "enabled": true
+  }
+}
+```
+
+### 5. Security
+
+- Never enable `ENABLE_DEBUG_ENDPOINTS` in production
+- Use authentication for RPC endpoints in production
+- Validate input data before operations
+
+## Limitations
+
+- **Single region writes** - Durable Objects provide strong consistency within a single location
+- **SQLite row limits** - Documents are limited by SQLite's maximum row size
+- **Vectorize batch limits** - Maximum 100 vectors per upsert operation
+- **Worker Loader availability** - `$function` operator requires closed beta access
+
+## Troubleshooting
+
+### Common Issues
+
+**Durable Object not found**
+
+Ensure your wrangler configuration includes the migration tag:
+
+```jsonc
+"migrations": [
+  {
+    "tag": "v1",
+    "new_sqlite_classes": ["MondoDatabase"]
+  }
+]
+```
+
+**MONDO_DATABASE binding missing**
+
+Verify the binding name matches in both wrangler.jsonc and your code:
+
+```typescript
+interface Env {
+  MONDO_DATABASE: DurableObjectNamespace // Must match binding name
+}
+```
+
+**SQLite errors**
+
+Check that `nodejs_compat` is enabled in compatibility flags.
+
+### Debug Endpoints
+
+In development, enable debug endpoints for troubleshooting:
+
+```bash
+# Check database health
+curl http://localhost:8787/health
+
+# Dump database contents (dev only)
+curl http://localhost:8787/internal/dump
+
+# Reset database (dev only)
+curl -X POST http://localhost:8787/internal/reset
+```

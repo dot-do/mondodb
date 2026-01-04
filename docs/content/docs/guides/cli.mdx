@@ -1,0 +1,353 @@
+---
+title: CLI Server
+description: Run MondoDB locally with the CLI server for development and testing
+---
+
+# CLI Server
+
+The MondoDB CLI provides a command-line interface for running a MongoDB-compatible wire protocol server locally. It supports two modes of operation: local SQLite storage for development, and remote proxy mode for connecting to Cloudflare Workers deployments.
+
+## Overview
+
+The CLI server speaks the MongoDB wire protocol, allowing you to connect using standard MongoDB tools like:
+
+- **MongoDB Compass** - Visual database browser
+- **mongosh** - MongoDB Shell
+- **Any MongoDB driver** - Node.js, Python, Go, etc.
+
+This makes MondoDB ideal for local development while maintaining compatibility with your production Cloudflare Workers deployment.
+
+## Installation
+
+Install MondoDB globally or as a project dependency:
+
+```bash
+# Global installation
+npm install -g mondodb
+
+# Project dependency
+npm install mondodb
+```
+
+## Quick Start
+
+Start a local server with default settings:
+
+```bash
+mondodb serve
+```
+
+This starts a server on `localhost:27017` using SQLite storage in the `./data` directory.
+
+Connect with MongoDB Compass or mongosh:
+
+```bash
+mongosh mongodb://localhost:27017
+```
+
+## Command-Line Options
+
+```
+Usage: mondodb serve [options]
+
+Start a MongoDB wire protocol server backed by SQLite.
+
+Options:
+  -p, --port <port>     Port to listen on (default: 27017)
+  -H, --host <host>     Host to bind to (default: localhost)
+  -d, --data <path>     Data directory for local SQLite storage (default: ./data)
+  -r, --remote <url>    Proxy/forward to remote Cloudflare Workers endpoint
+  -v, --verbose         Enable verbose logging
+  -V, --version         Show version number
+  -h, --help            Show help message
+```
+
+### Option Details
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--port` | `-p` | `27017` | TCP port for the wire protocol server (1-65535) |
+| `--host` | `-H` | `localhost` | Host address to bind to |
+| `--data` | `-d` | `./data` | Directory for SQLite database files |
+| `--remote` | `-r` | - | URL of remote Cloudflare Workers RPC endpoint |
+| `--verbose` | `-v` | `false` | Enable detailed logging of commands |
+| `--version` | `-V` | - | Print version and exit |
+| `--help` | `-h` | - | Print help message and exit |
+
+## Local SQLite Mode
+
+The default mode stores data in SQLite databases on your local filesystem. Each database is stored as a separate `.sqlite` file in the data directory.
+
+```bash
+# Start with default data directory
+mondodb serve
+
+# Use custom data directory
+mondodb serve --data /var/lib/mondodb
+
+# Custom port and verbose logging
+mondodb serve --port 27018 --verbose
+```
+
+### Data Directory Structure
+
+```
+./data/
+  myapp.sqlite      # Database "myapp"
+  analytics.sqlite  # Database "analytics"
+  test.sqlite       # Database "test"
+```
+
+### Supported Operations
+
+Local SQLite mode supports the full MongoDB CRUD API:
+
+- **Find operations** with filters, projections, sorting, skip, and limit
+- **Insert** single and multiple documents
+- **Update** with `$set`, `$unset`, `$inc`, `$push`, and replacement
+- **Delete** single and multiple documents
+- **Aggregation pipeline** with `$match`, `$project`, `$sort`, `$limit`, `$skip`, `$group`, `$count`, and `$sample`
+- **Index management** (metadata only in SQLite mode)
+- **Database and collection management**
+
+## Remote Proxy Mode
+
+Proxy mode forwards all operations to a remote Cloudflare Workers deployment via the RPC endpoint. This is useful for:
+
+- Testing against production data
+- Local development with remote Durable Objects
+- Debugging production issues
+
+```bash
+# Proxy to Cloudflare Workers
+mondodb serve --remote https://my-mondodb.workers.dev/rpc
+
+# Proxy with local port customization
+mondodb serve --remote https://my-mondodb.workers.dev/rpc --port 27018 --verbose
+```
+
+### RPC Endpoint
+
+Your Cloudflare Workers deployment must expose an RPC endpoint. MondoDB automatically handles:
+
+- Request/response serialization
+- Error handling with MongoDB-compatible error codes
+- Retry logic for transient failures
+- Connection validation on startup
+
+### Configuration Example
+
+```bash
+# Development: Use local SQLite
+mondodb serve
+
+# Staging: Proxy to staging worker
+mondodb serve --remote https://staging.my-mondodb.workers.dev/rpc
+
+# Production debugging: Proxy with verbose logging
+mondodb serve --remote https://my-mondodb.workers.dev/rpc --verbose
+```
+
+## Binding to All Interfaces
+
+By default, the server only accepts connections from localhost. To allow connections from other machines on your network:
+
+```bash
+# Bind to all interfaces
+mondodb serve --host 0.0.0.0
+
+# With custom port
+mondodb serve --host 0.0.0.0 --port 27017
+```
+
+**Security Note:** Only bind to `0.0.0.0` in trusted network environments. The CLI server does not enable authentication by default.
+
+## Verbose Logging
+
+Enable verbose mode to see all commands being executed:
+
+```bash
+mondodb serve --verbose
+```
+
+Output:
+
+```
+MondoDB v1.0.0
+MongoDB-compatible database backed by SQLite
+
+Mode: Local/SQLite
+Connect: mongodb://localhost:27017
+Data directory: ./data
+
+Ready to accept connections. Press Ctrl+C to stop.
+
+[1] find on myapp
+[1] insertOne on myapp
+[1] updateOne on myapp
+```
+
+Each log line shows:
+- `[N]` - Connection ID
+- Command name (find, insert, update, etc.)
+- Database name
+
+## Graceful Shutdown
+
+The server handles shutdown signals gracefully:
+
+- **SIGINT** (Ctrl+C) - Graceful shutdown
+- **SIGTERM** - Graceful shutdown (for process managers)
+
+During shutdown:
+1. Stop accepting new connections
+2. Wait for active operations to complete
+3. Close all database connections
+4. Clean up resources
+
+## Common Usage Patterns
+
+### Local Development
+
+```bash
+# Terminal 1: Start the server
+mondodb serve --verbose
+
+# Terminal 2: Use mongosh
+mongosh mongodb://localhost:27017/myapp
+```
+
+### Integration Testing
+
+```bash
+# Start server on test port with isolated data
+mondodb serve --port 27018 --data ./test-data
+
+# Run tests
+npm test
+
+# Clean up
+rm -rf ./test-data
+```
+
+### MongoDB Compass Connection
+
+1. Start the CLI server: `mondodb serve`
+2. Open MongoDB Compass
+3. Connect using: `mongodb://localhost:27017`
+4. Browse databases, collections, and documents visually
+
+### CI/CD Pipeline
+
+```yaml
+# GitHub Actions example
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Start MondoDB
+        run: bun run mondodb serve --port 27017 &
+
+      - name: Wait for server
+        run: sleep 2
+
+      - name: Run tests
+        run: bun test
+```
+
+## Error Handling
+
+The CLI provides helpful error messages for common issues:
+
+### Port Already in Use
+
+```
+error: Port 27017 is already in use (EADDRINUSE)
+
+Hint: The port is already in use. Try a different port with --port.
+```
+
+### Permission Denied
+
+```
+error: Permission denied (EACCES)
+
+Hint: Permission denied. Ports below 1024 require root privileges.
+      Try using a port number above 1024, e.g., --port=27017.
+```
+
+### Remote Connection Failed
+
+```
+error: Failed to connect to remote worker: https://my-worker.dev/rpc
+
+Hint: Could not connect to the remote worker.
+      Check that the URL is correct and the worker is running.
+```
+
+## Programmatic Usage
+
+You can also use the CLI server programmatically in your Node.js/Bun applications:
+
+```typescript
+import { parseArgs, runServer, validateOptions } from 'mondodb/cli/server'
+
+const options = parseArgs(['--port', '27018', '--verbose'])
+validateOptions(options)
+
+const controller = await runServer(options)
+
+// Check server status
+console.log(controller.isRunning)        // true
+console.log(controller.address)          // { host: 'localhost', port: 27018 }
+
+// Graceful shutdown
+await controller.stop()
+```
+
+### ServerController Interface
+
+```typescript
+interface ServerController {
+  /** Gracefully stop the server */
+  stop(): Promise<void>
+
+  /** Whether the server is currently running */
+  isRunning: boolean
+
+  /** Whether accepting new connections */
+  isAcceptingConnections: boolean
+
+  /** Number of active connections */
+  activeConnections: number
+
+  /** Server address info */
+  address: { host: string; port: number }
+}
+```
+
+## Best Practices
+
+1. **Use verbose mode during development** - Helps debug query issues
+2. **Use isolated data directories for tests** - Prevents test pollution
+3. **Use remote mode sparingly** - Local SQLite is faster for development
+4. **Set up graceful shutdown** - Handle SIGTERM in production scripts
+5. **Use standard MongoDB port (27017)** - Tools default to this port
+
+## Limitations
+
+The CLI server has some differences from a full MongoDB deployment:
+
+- **No authentication** - The local server runs without auth by default
+- **No replica sets** - Single-node only
+- **No sharding** - All data is local
+- **SQLite query translation** - Some complex queries may behave differently
+- **In-memory aggregation** - Large aggregations load all documents into memory
+
+For production workloads, deploy MondoDB to Cloudflare Workers with Durable Objects.

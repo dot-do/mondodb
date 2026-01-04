@@ -1,0 +1,413 @@
+---
+title: MondoDB Studio
+description: Web-based graphical interface for managing databases, collections, and documents
+---
+
+# MondoDB Studio
+
+MondoDB Studio is a web-based graphical interface for managing your MondoDB databases. It provides an intuitive way to connect to databases, browse collections, query documents, and perform CRUD operations without writing code.
+
+## Overview
+
+Studio consists of several core components:
+
+- **Connection Panel** - Manage database connections with saved credentials
+- **Database Browser** - Navigate databases and collections in a tree view
+- **Document Viewer** - Browse and search documents with pagination
+- **Query Bar** - Write and execute MongoDB queries with syntax highlighting
+- **CRUD Dialogs** - Insert, edit, and delete documents through modal interfaces
+
+---
+
+## Connection Management
+
+### Connection Panel
+
+The Connection Panel is the entry point to Studio. It allows you to manage multiple database connections.
+
+**Panel Views:**
+
+| View | Description |
+|------|-------------|
+| **Saved** | List of saved connections with quick connect |
+| **New** | Form to create a new connection |
+| **Quick** | Connect directly using a connection URI |
+
+### Creating a New Connection
+
+1. Click the **New** tab in the Connection Panel
+2. Enter a **Connection Name** (e.g., "Production Database")
+3. Choose input method:
+   - **URI** - Paste a connection string directly
+   - **Advanced** - Fill in individual fields
+
+**URI Format:**
+```
+mondodb://username:password@host:port/database
+```
+
+**Advanced Form Fields:**
+
+| Field | Description | Default |
+|-------|-------------|---------|
+| Host | Database server hostname | `localhost` |
+| Port | Server port | `27017` |
+| Database | Default database name | `test` |
+| Authentication | Auth type (none, basic, X.509, AWS, Kerberos) | `none` |
+| Username | Auth username | - |
+| Password | Auth password | - |
+| Auth Source | Authentication database | `admin` |
+| TLS/SSL | Enable encrypted connection | `false` |
+| Connect Timeout | Connection timeout in milliseconds | `10000` |
+| Max Pool Size | Maximum connection pool size | `100` |
+
+### Testing Connections
+
+Before connecting, use the **Test Connection** button to verify connectivity:
+
+- A successful test shows latency in milliseconds
+- Failed tests display the error message
+
+### Saving and Managing Connections
+
+**Save a Connection:**
+1. Fill in connection details
+2. Click **Save** to store without connecting
+3. Click **Connect** to save and connect immediately
+
+**Connection List Features:**
+- Search connections by name, host, or database
+- Sort by name, recently used, or creation date
+- Filter to show only favorites
+- Mark connections as favorites with the star icon
+
+**Connection Actions (via menu):**
+- **Edit** - Modify connection settings
+- **Duplicate** - Create a copy of the connection
+- **Delete** - Remove the saved connection
+
+### Connection Status Indicator
+
+The status indicator shows real-time connection state:
+
+| Status | Indicator | Description |
+|--------|-----------|-------------|
+| Connected | Green dot | Successfully connected to database |
+| Connecting | Yellow dot | Connection in progress |
+| Error | Red dot | Connection failed |
+| Disconnected | Gray dot | Not connected |
+
+When connected, the indicator displays:
+- Connection name
+- Latency in milliseconds
+- Server version
+
+---
+
+## Database Browser
+
+The Database Browser provides a hierarchical tree view of your databases and collections.
+
+### Navigation
+
+- Click a database name to expand/collapse its collections
+- Click a collection to select it and view documents
+- Use the search bar to filter databases and collections
+
+### Database Actions
+
+Hover over a database to reveal action buttons:
+
+| Action | Icon | Description |
+|--------|------|-------------|
+| Create Collection | `+` | Add a new collection to the database |
+| Drop Database | Trash | Delete the database (with confirmation) |
+
+### Collection Actions
+
+Hover over a collection to reveal action buttons:
+
+| Action | Icon | Description |
+|--------|------|-------------|
+| Drop Collection | Trash | Delete the collection (with confirmation) |
+
+### Collection Statistics
+
+When a collection is expanded, Studio displays:
+- Document count
+- Data size
+- Index count
+
+### Creating a Database
+
+Click the **Create Database** button at the bottom of the browser to create a new database. Enter the database name and optionally specify an initial collection.
+
+---
+
+## Query Bar
+
+The Query Bar provides a powerful interface for writing and executing MongoDB queries.
+
+### Editor Features
+
+- **Syntax highlighting** for JSON
+- **Real-time validation** with error indicators
+- **Line numbers** for easy reference
+- **Bracket matching** and auto-closing
+- **Auto-completion** for common patterns
+
+### Query Tabs
+
+Switch between different query components:
+
+| Tab | Description | Example |
+|-----|-------------|---------|
+| **Filter** | Match documents | `{ "status": "active" }` |
+| **Projection** | Select fields | `{ "name": 1, "email": 1 }` |
+| **Sort** | Order results | `{ "createdAt": -1 }` |
+
+### Query Options
+
+- **Limit** - Maximum documents to return (1-1000)
+
+### Executing Queries
+
+**Methods:**
+- Click the **Execute** button
+- Press `Cmd+Enter` (Mac) or `Ctrl+Enter` (Windows/Linux)
+- Press `Shift+Enter`
+
+**Query Results Display:**
+- Document count returned
+- Execution time in milliseconds
+
+### Toolbar Actions
+
+| Button | Shortcut | Description |
+|--------|----------|-------------|
+| Format | `Shift+Alt+F` | Pretty-print JSON |
+| Clear | - | Reset query to `{}` |
+| History | - | Toggle query history panel |
+
+### Validation Errors
+
+Invalid JSON is highlighted with:
+- Red border around the editor
+- Error badge in header
+- Detailed error message with line and column numbers
+
+---
+
+## Document Viewer and Editor
+
+### Viewing Documents
+
+Documents are displayed in a scrollable list with:
+- Document ID prominently shown
+- Field names with type indicators
+- Expandable nested objects and arrays
+
+### Inline Field Editing
+
+The Document Editor supports inline editing of all field types:
+
+| Type | Editor | Description |
+|------|--------|-------------|
+| String | Text input | Standard text editing |
+| Number | Number input | Numeric value with validation |
+| Boolean | Toggle switch | Click to toggle true/false |
+| Array | Expandable list | Click `[+]` to expand items |
+| Object | Expandable tree | Click `{+}` to expand fields |
+| Null | Disabled | Cannot be edited inline |
+
+**Field Type Indicators:**
+Each field displays a type badge (string, number, boolean, array, object, null).
+
+### Editing Documents
+
+1. Click on a document to open the editor
+2. Modify field values inline
+3. View the **Changes Preview** panel showing:
+   - Modified fields (old value -> new value)
+   - Added fields
+   - Removed fields
+4. Click **Save** to apply changes
+
+**Adding Fields:**
+1. Click **+ Add field** at the bottom
+2. Enter the field name
+3. Press Enter or click **Add**
+
+**Deleting Fields:**
+1. Hover over a field row
+2. Click the **Delete** button that appears
+
+**Validation:**
+- Required fields show errors if empty
+- Invalid values are highlighted with red borders
+
+### Unsaved Changes Warning
+
+If you have unsaved changes and attempt to cancel:
+1. A confirmation dialog appears
+2. Choose **Discard changes** to lose changes
+3. Choose **Keep editing** to continue
+
+---
+
+## CRUD Operations via UI
+
+### Insert Document Dialog
+
+Insert new documents using the graphical dialog:
+
+1. Click the **Insert Document** button
+2. Enter JSON in the editor:
+```json
+{
+  "name": "New Document",
+  "status": "active",
+  "createdAt": { "$date": "2024-01-15T10:30:00Z" }
+}
+```
+3. Click **Insert** to add the document
+
+**Editor Features:**
+- Syntax highlighting
+- Real-time JSON validation
+- Format button to pretty-print
+
+**Dialog Actions:**
+
+| Button | Shortcut | Description |
+|--------|----------|-------------|
+| Format | `Cmd+Shift+F` | Pretty-print JSON |
+| Clear | - | Reset to empty object |
+| Insert | `Cmd+Enter` | Submit the document |
+| Cancel | `Escape` | Close without inserting |
+
+### Delete Document Dialog
+
+Delete documents with confirmation:
+
+**Single Document Deletion:**
+1. Click delete on a document row
+2. Review the document preview
+3. Confirm by clicking **Delete**
+
+**Bulk Deletion:**
+1. Select multiple documents
+2. Click **Delete Selected**
+3. Review the count of documents to delete
+4. Confirm by clicking **Delete N Documents**
+
+**Dialog Features:**
+- Document preview (up to 3 documents shown)
+- Warning message about permanent deletion
+- Progress bar for bulk operations
+
+---
+
+## Keyboard Shortcuts
+
+### Global Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Escape` | Close current dialog |
+
+### Query Bar
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl + Enter` | Execute query |
+| `Shift + Enter` | Execute query |
+| `Shift + Alt + F` | Format JSON |
+
+### Document Editor
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl + Enter` | Save document |
+| `Escape` | Cancel editing (if no changes) |
+
+### Insert Dialog
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl + Enter` | Insert document |
+| `Cmd/Ctrl + Shift + F` | Format JSON |
+| `Escape` | Cancel and close |
+
+---
+
+## Workflows
+
+### Connecting and Browsing
+
+1. Open MondoDB Studio
+2. Enter connection URI or create a new connection
+3. Click **Connect**
+4. Expand databases in the tree view
+5. Click a collection to view documents
+
+### Querying Data
+
+1. Select a collection
+2. Enter a filter in the Query Bar:
+```json
+{ "status": "active", "age": { "$gte": 18 } }
+```
+3. Optionally add projection:
+```json
+{ "name": 1, "email": 1, "_id": 0 }
+```
+4. Set sort order:
+```json
+{ "createdAt": -1 }
+```
+5. Adjust the limit if needed
+6. Press `Cmd+Enter` to execute
+
+### Editing a Document
+
+1. Find the document to edit
+2. Click to open the Document Editor
+3. Modify fields:
+   - Click a string/number field to edit inline
+   - Toggle boolean fields with the switch
+   - Expand arrays/objects to edit nested values
+4. Review changes in the diff preview
+5. Click **Save** to apply
+
+### Bulk Operations
+
+**Delete multiple documents:**
+1. Use the Query Bar to filter documents
+2. Select documents using checkboxes
+3. Click **Delete Selected**
+4. Confirm the bulk deletion
+
+---
+
+## Tips and Best Practices
+
+### Connection Management
+- Save frequently used connections with descriptive names
+- Use favorites to pin important connections
+- Test connections before saving to verify credentials
+
+### Query Performance
+- Use filters to limit result sets
+- Apply projections to return only needed fields
+- Set reasonable limits to avoid loading too many documents
+
+### Document Editing
+- Review the diff preview before saving
+- Use the format button to validate JSON structure
+- Be cautious with bulk deletions - they cannot be undone
+
+### Security
+- Never commit connection strings with passwords
+- Use environment-specific connections
+- Disconnect when finished with sensitive databases

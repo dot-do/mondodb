@@ -1,0 +1,576 @@
+---
+title: Geospatial Queries
+description: Query location-based data with MongoDB-compatible geospatial operators in MondoDB
+---
+
+# Geospatial Queries
+
+MondoDB provides MongoDB-compatible geospatial query operators for working with location-based data. This guide covers how to store, index, and query geographic data using GeoJSON format and geospatial operators.
+
+## Overview
+
+MondoDB supports geospatial queries that let you:
+
+- Find documents near a specific location
+- Find documents within a geographic boundary
+- Find documents that intersect with a geometry
+- Sort results by distance from a point
+
+Under the hood, MondoDB translates geospatial queries to SQLite using the Haversine formula for accurate spherical distance calculations.
+
+## GeoJSON Data Format
+
+MondoDB uses the GeoJSON format for storing and querying geospatial data. GeoJSON is an open standard for representing geographic features.
+
+### Point
+
+The most common geometry type, representing a single location with longitude and latitude.
+
+```typescript
+{
+  type: 'Point',
+  coordinates: [longitude, latitude]
+}
+```
+
+**Example:**
+
+```typescript
+await collection.insertOne({
+  name: 'Central Park',
+  location: {
+    type: 'Point',
+    coordinates: [-73.965355, 40.782865]  // [longitude, latitude]
+  }
+})
+```
+
+**Important:** Coordinates are specified as `[longitude, latitude]` (not latitude, longitude). This follows the GeoJSON standard where longitude comes first.
+
+### Polygon
+
+Represents an area defined by a series of points forming a closed ring.
+
+```typescript
+{
+  type: 'Polygon',
+  coordinates: [
+    [  // Exterior ring (counter-clockwise)
+      [lng1, lat1],
+      [lng2, lat2],
+      [lng3, lat3],
+      [lng1, lat1]  // Must close the ring
+    ]
+  ]
+}
+```
+
+**Example:**
+
+```typescript
+const manhattanBounds = {
+  type: 'Polygon',
+  coordinates: [[
+    [-74.047285, 40.679548],
+    [-73.907000, 40.679548],
+    [-73.907000, 40.882214],
+    [-74.047285, 40.882214],
+    [-74.047285, 40.679548]  // Close the polygon
+  ]]
+}
+```
+
+**Rules for valid polygons:**
+- The exterior ring must have at least 4 points (including the closing point)
+- The first and last points must be identical to close the ring
+- Coordinates must be valid (longitude: -180 to 180, latitude: -90 to 90)
+
+### LineString
+
+Represents a path defined by two or more points.
+
+```typescript
+{
+  type: 'LineString',
+  coordinates: [
+    [lng1, lat1],
+    [lng2, lat2],
+    [lng3, lat3]
+  ]
+}
+```
+
+### MultiPoint
+
+Represents multiple point locations.
+
+```typescript
+{
+  type: 'MultiPoint',
+  coordinates: [
+    [lng1, lat1],
+    [lng2, lat2],
+    [lng3, lat3]
+  ]
+}
+```
+
+---
+
+## Creating Geospatial Indexes
+
+For efficient geospatial queries, create a `2dsphere` index on fields containing GeoJSON data.
+
+### 2dsphere Index
+
+The `2dsphere` index supports queries on spherical geometry (Earth's surface).
+
+```typescript
+// Create a 2dsphere index on the location field
+await collection.createIndex({ location: '2dsphere' })
+
+// With additional options
+await collection.createIndex(
+  { location: '2dsphere' },
+  { name: 'location_geo_index' }
+)
+```
+
+### Compound Geospatial Indexes
+
+Combine geospatial indexes with other fields for complex queries:
+
+```typescript
+// Index for querying stores by category and location
+await collection.createIndex({
+  category: 1,
+  location: '2dsphere'
+})
+
+// Query using both fields
+const coffeeShopsNearby = await collection.find({
+  category: 'coffee',
+  location: {
+    $near: {
+      $geometry: { type: 'Point', coordinates: [-73.99, 40.73] },
+      $maxDistance: 1000
+    }
+  }
+}).toArray()
+```
+
+### 2d Index
+
+For legacy coordinate pairs (flat 2D geometry), use a `2d` index:
+
+```typescript
+await collection.createIndex({ coordinates: '2d' })
+```
+
+**Note:** `2dsphere` indexes are recommended for most use cases as they account for Earth's curvature.
+
+---
+
+## Query Operators
+
+### $near
+
+Find documents near a point, sorted by distance (closest first).
+
+```typescript
+const nearbyPlaces = await collection.find({
+  location: {
+    $near: {
+      $geometry: {
+        type: 'Point',
+        coordinates: [-73.9667, 40.78]  // Central Park
+      },
+      $maxDistance: 2000,  // Maximum distance in meters
+      $minDistance: 100    // Minimum distance in meters (optional)
+    }
+  }
+}).toArray()
+```
+
+**Parameters:**
+- `$geometry` - The reference point (GeoJSON Point)
+- `$maxDistance` - Maximum distance in meters
+- `$minDistance` - Minimum distance in meters (optional)
+
+**Returns:** Documents sorted by distance from the point (ascending).
+
+### $nearSphere
+
+Same as `$near` but explicitly uses spherical geometry for distance calculations.
+
+```typescript
+const nearbyRestaurants = await collection.find({
+  location: {
+    $nearSphere: {
+      $geometry: {
+        type: 'Point',
+        coordinates: [-122.4194, 37.7749]  // San Francisco
+      },
+      $maxDistance: 5000  // 5km radius
+    }
+  }
+}).toArray()
+```
+
+**Note:** In MondoDB, both `$near` and `$nearSphere` use the Haversine formula for spherical distance calculations on `2dsphere` indexes.
+
+### $geoWithin
+
+Find documents with locations inside a specified shape. Results are not sorted by distance.
+
+#### Within a Polygon
+
+```typescript
+const placesInArea = await collection.find({
+  location: {
+    $geoWithin: {
+      $geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [-74.05, 40.70],
+          [-73.90, 40.70],
+          [-73.90, 40.80],
+          [-74.05, 40.80],
+          [-74.05, 40.70]
+        ]]
+      }
+    }
+  }
+}).toArray()
+```
+
+#### Within a Box
+
+```typescript
+const placesInBox = await collection.find({
+  location: {
+    $geoWithin: {
+      $box: [
+        [-74.05, 40.70],  // Bottom-left corner [lng, lat]
+        [-73.90, 40.80]   // Top-right corner [lng, lat]
+      ]
+    }
+  }
+}).toArray()
+```
+
+#### Within a Circle (2D)
+
+For flat 2D geometry:
+
+```typescript
+const placesInCircle = await collection.find({
+  location: {
+    $geoWithin: {
+      $center: [
+        [-73.9667, 40.78],  // Center point [lng, lat]
+        0.01                 // Radius in coordinate units
+      ]
+    }
+  }
+}).toArray()
+```
+
+#### Within a Sphere
+
+For spherical geometry:
+
+```typescript
+const placesInSphere = await collection.find({
+  location: {
+    $geoWithin: {
+      $centerSphere: [
+        [-73.9667, 40.78],        // Center point [lng, lat]
+        1 / 6371                   // Radius in radians (1km / Earth radius)
+      ]
+    }
+  }
+}).toArray()
+```
+
+**Converting distance to radians:** Divide the distance by Earth's radius (6,371 km or 3,959 miles).
+
+### $geoIntersects
+
+Find documents with geometries that intersect with a specified GeoJSON geometry.
+
+```typescript
+const intersectingRoutes = await collection.find({
+  route: {
+    $geoIntersects: {
+      $geometry: {
+        type: 'Polygon',
+        coordinates: [[
+          [-74.05, 40.70],
+          [-73.90, 40.70],
+          [-73.90, 40.80],
+          [-74.05, 40.80],
+          [-74.05, 40.70]
+        ]]
+      }
+    }
+  }
+}).toArray()
+```
+
+---
+
+## Distance Calculations
+
+MondoDB uses the Haversine formula to calculate great-circle distances between points on Earth's surface. This accounts for Earth's curvature and provides accurate distance calculations.
+
+### Distance Units
+
+- `$near` and `$nearSphere`: Distances are in **meters**
+- `$centerSphere`: Radius is in **radians**
+
+### Converting Units
+
+```typescript
+// Convert kilometers to meters
+const distanceKm = 5
+const distanceMeters = distanceKm * 1000  // 5000 meters
+
+// Convert miles to meters
+const distanceMiles = 3
+const distanceMeters2 = distanceMiles * 1609.34  // ~4828 meters
+
+// Convert kilometers to radians (for $centerSphere)
+const radiusKm = 10
+const radiusRadians = radiusKm / 6371  // Earth's radius in km
+```
+
+---
+
+## Code Examples
+
+### Store Finder
+
+Find stores near a user's location, sorted by distance:
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+async function findNearbyStores(userLng: number, userLat: number) {
+  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  await client.connect()
+
+  const db = client.db('retail')
+  const stores = db.collection('stores')
+
+  // Ensure geospatial index exists
+  await stores.createIndex({ location: '2dsphere' })
+
+  // Find stores within 10km, sorted by distance
+  const nearbyStores = await stores.find({
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [userLng, userLat]
+        },
+        $maxDistance: 10000  // 10km in meters
+      }
+    }
+  }).limit(10).toArray()
+
+  return nearbyStores
+}
+
+// Usage
+const stores = await findNearbyStores(-73.9857, 40.7484)  // Times Square
+console.log(stores)
+```
+
+### Nearby Search with Filters
+
+Find nearby restaurants filtered by cuisine type:
+
+```typescript
+async function findNearbyRestaurants(
+  lng: number,
+  lat: number,
+  cuisine: string,
+  maxDistanceKm: number
+) {
+  const restaurants = db.collection('restaurants')
+
+  // Create compound index for efficient queries
+  await restaurants.createIndex({
+    cuisine: 1,
+    location: '2dsphere'
+  })
+
+  const results = await restaurants.find({
+    cuisine: cuisine,
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [lng, lat]
+        },
+        $maxDistance: maxDistanceKm * 1000
+      }
+    }
+  }).toArray()
+
+  return results
+}
+
+// Find Italian restaurants within 2km
+const italianRestaurants = await findNearbyRestaurants(
+  -122.4194, 37.7749,  // San Francisco
+  'italian',
+  2
+)
+```
+
+### Area Queries - Delivery Zone Check
+
+Check if an address is within a delivery zone:
+
+```typescript
+async function isInDeliveryZone(
+  addressLng: number,
+  addressLat: number,
+  restaurantId: string
+) {
+  const zones = db.collection('delivery_zones')
+
+  const zone = await zones.findOne({
+    restaurantId: restaurantId,
+    boundary: {
+      $geoIntersects: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [addressLng, addressLat]
+        }
+      }
+    }
+  })
+
+  return zone !== null
+}
+
+// Check if address is in delivery zone
+const canDeliver = await isInDeliveryZone(-73.98, 40.75, 'restaurant123')
+if (canDeliver) {
+  console.log('Delivery available!')
+} else {
+  console.log('Sorry, outside delivery area')
+}
+```
+
+### Finding Points in a Region
+
+Find all events happening in a specific city area:
+
+```typescript
+async function findEventsInArea(polygon: number[][]) {
+  const events = db.collection('events')
+
+  await events.createIndex({ location: '2dsphere' })
+
+  const results = await events.find({
+    location: {
+      $geoWithin: {
+        $geometry: {
+          type: 'Polygon',
+          coordinates: [polygon]
+        }
+      }
+    },
+    date: { $gte: new Date() }  // Only future events
+  }).sort({ date: 1 }).toArray()
+
+  return results
+}
+
+// Define downtown area
+const downtownBounds = [
+  [-73.99, 40.71],
+  [-73.97, 40.71],
+  [-73.97, 40.73],
+  [-73.99, 40.73],
+  [-73.99, 40.71]  // Close the polygon
+]
+
+const downtownEvents = await findEventsInArea(downtownBounds)
+```
+
+### Radius Search with Distance Limit
+
+Find users within a certain radius for a ride-sharing app:
+
+```typescript
+async function findNearbyDrivers(
+  pickupLng: number,
+  pickupLat: number,
+  maxDistanceMeters: number = 5000
+) {
+  const drivers = db.collection('drivers')
+
+  await drivers.createIndex({ currentLocation: '2dsphere' })
+
+  const availableDrivers = await drivers.find({
+    status: 'available',
+    currentLocation: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [pickupLng, pickupLat]
+        },
+        $maxDistance: maxDistanceMeters
+      }
+    }
+  }).limit(5).toArray()
+
+  return availableDrivers
+}
+
+// Find 5 nearest available drivers within 5km
+const drivers = await findNearbyDrivers(-122.4194, 37.7749)
+```
+
+---
+
+## Best Practices
+
+### Data Storage
+
+- Always use GeoJSON format with `type` and `coordinates` fields
+- Remember: coordinates are `[longitude, latitude]`
+- Validate coordinates are within valid ranges:
+  - Longitude: -180 to 180
+  - Latitude: -90 to 90
+
+### Indexing
+
+- Create `2dsphere` indexes for all fields used in geospatial queries
+- Use compound indexes when filtering by both location and other fields
+- Place the non-geospatial field first in compound indexes for equality queries
+
+### Query Performance
+
+- Always specify `$maxDistance` to limit the search area
+- Use `limit()` to cap the number of results
+- Consider using `$geoWithin` instead of `$near` if you don't need distance sorting
+
+### Distance Calculations
+
+- Use meters for `$near` and `$nearSphere`
+- Use radians for `$centerSphere`
+- Account for Earth's curvature using spherical queries for accurate long-distance calculations
+
+---
+
+## Related
+
+- [Indexing](/docs/guides/indexing) - Index creation and management
+- [CRUD Operations](/docs/guides/crud) - Basic document operations
+- [Aggregation](/docs/guides/aggregation) - Data processing pipelines

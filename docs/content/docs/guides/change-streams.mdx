@@ -1,0 +1,575 @@
+---
+title: Change Streams
+description: Real-time notifications for data changes in MondoDB collections
+---
+
+# Change Streams
+
+Change streams provide real-time notifications when data changes in your MondoDB collections. You can watch for inserts, updates, replaces, and deletes, and react to changes as they happen. This is ideal for building reactive applications, live dashboards, and real-time synchronization features.
+
+## Overview
+
+Change streams allow you to:
+
+- **Watch for changes** on a collection in real-time
+- **Filter events** using aggregation pipeline stages
+- **Resume watching** from a specific point using resume tokens
+- **React to specific operations** like inserts, updates, or deletes
+
+## The watch() Method
+
+Use the `watch()` method on a collection to create a change stream:
+
+```typescript
+const changeStream = collection.watch()
+
+// Process change events
+for await (const event of changeStream) {
+  console.log('Change detected:', event.operationType)
+  console.log('Document:', event.fullDocument)
+}
+```
+
+**Parameters:**
+- `pipeline` (optional) - Array of `$match` stages to filter events
+- `options` (optional) - Change stream options
+
+**Returns:** `ChangeStream` - A cursor-like object for iterating over change events
+
+---
+
+## Change Event Types
+
+Change streams emit events for four types of operations:
+
+### Insert Events
+
+Emitted when a new document is inserted:
+
+```typescript
+const changeStream = collection.watch()
+
+await collection.insertOne({ name: 'Alice', status: 'active' })
+
+const event = await changeStream.next()
+// {
+//   _id: { _data: '...' },         // Resume token
+//   operationType: 'insert',
+//   clusterTime: Date,
+//   ns: { db: 'mydb', coll: 'users' },
+//   documentKey: { _id: ObjectId('...') },
+//   fullDocument: { _id: ObjectId('...'), name: 'Alice', status: 'active' }
+// }
+```
+
+### Update Events
+
+Emitted when a document is updated with `updateOne()` or `updateMany()`:
+
+```typescript
+await collection.updateOne(
+  { name: 'Alice' },
+  { $set: { status: 'inactive' }, $unset: { temporaryField: '' } }
+)
+
+const event = await changeStream.next()
+// {
+//   _id: { _data: '...' },
+//   operationType: 'update',
+//   clusterTime: Date,
+//   ns: { db: 'mydb', coll: 'users' },
+//   documentKey: { _id: ObjectId('...') },
+//   updateDescription: {
+//     updatedFields: { status: 'inactive' },
+//     removedFields: ['temporaryField']
+//   }
+// }
+```
+
+Note: By default, update events do not include the full document. Use the `fullDocument` option to include it (see [Update Lookup](#update-lookup) below).
+
+### Replace Events
+
+Emitted when a document is replaced with `replaceOne()`:
+
+```typescript
+await collection.replaceOne(
+  { name: 'Alice' },
+  { name: 'Alice Smith', email: 'alice@example.com' }
+)
+
+const event = await changeStream.next()
+// {
+//   _id: { _data: '...' },
+//   operationType: 'replace',
+//   clusterTime: Date,
+//   ns: { db: 'mydb', coll: 'users' },
+//   documentKey: { _id: ObjectId('...') },
+//   fullDocument: { _id: ObjectId('...'), name: 'Alice Smith', email: 'alice@example.com' }
+// }
+```
+
+### Delete Events
+
+Emitted when a document is deleted:
+
+```typescript
+await collection.deleteOne({ name: 'Alice Smith' })
+
+const event = await changeStream.next()
+// {
+//   _id: { _data: '...' },
+//   operationType: 'delete',
+//   clusterTime: Date,
+//   ns: { db: 'mydb', coll: 'users' },
+//   documentKey: { _id: ObjectId('...') }
+//   // Note: fullDocument is not available for delete events
+// }
+```
+
+---
+
+## Change Event Structure
+
+Every change event contains the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_id` | `ResumeToken` | A token used to resume the stream from this point |
+| `operationType` | `string` | The type of operation: `'insert'`, `'update'`, `'replace'`, or `'delete'` |
+| `clusterTime` | `Date` | Timestamp when the change occurred |
+| `ns` | `object` | Namespace with `db` and `coll` properties |
+| `documentKey` | `object` | Contains the `_id` of the affected document |
+| `fullDocument` | `object` | The full document (for insert, replace, and optionally update) |
+| `updateDescription` | `object` | For update events: `updatedFields` and `removedFields` |
+
+---
+
+## Filtering Change Streams
+
+Use aggregation pipeline stages to filter which events you receive. Currently, the `$match` stage is supported.
+
+### Filter by Operation Type
+
+Watch only for inserts:
+
+```typescript
+const changeStream = collection.watch([
+  { $match: { operationType: 'insert' } }
+])
+
+// Will only receive insert events
+for await (const event of changeStream) {
+  console.log('New document:', event.fullDocument)
+}
+```
+
+Watch for inserts and deletes:
+
+```typescript
+const changeStream = collection.watch([
+  { $match: { operationType: { $in: ['insert', 'delete'] } } }
+])
+```
+
+### Filter by Document Fields
+
+Filter events based on the document content:
+
+```typescript
+// Only watch changes to high-priority items
+const changeStream = collection.watch([
+  { $match: { 'fullDocument.priority': 'high' } }
+])
+
+// Watch changes to documents in a specific category
+const changeStream = collection.watch([
+  { $match: { 'fullDocument.category': 'electronics' } }
+])
+```
+
+### Complex Filters
+
+Combine multiple conditions:
+
+```typescript
+const changeStream = collection.watch([
+  {
+    $match: {
+      $or: [
+        { operationType: 'delete' },
+        { 'fullDocument.value': { $gt: 1000 } }
+      ]
+    }
+  }
+])
+```
+
+---
+
+## Change Stream Options
+
+### Update Lookup
+
+By default, update events only include the fields that changed. To get the full document after an update, use the `fullDocument` option:
+
+```typescript
+const changeStream = collection.watch([], {
+  fullDocument: 'updateLookup'
+})
+
+await collection.updateOne(
+  { name: 'Alice' },
+  { $set: { status: 'active' } }
+)
+
+const event = await changeStream.next()
+// event.fullDocument now contains the entire document after the update
+console.log(event.fullDocument)
+// { _id: ObjectId('...'), name: 'Alice', status: 'active', ... }
+```
+
+**Available `fullDocument` values:**
+- `'default'` - No full document for updates (only `updateDescription`)
+- `'updateLookup'` - Look up and include the current document for updates
+
+### Max Await Time
+
+Control how long `next()` waits for new events:
+
+```typescript
+const changeStream = collection.watch([], {
+  maxAwaitTimeMS: 5000  // Wait up to 5 seconds for new events
+})
+```
+
+---
+
+## Resume Tokens and Error Recovery
+
+Each change event includes a resume token in the `_id` field. Use this token to resume watching from a specific point after a disconnection or error.
+
+### Getting the Resume Token
+
+```typescript
+const changeStream = collection.watch()
+
+await collection.insertOne({ name: 'test' })
+await changeStream.next()
+
+// Get the current resume token
+const resumeToken = changeStream.getResumeToken()
+console.log(resumeToken)
+// { _data: '...' }
+```
+
+### Resuming After a Token
+
+Use `resumeAfter` to continue from where you left off:
+
+```typescript
+// Store the token when processing events
+let lastToken = null
+
+for await (const event of changeStream) {
+  processEvent(event)
+  lastToken = event._id
+}
+
+// Later, resume from the last processed event
+const resumedStream = collection.watch([], {
+  resumeAfter: lastToken
+})
+
+// Will receive events that occurred after lastToken
+for await (const event of resumedStream) {
+  processEvent(event)
+}
+```
+
+### Using startAfter
+
+The `startAfter` option works similarly to `resumeAfter`:
+
+```typescript
+const changeStream = collection.watch([], {
+  startAfter: savedToken
+})
+```
+
+---
+
+## ChangeStream Methods
+
+### next()
+
+Get the next change event. Blocks until an event is available or the timeout is reached:
+
+```typescript
+const event = await changeStream.next()
+
+if (event) {
+  console.log('Received event:', event.operationType)
+} else {
+  console.log('Timeout or stream closed')
+}
+```
+
+### tryNext()
+
+Get the next event without blocking. Returns `null` immediately if no events are available:
+
+```typescript
+const event = await changeStream.tryNext()
+
+if (event) {
+  console.log('Event available:', event.operationType)
+} else {
+  console.log('No events pending')
+}
+```
+
+### hasNext()
+
+Check if more events are available:
+
+```typescript
+if (await changeStream.hasNext()) {
+  const event = await changeStream.next()
+  // Process event
+}
+```
+
+### close()
+
+Close the change stream when done:
+
+```typescript
+await changeStream.close()
+
+// Check if closed
+console.log(changeStream.closed) // true
+```
+
+### stream()
+
+Get an async iterable for the change stream:
+
+```typescript
+const stream = changeStream.stream()
+
+for await (const event of stream) {
+  // Process events
+}
+```
+
+---
+
+## Async Iteration
+
+Change streams support `for await...of` iteration:
+
+```typescript
+const changeStream = collection.watch()
+
+for await (const event of changeStream) {
+  switch (event.operationType) {
+    case 'insert':
+      console.log('New document:', event.fullDocument)
+      break
+    case 'update':
+      console.log('Updated fields:', event.updateDescription?.updatedFields)
+      break
+    case 'delete':
+      console.log('Deleted document:', event.documentKey._id)
+      break
+  }
+}
+```
+
+---
+
+## Real-World Examples
+
+### Real-Time Notifications
+
+Send notifications when specific documents are created:
+
+```typescript
+const orderStream = orders.watch([
+  { $match: { operationType: 'insert' } }
+])
+
+for await (const event of orderStream) {
+  const order = event.fullDocument
+
+  // Send notification for new orders
+  await sendNotification({
+    type: 'new_order',
+    orderId: order._id,
+    customer: order.customerEmail,
+    total: order.total
+  })
+}
+```
+
+### Live Dashboard Updates
+
+Push updates to a dashboard when data changes:
+
+```typescript
+const metricsStream = analytics.watch([
+  {
+    $match: {
+      $or: [
+        { operationType: 'insert' },
+        { operationType: 'update' }
+      ]
+    }
+  }
+])
+
+for await (const event of metricsStream) {
+  // Broadcast to connected WebSocket clients
+  websocketServer.broadcast({
+    type: 'metrics_update',
+    operation: event.operationType,
+    data: event.fullDocument || event.updateDescription
+  })
+}
+```
+
+### Audit Logging
+
+Maintain an audit trail of all changes:
+
+```typescript
+const auditStream = sensitiveData.watch()
+
+for await (const event of auditStream) {
+  await auditLog.insertOne({
+    timestamp: event.clusterTime,
+    operation: event.operationType,
+    collection: event.ns.coll,
+    documentId: event.documentKey._id,
+    changes: event.operationType === 'update'
+      ? event.updateDescription
+      : event.fullDocument,
+    metadata: {
+      // Add your audit metadata
+      correlationId: getCurrentCorrelationId()
+    }
+  })
+}
+```
+
+### Cache Invalidation
+
+Invalidate cache entries when documents change:
+
+```typescript
+const changeStream = products.watch([
+  {
+    $match: {
+      operationType: { $in: ['update', 'replace', 'delete'] }
+    }
+  }
+])
+
+for await (const event of changeStream) {
+  const productId = event.documentKey._id.toHexString()
+
+  // Invalidate cache
+  await cache.delete(`product:${productId}`)
+
+  // If updated, optionally warm the cache
+  if (event.operationType !== 'delete' && event.fullDocument) {
+    await cache.set(`product:${productId}`, event.fullDocument)
+  }
+}
+```
+
+### Sync Between Collections
+
+Keep a derived collection in sync:
+
+```typescript
+const changeStream = sourceCollection.watch()
+
+for await (const event of changeStream) {
+  switch (event.operationType) {
+    case 'insert':
+    case 'replace':
+      await derivedCollection.replaceOne(
+        { sourceId: event.documentKey._id },
+        transformDocument(event.fullDocument!),
+        { upsert: true }
+      )
+      break
+
+    case 'update':
+      await derivedCollection.updateOne(
+        { sourceId: event.documentKey._id },
+        { $set: transformFields(event.updateDescription!.updatedFields) }
+      )
+      break
+
+    case 'delete':
+      await derivedCollection.deleteOne({ sourceId: event.documentKey._id })
+      break
+  }
+}
+```
+
+---
+
+## Error Handling
+
+Always handle errors and implement reconnection logic:
+
+```typescript
+async function watchWithRetry(collection: MongoCollection) {
+  let resumeToken = null
+
+  while (true) {
+    try {
+      const options = resumeToken ? { resumeAfter: resumeToken } : {}
+      const changeStream = collection.watch([], options)
+
+      for await (const event of changeStream) {
+        // Process event
+        await processEvent(event)
+
+        // Save token for recovery
+        resumeToken = event._id
+      }
+    } catch (error) {
+      console.error('Change stream error:', error)
+
+      // Wait before reconnecting
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Will resume from last saved token
+      console.log('Reconnecting...')
+    }
+  }
+}
+```
+
+---
+
+## Best Practices
+
+1. **Always close change streams** when they're no longer needed to free resources.
+
+2. **Store resume tokens** persistently if you need to survive process restarts.
+
+3. **Use filtering** to reduce the volume of events when you only need specific changes.
+
+4. **Handle errors gracefully** and implement retry logic with exponential backoff.
+
+5. **Use `fullDocument: 'updateLookup'`** sparingly, as it requires an additional database lookup for each update event.
+
+6. **Process events asynchronously** when possible to avoid blocking the change stream.
+
+7. **Monitor for stream closures** and reconnect automatically in production applications.

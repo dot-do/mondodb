@@ -1,181 +1,583 @@
 ---
 title: Transactions
-description: Use multi-document transactions for atomic operations
+description: Use multi-document transactions for atomic operations across documents and collections
 ---
 
 # Transactions
 
-MondoDB supports multi-document transactions for operations that need to be atomic across multiple documents or collections.
+MondoDB supports multi-document transactions, providing ACID guarantees for operations that need to be atomic across multiple documents or collections. Transactions ensure that either all operations succeed together, or none of them take effect.
 
-## Starting a Transaction
+## Overview
 
-Use `startSession()` to begin a transaction:
+Transactions in MondoDB work through sessions. A session tracks the state of a transaction and ensures that all operations within the transaction are executed atomically. Under the hood, MondoDB maps MongoDB transaction semantics to SQLite transactions:
+
+- `startTransaction()` maps to `BEGIN TRANSACTION`
+- `commitTransaction()` maps to `COMMIT`
+- `abortTransaction()` maps to `ROLLBACK`
+
+## Starting a Session
+
+Use `startSession()` on the MongoClient to create a new session:
 
 ```typescript
-const session = client.startSession();
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://localhost:27017')
+await client.connect()
+
+// Create a session
+const session = client.startSession()
+
+// Use the session for operations...
+
+// Always end the session when done
+await session.endSession()
+```
+
+### Session Options
+
+You can configure default transaction options when creating a session:
+
+```typescript
+const session = client.startSession({
+  defaultTransactionOptions: {
+    readConcern: { level: 'majority' },
+    writeConcern: { w: 'majority' },
+    maxCommitTimeMS: 5000
+  }
+})
+```
+
+## Transaction Lifecycle
+
+A transaction goes through several states during its lifecycle:
+
+| State | Description |
+|-------|-------------|
+| `none` | No transaction active |
+| `starting` | Transaction started but no operations executed yet |
+| `in_progress` | Transaction has operations in flight |
+| `committed` | Transaction successfully committed |
+| `aborted` | Transaction was rolled back |
+
+### Manual Transaction Control
+
+For full control over transaction behavior, use manual transaction management:
+
+```typescript
+const session = client.startSession()
 
 try {
-  session.startTransaction();
+  // Start the transaction
+  session.startTransaction()
 
   // Perform operations within the transaction
-  await collection.insertOne({ name: 'Alice' }, { session });
-  await collection.updateOne({ name: 'Bob' }, { $inc: { balance: -100 } }, { session });
+  await collection.insertOne({ name: 'Alice', balance: 1000 }, { session })
+  await collection.updateOne(
+    { name: 'Bob' },
+    { $inc: { balance: -100 } },
+    { session }
+  )
 
   // Commit the transaction
-  await session.commitTransaction();
+  await session.commitTransaction()
+  console.log('Transaction committed successfully')
 } catch (error) {
   // If an error occurs, abort the transaction
-  await session.abortTransaction();
-  throw error;
+  await session.abortTransaction()
+  console.error('Transaction aborted:', error)
+  throw error
 } finally {
   // Always end the session
-  await session.endSession();
+  await session.endSession()
 }
+```
+
+### Session Properties
+
+The session object provides several useful properties:
+
+```typescript
+// Check if currently in a transaction
+if (session.inTransaction) {
+  console.log('Transaction is active')
+}
+
+// Get the current transaction state
+console.log(session.transactionState) // 'none' | 'starting' | 'in_progress' | 'committed' | 'aborted'
+
+// Get the current transaction number
+console.log(session.transactionNumber)
+
+// Check if session has ended
+if (session.hasEnded) {
+  console.log('Session has ended')
+}
+
+// Get the unique session ID
+console.log(session.id.toHexString())
 ```
 
 ## Using withTransaction Helper
 
-The `withTransaction()` helper manages commit and abort automatically:
+The `withTransaction()` helper provides automatic commit and abort handling, plus built-in retry logic for transient errors:
 
 ```typescript
-const session = client.startSession();
+const session = client.startSession()
 
 try {
-  await session.withTransaction(async () => {
-    const accounts = db.collection('accounts');
+  const result = await session.withTransaction(async (sess) => {
+    const accounts = db.collection('accounts')
 
     // Transfer funds between accounts
     await accounts.updateOne(
       { userId: 'alice' },
       { $inc: { balance: -100 } },
-      { session }
-    );
+      { session: sess }
+    )
 
     await accounts.updateOne(
       { userId: 'bob' },
       { $inc: { balance: 100 } },
-      { session }
-    );
-  });
+      { session: sess }
+    )
+
+    // Return a value from the transaction
+    return { transferred: 100 }
+  })
+
+  console.log('Transfer complete:', result)
 } finally {
-  await session.endSession();
+  await session.endSession()
 }
+```
+
+### Automatic Retry Logic
+
+`withTransaction()` automatically retries on transient transaction errors. When an error has the `TransientTransactionError` label, the helper will:
+
+1. Abort the current transaction attempt
+2. Wait briefly before retrying
+3. Start a new transaction and re-execute the callback
+4. Continue retrying up to the maximum retry limit (120 attempts by default)
+
+```typescript
+await session.withTransaction(async (sess) => {
+  // If this throws a TransientTransactionError,
+  // the entire callback will be retried automatically
+  await collection.updateOne(
+    { _id: docId },
+    { $set: { status: 'processed' } },
+    { session: sess }
+  )
+})
 ```
 
 ## Transaction Options
 
-Configure transactions with read and write concerns:
+### Read Concern
+
+Read concern controls the consistency and isolation properties of data reads:
 
 ```typescript
-const session = client.startSession({
-  defaultTransactionOptions: {
-    readConcern: { level: 'snapshot' },
-    writeConcern: { w: 'majority' },
-    maxCommitTimeMS: 5000,
-  },
-});
+session.startTransaction({
+  readConcern: { level: 'local' }      // Read from local replica (fastest)
+})
+
+session.startTransaction({
+  readConcern: { level: 'majority' }   // Read data acknowledged by majority
+})
+
+session.startTransaction({
+  readConcern: { level: 'snapshot' }   // Point-in-time snapshot isolation
+})
 ```
 
-## Use Cases
+| Level | Description |
+|-------|-------------|
+| `local` | Returns the most recent data available on the local node |
+| `available` | Returns data from the instance with no guarantee of durability |
+| `majority` | Returns data that has been acknowledged by a majority of replica set members |
+| `linearizable` | Returns data that reflects all successful writes prior to the read |
+| `snapshot` | Returns data from a snapshot of the data at a specific point in time |
 
-### Money Transfer
+### Write Concern
+
+Write concern controls the acknowledgment of write operations:
 
 ```typescript
+session.startTransaction({
+  writeConcern: { w: 1 }               // Acknowledge from primary only
+})
+
+session.startTransaction({
+  writeConcern: { w: 'majority' }      // Acknowledge from majority of nodes
+})
+
+session.startTransaction({
+  writeConcern: {
+    w: 'majority',
+    wtimeoutMS: 5000,                  // Timeout for write acknowledgment
+    journal: true                       // Wait for journal write
+  }
+})
+```
+
+### Max Commit Time
+
+Set a timeout for the commit operation:
+
+```typescript
+session.startTransaction({
+  maxCommitTimeMS: 10000  // 10 second timeout for commit
+})
+```
+
+## Code Examples
+
+### Bank Transfer
+
+A classic example of when transactions are essential - transferring money between accounts:
+
+```typescript
+interface Account {
+  _id?: ObjectId
+  userId: string
+  balance: number
+}
+
 async function transferFunds(
-  from: string,
-  to: string,
+  fromUserId: string,
+  toUserId: string,
   amount: number
-) {
-  const session = client.startSession();
+): Promise<void> {
+  const session = client.startSession()
 
   try {
-    await session.withTransaction(async () => {
-      const accounts = db.collection('accounts');
+    await session.withTransaction(async (sess) => {
+      const accounts = db.collection<Account>('accounts')
 
-      // Check balance
-      const source = await accounts.findOne(
-        { userId: from },
-        { session }
-      );
+      // Verify source account has sufficient funds
+      const sourceAccount = await accounts.findOne(
+        { userId: fromUserId },
+        { session: sess }
+      )
 
-      if (!source || source.balance < amount) {
-        throw new Error('Insufficient funds');
+      if (!sourceAccount) {
+        throw new Error(`Account not found: ${fromUserId}`)
       }
 
-      // Debit source
+      if (sourceAccount.balance < amount) {
+        throw new Error(
+          `Insufficient funds: ${sourceAccount.balance} < ${amount}`
+        )
+      }
+
+      // Debit source account
       await accounts.updateOne(
-        { userId: from },
+        { userId: fromUserId },
         { $inc: { balance: -amount } },
-        { session }
-      );
+        { session: sess }
+      )
 
-      // Credit destination
+      // Credit destination account
       await accounts.updateOne(
-        { userId: to },
+        { userId: toUserId },
         { $inc: { balance: amount } },
-        { session }
-      );
+        { session: sess }
+      )
 
-      // Log transaction
-      await db.collection('transactions').insertOne({
-        from,
-        to,
+      // Record the transaction in an audit log
+      await db.collection('transfers').insertOne({
+        from: fromUserId,
+        to: toUserId,
         amount,
         timestamp: new Date(),
-      }, { session });
-    });
+        status: 'completed'
+      }, { session: sess })
+    })
+
+    console.log(`Transferred $${amount} from ${fromUserId} to ${toUserId}`)
   } finally {
-    await session.endSession();
+    await session.endSession()
   }
 }
 ```
 
-### Order Processing
+### Inventory Management
+
+Managing inventory across orders requires atomic operations:
 
 ```typescript
-async function processOrder(order: Order) {
-  const session = client.startSession();
+interface Product {
+  _id?: ObjectId
+  sku: string
+  name: string
+  quantity: number
+  reserved: number
+}
+
+interface Order {
+  _id?: ObjectId
+  orderId: string
+  items: Array<{ sku: string; quantity: number }>
+  status: string
+  createdAt: Date
+}
+
+async function reserveInventory(order: Order): Promise<void> {
+  const session = client.startSession()
 
   try {
-    await session.withTransaction(async () => {
-      const orders = db.collection('orders');
-      const inventory = db.collection('inventory');
+    await session.withTransaction(async (sess) => {
+      const inventory = db.collection<Product>('inventory')
+      const orders = db.collection<Order>('orders')
+
+      // Check and reserve inventory for each item
+      for (const item of order.items) {
+        const product = await inventory.findOne(
+          { sku: item.sku },
+          { session: sess }
+        )
+
+        if (!product) {
+          throw new Error(`Product not found: ${item.sku}`)
+        }
+
+        const available = product.quantity - product.reserved
+        if (available < item.quantity) {
+          throw new Error(
+            `Insufficient inventory for ${item.sku}: ${available} available, ${item.quantity} requested`
+          )
+        }
+
+        // Reserve the inventory
+        await inventory.updateOne(
+          { sku: item.sku },
+          { $inc: { reserved: item.quantity } },
+          { session: sess }
+        )
+      }
 
       // Create the order
-      await orders.insertOne(order, { session });
-
-      // Update inventory for each item
-      for (const item of order.items) {
-        const result = await inventory.updateOne(
-          { productId: item.productId, quantity: { $gte: item.quantity } },
-          { $inc: { quantity: -item.quantity } },
-          { session }
-        );
-
-        if (result.modifiedCount === 0) {
-          throw new Error(`Insufficient inventory for ${item.productId}`);
-        }
-      }
-    });
+      await orders.insertOne({
+        ...order,
+        status: 'reserved',
+        createdAt: new Date()
+      }, { session: sess })
+    })
   } finally {
-    await session.endSession();
+    await session.endSession()
   }
+}
+
+async function fulfillOrder(orderId: string): Promise<void> {
+  const session = client.startSession()
+
+  try {
+    await session.withTransaction(async (sess) => {
+      const inventory = db.collection<Product>('inventory')
+      const orders = db.collection<Order>('orders')
+
+      const order = await orders.findOne(
+        { orderId, status: 'reserved' },
+        { session: sess }
+      )
+
+      if (!order) {
+        throw new Error(`Order not found or not in reserved status: ${orderId}`)
+      }
+
+      // Deduct inventory for each item
+      for (const item of order.items) {
+        await inventory.updateOne(
+          { sku: item.sku },
+          {
+            $inc: {
+              quantity: -item.quantity,
+              reserved: -item.quantity
+            }
+          },
+          { session: sess }
+        )
+      }
+
+      // Update order status
+      await orders.updateOne(
+        { orderId },
+        { $set: { status: 'fulfilled', fulfilledAt: new Date() } },
+        { session: sess }
+      )
+    })
+  } finally {
+    await session.endSession()
+  }
+}
+```
+
+### Multi-Collection Updates
+
+Updating related documents across multiple collections atomically:
+
+```typescript
+interface User {
+  _id?: ObjectId
+  email: string
+  profile: { name: string; bio: string }
+}
+
+interface Post {
+  _id?: ObjectId
+  authorId: ObjectId
+  authorName: string
+  content: string
+}
+
+interface Comment {
+  _id?: ObjectId
+  authorId: ObjectId
+  authorName: string
+  text: string
+}
+
+async function updateUserProfile(
+  userId: ObjectId,
+  newName: string,
+  newBio: string
+): Promise<void> {
+  const session = client.startSession()
+
+  try {
+    await session.withTransaction(async (sess) => {
+      const users = db.collection<User>('users')
+      const posts = db.collection<Post>('posts')
+      const comments = db.collection<Comment>('comments')
+
+      // Update the user profile
+      await users.updateOne(
+        { _id: userId },
+        { $set: { 'profile.name': newName, 'profile.bio': newBio } },
+        { session: sess }
+      )
+
+      // Update denormalized author name in all posts
+      await posts.updateMany(
+        { authorId: userId },
+        { $set: { authorName: newName } },
+        { session: sess }
+      )
+
+      // Update denormalized author name in all comments
+      await comments.updateMany(
+        { authorId: userId },
+        { $set: { authorName: newName } },
+        { session: sess }
+      )
+    })
+  } finally {
+    await session.endSession()
+  }
+}
+```
+
+## Error Handling
+
+### Handling Transaction Errors
+
+```typescript
+const session = client.startSession()
+
+try {
+  await session.withTransaction(async (sess) => {
+    await collection.insertOne({ name: 'Test' }, { session: sess })
+  })
+} catch (error) {
+  // Check for specific error types
+  if (error.message.includes('Insufficient')) {
+    console.error('Business logic error:', error.message)
+  } else if (error.hasErrorLabel?.('TransientTransactionError')) {
+    console.error('Transient error - would have been retried:', error.message)
+  } else {
+    console.error('Transaction failed:', error)
+  }
+  throw error
+} finally {
+  await session.endSession()
+}
+```
+
+### Transaction Validation Errors
+
+Certain operations are not allowed within transactions:
+
+```typescript
+const session = client.startSession()
+
+try {
+  session.startTransaction()
+
+  // This will throw - cannot start a new transaction while one is active
+  session.startTransaction() // Error: Transaction already in progress
+
+} catch (error) {
+  console.error(error.message)
+} finally {
+  await session.endSession()
+}
+```
+
+```typescript
+const session = client.startSession()
+
+try {
+  // This will throw - no transaction has been started
+  await session.commitTransaction() // Error: No transaction started
+
+} catch (error) {
+  console.error(error.message)
+} finally {
+  await session.endSession()
 }
 ```
 
 ## Best Practices
 
-1. **Keep transactions short** - Long-running transactions can impact performance
-2. **Handle errors gracefully** - Always use try/catch/finally
+1. **Keep transactions short** - Long-running transactions can impact performance and increase the chance of conflicts
+
+2. **Handle errors gracefully** - Always use try/catch/finally to ensure proper cleanup
+
 3. **Use withTransaction()** - It handles retries and error handling automatically
-4. **Pass session to all operations** - Ensure all operations within a transaction use the session
-5. **End sessions** - Always call `endSession()` in a finally block
+
+4. **Pass session to all operations** - Every operation within a transaction must include the session option
+
+5. **End sessions** - Always call `endSession()` in a finally block to release resources
+
+6. **Avoid side effects** - Don't perform external operations (API calls, file I/O) inside transactions since they cannot be rolled back
+
+7. **Validate before modifying** - Check preconditions (like sufficient funds) before making changes
 
 ## Limitations
 
-- Transactions in MondoDB are scoped to a single Durable Object
+- Transactions in MondoDB are scoped to a single Durable Object instance
 - Cross-database transactions are not supported
 - Large transactions may have performance implications
+- Transactions have a maximum execution time
+
+## Session ID Uniqueness
+
+Each session is assigned a unique identifier that can be used for tracking and debugging:
+
+```typescript
+const session1 = client.startSession()
+const session2 = client.startSession()
+
+// Each session has a unique ID
+console.log(session1.id.toHexString()) // e.g., "507f1f77bcf86cd799439011"
+console.log(session2.id.toHexString()) // e.g., "507f1f77bcf86cd799439012"
+
+// IDs are guaranteed to be unique
+console.log(session1.id.toString() !== session2.id.toString()) // true
+```
 
 ## Next Steps
 

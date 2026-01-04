@@ -1,0 +1,418 @@
+---
+title: User-Defined Functions
+description: Execute custom JavaScript functions within aggregation pipelines using the $function operator
+---
+
+# User-Defined Functions
+
+MondoDB supports the `$function` aggregation operator, allowing you to execute custom JavaScript functions within your aggregation pipelines. This enables complex transformations and computations that cannot be expressed using standard aggregation operators.
+
+## Overview
+
+The `$function` operator executes arbitrary JavaScript code in a secure, sandboxed environment. Functions run in isolated V8 contexts using Cloudflare's worker-loader, ensuring:
+
+- **Network isolation**: No outbound network access (`globalOutbound: null`)
+- **Environment isolation**: No access to bindings or environment variables
+- **Timeout enforcement**: Configurable execution timeouts (default 5 seconds)
+- **Resource limits**: Memory and CPU constraints enforced by V8 isolates
+
+## Basic Syntax
+
+The `$function` operator accepts an object with the following properties:
+
+```typescript
+{
+  $function: {
+    body: string | Function,  // The JavaScript function to execute
+    args: unknown[],          // Arguments to pass to the function
+    lang: 'js'               // Language (only 'js' supported)
+  }
+}
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `body` | `string` or `Function` | The JavaScript function code. Can be a function declaration string, arrow function string, or actual function reference |
+| `args` | `unknown[]` | Array of arguments to pass to the function. Can include field references (e.g., `"$fieldName"`) or literal values |
+| `lang` | `'js'` | The language for the function. Currently only JavaScript (`'js'`) is supported |
+
+## Basic Examples
+
+### Simple Transformation
+
+```typescript
+// Double each document's value
+await collection.aggregate([
+  {
+    $addFields: {
+      doubledValue: {
+        $function: {
+          body: 'function(x) { return x * 2; }',
+          args: ['$value'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Arrow Function Syntax
+
+```typescript
+// Calculate string length
+await collection.aggregate([
+  {
+    $addFields: {
+      nameLength: {
+        $function: {
+          body: '(str) => str.length',
+          args: ['$name'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Multiple Arguments
+
+```typescript
+// Combine multiple fields
+await collection.aggregate([
+  {
+    $addFields: {
+      fullAddress: {
+        $function: {
+          body: '(street, city, zip) => `${street}, ${city} ${zip}`',
+          args: ['$street', '$city', '$zipCode'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Mixing Field References and Literals
+
+```typescript
+// Apply tax rate to price
+await collection.aggregate([
+  {
+    $addFields: {
+      priceWithTax: {
+        $function: {
+          body: '(price, taxRate) => price * (1 + taxRate)',
+          args: ['$price', 0.08],  // Field reference and literal value
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+## Advanced Use Cases
+
+### Complex Object Transformations
+
+```typescript
+// Parse and transform nested data
+await collection.aggregate([
+  {
+    $addFields: {
+      parsedMetadata: {
+        $function: {
+          body: `function(data) {
+            const parsed = JSON.parse(data);
+            return {
+              version: parsed.v || 1,
+              tags: parsed.tags || [],
+              timestamp: new Date(parsed.ts).toISOString()
+            };
+          }`,
+          args: ['$rawMetadata'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Array Processing
+
+```typescript
+// Compute statistics on arrays
+await collection.aggregate([
+  {
+    $addFields: {
+      scoreStats: {
+        $function: {
+          body: `(scores) => {
+            if (!scores || scores.length === 0) return null;
+            const sum = scores.reduce((a, b) => a + b, 0);
+            const avg = sum / scores.length;
+            const sorted = [...scores].sort((a, b) => a - b);
+            return {
+              min: sorted[0],
+              max: sorted[sorted.length - 1],
+              avg: avg,
+              median: sorted[Math.floor(sorted.length / 2)]
+            };
+          }`,
+          args: ['$scores'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Custom Validation
+
+```typescript
+// Validate email format
+await collection.aggregate([
+  {
+    $addFields: {
+      isValidEmail: {
+        $function: {
+          body: `(email) => {
+            const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+            return emailRegex.test(email);
+          }`,
+          args: ['$email'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+### Conditional Logic
+
+```typescript
+// Categorize users based on activity
+await collection.aggregate([
+  {
+    $addFields: {
+      userTier: {
+        $function: {
+          body: `(loginCount, purchaseCount, accountAge) => {
+            const score = loginCount * 1 + purchaseCount * 5 + accountAge * 0.1;
+            if (score >= 100) return 'platinum';
+            if (score >= 50) return 'gold';
+            if (score >= 20) return 'silver';
+            return 'bronze';
+          }`,
+          args: ['$loginCount', '$purchaseCount', '$accountAgeDays'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+## Async Function Support
+
+The `$function` operator supports asynchronous functions. Async operations are automatically awaited with timeout enforcement.
+
+```typescript
+// Async computation
+await collection.aggregate([
+  {
+    $addFields: {
+      processedData: {
+        $function: {
+          body: `async (data) => {
+            // Simulate async processing
+            const result = await Promise.resolve(data.toUpperCase());
+            return result;
+          }`,
+          args: ['$text'],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+```
+
+**Note**: Network requests (`fetch`) are blocked in the sandboxed environment. Async support is primarily useful for Promise-based computations and internal async operations.
+
+## Batch Execution
+
+For pipelines processing many documents, MondoDB automatically optimizes function execution through batching. This reduces the overhead of creating isolated contexts for each document.
+
+The batch mode:
+- Groups multiple document transformations into a single worker invocation
+- Executes all transformations in parallel within the isolate
+- Has a longer default timeout (10 seconds) to accommodate larger batches
+
+## Sandboxed Execution Environment
+
+### Security Model
+
+Functions execute in fully isolated V8 contexts with strict security boundaries:
+
+| Capability | Status | Description |
+|------------|--------|-------------|
+| Network access | Blocked | `globalOutbound: null` prevents all outbound requests |
+| Environment variables | Blocked | Empty `env` object passed to worker |
+| File system | Blocked | No file system access available |
+| Database access | Blocked | No direct database bindings |
+| Timers | Available | `setTimeout`, `setInterval` work but are subject to timeout |
+| JSON | Available | `JSON.parse`, `JSON.stringify` available |
+| Math | Available | Full `Math` object available |
+| Date | Available | `Date` object available |
+| Crypto | Available | `crypto` API available for hashing, etc. |
+
+### Available Globals
+
+The following JavaScript globals are available in the execution context:
+
+```javascript
+// Standard JavaScript
+Object, Array, String, Number, Boolean, Symbol
+Map, Set, WeakMap, WeakSet
+Promise, Proxy, Reflect
+JSON, Math, Date
+RegExp, Error, TypeError, ReferenceError
+parseInt, parseFloat, isNaN, isFinite
+encodeURI, decodeURI, encodeURIComponent, decodeURIComponent
+
+// Typed Arrays
+ArrayBuffer, DataView
+Int8Array, Uint8Array, Uint8ClampedArray
+Int16Array, Uint16Array
+Int32Array, Uint32Array
+Float32Array, Float64Array
+BigInt64Array, BigUint64Array
+
+// Web APIs (subset)
+console (logging captured but not returned)
+TextEncoder, TextDecoder
+URL, URLSearchParams
+crypto.subtle (for hashing operations)
+```
+
+### Limitations
+
+1. **No Network Access**: `fetch()` and other network APIs will fail
+2. **No Imports**: Cannot import external modules or packages
+3. **Timeout Enforcement**: Functions that exceed the timeout will be terminated
+4. **Memory Limits**: V8 isolate memory limits apply
+5. **No Persistent State**: Each execution is stateless
+
+## Configuration
+
+### Worker Loader Binding
+
+To use `$function`, you must configure the `worker_loaders` binding in your `wrangler.jsonc`:
+
+```jsonc
+{
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ]
+}
+```
+
+Without this binding, `$function` will throw an error with configuration instructions.
+
+### Timeout Configuration
+
+The default timeout is 5 seconds for single executions and 10 seconds for batch executions. These can be adjusted through the aggregation executor configuration.
+
+## Error Handling
+
+Errors during function execution are captured and returned with descriptive messages:
+
+```typescript
+// This will throw an error
+await collection.aggregate([
+  {
+    $addFields: {
+      result: {
+        $function: {
+          body: '() => undefinedVariable',  // ReferenceError
+          args: [],
+          lang: 'js'
+        }
+      }
+    }
+  }
+]).toArray();
+// Error: $function execution failed: ReferenceError: undefinedVariable is not defined
+```
+
+Common error types:
+- **Syntax errors**: Invalid JavaScript in function body
+- **Reference errors**: Undefined variables or missing properties
+- **Type errors**: Invalid operations on values
+- **Timeout errors**: Function exceeded execution time limit
+
+## Performance Considerations
+
+1. **Use built-in operators when possible**: Standard aggregation operators are faster than `$function`
+2. **Minimize function complexity**: Keep functions focused and simple
+3. **Avoid in $match**: Use `$function` in `$addFields` or `$project`, not filtering stages
+4. **Cache function bodies**: Same function body strings are cached by hash, so reuse identical functions
+
+```typescript
+// Good: Use $function for complex logic only
+await collection.aggregate([
+  { $match: { status: 'active' } },           // Fast: native filtering
+  { $addFields: {
+    total: { $multiply: ['$price', '$qty'] }, // Fast: native expression
+    customScore: {                             // $function only when needed
+      $function: {
+        body: complexScoringLogic,
+        args: ['$metrics'],
+        lang: 'js'
+      }
+    }
+  }}
+]).toArray();
+```
+
+## Function Body Formats
+
+The `body` parameter accepts several formats:
+
+```typescript
+// String: function declaration
+{ body: 'function(x) { return x * 2; }' }
+
+// String: arrow function
+{ body: '(x) => x * 2' }
+
+// String: multiline function
+{ body: `function(x) {
+  const doubled = x * 2;
+  return doubled;
+}` }
+
+// Function reference (serialized to string)
+{ body: function(x) { return x * 2; } }
+```
+
+**Note**: Function declarations are automatically wrapped in parentheses for proper execution context.
+
+---
+
+## Next Steps
+
+- [Aggregation Pipeline](/docs/guides/aggregation) - Learn about all aggregation stages
+- [CRUD Operations](/docs/guides/crud) - Basic document operations
+- [Indexing](/docs/guides/indexing) - Optimize query performance

@@ -1,0 +1,726 @@
+---
+title: Cursor Operations
+description: Efficiently iterate through query results using cursors in MondoDB
+---
+
+# Cursor Operations
+
+MondoDB uses cursors to provide efficient, lazy evaluation of query results. Instead of loading all matching documents into memory at once, cursors allow you to iterate through results incrementally, which is essential for working with large datasets.
+
+## Overview
+
+When you call `find()` or `aggregate()` on a collection, MondoDB returns a cursor object rather than the actual documents. The query is only executed when you consume the cursor using methods like `toArray()`, `forEach()`, or async iteration.
+
+```typescript
+// Returns a cursor, not documents
+const cursor = collection.find({ status: 'active' })
+
+// Query is executed when you consume the cursor
+const documents = await cursor.toArray()
+```
+
+This lazy evaluation provides several benefits:
+- **Memory efficiency**: Documents are fetched in batches rather than all at once
+- **Chainable modifiers**: Apply sort, limit, skip, and projection before execution
+- **Streaming**: Process documents one at a time with minimal memory footprint
+- **Early termination**: Stop iteration early without fetching remaining documents
+
+---
+
+## Cursor Methods
+
+### toArray()
+
+Executes the query and returns all matching documents as an array. This is the most common way to consume a cursor.
+
+```typescript
+const users = await collection.find({ age: { $gte: 21 } }).toArray()
+console.log(`Found ${users.length} users`)
+```
+
+**Note:** `toArray()` loads all documents into memory. For very large result sets, consider using iteration methods instead.
+
+### forEach()
+
+Execute a callback function for each document. Return `false` from the callback to stop iteration early.
+
+```typescript
+// Process each document
+await collection.find({ status: 'pending' }).forEach((doc, index) => {
+  console.log(`Processing document ${index}: ${doc.name}`)
+})
+
+// Stop iteration early
+await collection.find({}).forEach((doc) => {
+  if (doc.priority === 'critical') {
+    handleCritical(doc)
+    return false // Stop iterating
+  }
+  handleNormal(doc)
+})
+```
+
+**Parameters:**
+- `callback(doc, index)` - Function called for each document
+  - `doc` - The current document
+  - `index` - Zero-based index of the document
+  - Return `false` to stop iteration
+
+### next()
+
+Get the next document from the cursor. Returns `null` when no more documents are available.
+
+```typescript
+const cursor = collection.find({ type: 'order' })
+
+const firstDoc = await cursor.next()
+console.log('First order:', firstDoc)
+
+const secondDoc = await cursor.next()
+console.log('Second order:', secondDoc)
+```
+
+### hasNext()
+
+Check if there are more documents available without consuming them.
+
+```typescript
+const cursor = collection.find({})
+
+while (await cursor.hasNext()) {
+  const doc = await cursor.next()
+  await processDocument(doc)
+}
+```
+
+### Async Iteration
+
+Cursors support async iteration with `for await...of` syntax, which is the recommended approach for processing documents one at a time.
+
+```typescript
+for await (const user of collection.find({ status: 'active' })) {
+  await sendNotification(user.email)
+}
+```
+
+This approach:
+- Processes one document at a time
+- Automatically closes the cursor when done
+- Handles early termination with `break` or `return`
+
+```typescript
+// Early termination
+for await (const doc of collection.find({})) {
+  if (doc.priority === 'high') {
+    await escalate(doc)
+    break // Cursor is automatically closed
+  }
+}
+```
+
+### map()
+
+Transform documents using a mapping function. Returns a new cursor that applies the transformation.
+
+```typescript
+const names = await collection.find({ status: 'active' })
+  .map((doc) => doc.name)
+  .toArray()
+
+console.log(names) // ['Alice', 'Bob', 'Carol']
+
+// With index
+const formatted = await collection.find({})
+  .map((doc, index) => `${index + 1}. ${doc.name}`)
+  .toArray()
+```
+
+### count()
+
+Count documents matching the query without consuming the cursor.
+
+```typescript
+const cursor = collection.find({ type: 'product' })
+const count = await cursor.count()
+console.log(`Found ${count} products`)
+```
+
+### close()
+
+Explicitly close the cursor and release resources. Normally cursors are closed automatically when exhausted or when using `toArray()`.
+
+```typescript
+const cursor = collection.find({})
+
+try {
+  // Work with cursor
+  const doc = await cursor.next()
+  if (someCondition) {
+    return // Cursor might not be exhausted
+  }
+} finally {
+  await cursor.close() // Ensure cleanup
+}
+```
+
+### clone()
+
+Create a copy of the cursor with the same query and options, but in an unfetched state.
+
+```typescript
+const baseCursor = collection.find({ category: 'electronics' })
+  .sort({ price: 1 })
+
+// Clone for different uses
+const cheapest = await baseCursor.clone().limit(5).toArray()
+const mostExpensive = await baseCursor.clone()
+  .sort({ price: -1 })
+  .limit(5)
+  .toArray()
+```
+
+---
+
+## Cursor Modifiers
+
+Cursor modifiers allow you to control how results are returned. Modifiers must be applied before the cursor is executed (before calling `toArray()`, `next()`, etc.).
+
+### sort()
+
+Specify the order of returned documents.
+
+```typescript
+// Sort ascending by name
+const users = await collection.find({})
+  .sort({ name: 1 })
+  .toArray()
+
+// Sort descending by date
+const recentPosts = await collection.find({})
+  .sort({ createdAt: -1 })
+  .toArray()
+
+// Multiple fields (name ascending, then age descending)
+const sorted = await collection.find({})
+  .sort({ name: 1, age: -1 })
+  .toArray()
+```
+
+**Sort Direction:**
+- `1` - Ascending order (A-Z, 0-9, oldest to newest)
+- `-1` - Descending order (Z-A, 9-0, newest to oldest)
+
+### limit()
+
+Restrict the number of documents returned.
+
+```typescript
+// Get only 10 documents
+const top10 = await collection.find({})
+  .sort({ score: -1 })
+  .limit(10)
+  .toArray()
+```
+
+**Note:** A limit of `0` means no limit (returns all documents).
+
+### skip()
+
+Skip a specified number of documents before returning results.
+
+```typescript
+// Skip the first 20 documents
+const page2 = await collection.find({})
+  .skip(20)
+  .limit(10)
+  .toArray()
+```
+
+**Warning:** `skip()` can be inefficient for large offsets. See [Pagination Patterns](#pagination-patterns) for alternatives.
+
+### project()
+
+Control which fields are included in returned documents.
+
+```typescript
+// Include only specific fields
+const users = await collection.find({})
+  .project({ name: 1, email: 1 })
+  .toArray()
+
+// Exclude specific fields
+const safeUsers = await collection.find({})
+  .project({ password: 0, secret: 0 })
+  .toArray()
+
+// Exclude _id (special case)
+const names = await collection.find({})
+  .project({ _id: 0, name: 1 })
+  .toArray()
+```
+
+**Projection Values:**
+- `1` - Include this field
+- `0` - Exclude this field
+
+**Note:** You cannot mix inclusion and exclusion in the same projection, except for `_id` which can always be excluded.
+
+### batchSize()
+
+Set a hint for how many documents to fetch in each batch.
+
+```typescript
+// Fetch 50 documents per batch
+const cursor = collection.find({})
+  .batchSize(50)
+
+for await (const doc of cursor) {
+  await processDocument(doc)
+}
+```
+
+**Note:** Batch size affects network efficiency. Larger batches reduce round trips but use more memory.
+
+### Chaining Modifiers
+
+All modifiers return the cursor, allowing fluent chaining:
+
+```typescript
+const results = await collection.find({ status: 'active' })
+  .sort({ createdAt: -1 })
+  .skip(20)
+  .limit(10)
+  .project({ name: 1, email: 1 })
+  .toArray()
+```
+
+---
+
+## Pagination Patterns
+
+There are two main approaches to pagination in MondoDB.
+
+### Skip-Limit Pagination
+
+The simplest approach uses `skip()` and `limit()` to implement offset-based pagination.
+
+```typescript
+async function getPage(pageNumber: number, pageSize: number = 20) {
+  const skip = (pageNumber - 1) * pageSize
+
+  const [documents, totalCount] = await Promise.all([
+    collection.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .toArray(),
+    collection.countDocuments({})
+  ])
+
+  return {
+    documents,
+    page: pageNumber,
+    pageSize,
+    totalCount,
+    totalPages: Math.ceil(totalCount / pageSize)
+  }
+}
+
+// Usage
+const page1 = await getPage(1)  // First 20 documents
+const page2 = await getPage(2)  // Documents 21-40
+```
+
+**Pros:**
+- Simple to implement
+- Supports jumping to any page
+
+**Cons:**
+- Performance degrades with large offsets
+- Results can shift if documents are inserted/deleted between pages
+
+### Range-Based Pagination (Cursor Pagination)
+
+For better performance with large datasets, use range-based pagination with a cursor value.
+
+```typescript
+interface PaginatedResult<T> {
+  documents: T[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+async function getPaginatedResults(
+  cursor: string | null,
+  pageSize: number = 20
+): Promise<PaginatedResult<Document>> {
+  // Build filter based on cursor
+  const filter = cursor
+    ? { _id: { $gt: cursor } }
+    : {}
+
+  const documents = await collection.find(filter)
+    .sort({ _id: 1 })
+    .limit(pageSize + 1) // Fetch one extra to check if more exist
+    .toArray()
+
+  const hasMore = documents.length > pageSize
+  if (hasMore) {
+    documents.pop() // Remove the extra document
+  }
+
+  return {
+    documents,
+    nextCursor: documents.length > 0
+      ? documents[documents.length - 1]._id.toString()
+      : null,
+    hasMore
+  }
+}
+
+// Usage
+const page1 = await getPaginatedResults(null)
+const page2 = await getPaginatedResults(page1.nextCursor)
+```
+
+For more complex sorting:
+
+```typescript
+async function getPaginatedByDate(
+  lastDate: Date | null,
+  lastId: string | null,
+  pageSize: number = 20
+) {
+  // Use compound cursor for deterministic ordering
+  const filter = lastDate && lastId
+    ? {
+        $or: [
+          { createdAt: { $lt: lastDate } },
+          { createdAt: lastDate, _id: { $lt: lastId } }
+        ]
+      }
+    : {}
+
+  const documents = await collection.find(filter)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(pageSize + 1)
+    .toArray()
+
+  const hasMore = documents.length > pageSize
+  if (hasMore) documents.pop()
+
+  const lastDoc = documents[documents.length - 1]
+
+  return {
+    documents,
+    cursor: lastDoc ? {
+      date: lastDoc.createdAt,
+      id: lastDoc._id.toString()
+    } : null,
+    hasMore
+  }
+}
+```
+
+**Pros:**
+- Consistent performance regardless of offset
+- Stable results even with concurrent modifications
+- Works well with infinite scroll UIs
+
+**Cons:**
+- Cannot jump to arbitrary pages
+- Requires ordered, unique cursor field
+
+---
+
+## Batch Size Configuration
+
+Batch size controls how many documents are fetched from the server in each network request.
+
+### Wire Protocol Batching
+
+When using the MongoDB wire protocol, documents are fetched in batches using `getMore` commands:
+
+```typescript
+// Initial find command returns first batch
+const cursor = collection.find({})
+  .batchSize(100)
+
+// First batch is fetched here
+const doc1 = await cursor.next()
+
+// Subsequent documents come from buffer until exhausted
+const doc2 = await cursor.next()
+
+// When buffer is empty, getMore fetches next batch
+const doc101 = await cursor.next()
+```
+
+### Choosing Batch Size
+
+- **Small batches (10-50)**: Lower memory usage, more network round trips
+- **Default (101)**: Good balance for most use cases
+- **Large batches (500+)**: Fewer round trips, higher memory usage
+
+```typescript
+// For memory-constrained processing
+const cursor = collection.find({})
+  .batchSize(25)
+
+for await (const doc of cursor) {
+  await heavyProcessing(doc)
+}
+
+// For bulk operations where memory is available
+const allDocs = await collection.find({})
+  .batchSize(1000)
+  .toArray()
+```
+
+---
+
+## Cursor State and Lifecycle
+
+### Cursor States
+
+A cursor progresses through several states:
+
+1. **Created**: Cursor object exists, query not yet executed
+2. **Fetching**: First batch is being retrieved
+3. **Open**: Documents are available for iteration
+4. **Exhausted**: All documents have been consumed
+5. **Closed**: Resources released
+
+```typescript
+const cursor = collection.find({})  // Created
+
+cursor.sort({ name: 1 })  // Still in Created state (modifiable)
+
+const doc = await cursor.next()  // Transitions to Open
+
+while (await cursor.hasNext()) {
+  await cursor.next()  // Remains Open
+}
+
+// Now Exhausted (or Closed after toArray())
+```
+
+### Closed Cursor Property
+
+Check if a cursor has been closed:
+
+```typescript
+const cursor = collection.find({})
+console.log(cursor.closed)  // false
+
+await cursor.toArray()
+console.log(cursor.closed)  // true
+```
+
+### Buffered Count
+
+Check how many documents are currently buffered:
+
+```typescript
+const cursor = collection.find({}).batchSize(100)
+
+await cursor.next()  // Fetches first batch
+console.log(cursor.bufferedCount)  // 99 (100 fetched, 1 consumed)
+```
+
+---
+
+## Timeout Handling
+
+### Automatic Cursor Cleanup
+
+MondoDB automatically cleans up server-side cursors in the following scenarios:
+
+- When all documents have been consumed
+- When `toArray()` completes
+- When the cursor is explicitly closed
+- When async iteration completes (including `break`)
+
+### Manual Cleanup
+
+Always close cursors in error handling scenarios:
+
+```typescript
+const cursor = collection.find({})
+
+try {
+  for await (const doc of cursor) {
+    await riskyOperation(doc)
+  }
+} catch (error) {
+  // Cursor is closed automatically in finally
+  throw error
+}
+```
+
+For non-iteration usage:
+
+```typescript
+const cursor = collection.find({})
+
+try {
+  const first = await cursor.next()
+  if (!meetsCriteria(first)) {
+    return null
+  }
+  // More processing...
+} finally {
+  await cursor.close()
+}
+```
+
+### Long-Running Operations
+
+For operations that may take a long time, process in smaller batches:
+
+```typescript
+async function processAllDocuments() {
+  let processed = 0
+  let lastId = null
+
+  while (true) {
+    const filter = lastId ? { _id: { $gt: lastId } } : {}
+
+    const batch = await collection.find(filter)
+      .sort({ _id: 1 })
+      .limit(100)
+      .toArray()
+
+    if (batch.length === 0) break
+
+    for (const doc of batch) {
+      await processDocument(doc)
+      processed++
+    }
+
+    lastId = batch[batch.length - 1]._id
+    console.log(`Processed ${processed} documents`)
+  }
+
+  return processed
+}
+```
+
+---
+
+## Aggregation Cursors
+
+The `aggregate()` method also returns a cursor with similar methods:
+
+```typescript
+const cursor = collection.aggregate([
+  { $match: { status: 'active' } },
+  { $group: { _id: '$category', count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+])
+
+// Same iteration methods available
+const results = await cursor.toArray()
+
+// Or iterate
+for await (const group of cursor) {
+  console.log(`${group._id}: ${group.count}`)
+}
+```
+
+### Aggregation Cursor Methods
+
+Aggregation cursors support:
+- `toArray()` - Get all results
+- `forEach(callback)` - Iterate with callback
+- `next()` / `hasNext()` - Manual iteration
+- `map(fn)` - Transform results
+- `close()` - Release resources
+- `clone()` - Copy cursor
+- Async iteration
+
+### explain()
+
+Get the aggregation pipeline details:
+
+```typescript
+const cursor = collection.aggregate([
+  { $match: { type: 'order' } },
+  { $group: { _id: '$customer', total: { $sum: '$amount' } } }
+])
+
+const explanation = cursor.explain()
+console.log(explanation.pipeline)
+// [
+//   { $match: { type: 'order' } },
+//   { $group: { _id: '$customer', total: { $sum: '$amount' } } }
+// ]
+```
+
+---
+
+## Best Practices
+
+### 1. Use Async Iteration for Large Datasets
+
+```typescript
+// Good - processes one document at a time
+for await (const doc of collection.find({})) {
+  await processDocument(doc)
+}
+
+// Avoid for large datasets - loads all into memory
+const allDocs = await collection.find({}).toArray()
+```
+
+### 2. Apply Filters and Limits Early
+
+```typescript
+// Good - database handles filtering
+const active = await collection.find({ status: 'active' })
+  .limit(100)
+  .toArray()
+
+// Avoid - fetches all documents, filters in application
+const all = await collection.find({}).toArray()
+const active = all.filter(d => d.status === 'active').slice(0, 100)
+```
+
+### 3. Project Only Needed Fields
+
+```typescript
+// Good - only transfers needed fields
+const names = await collection.find({})
+  .project({ name: 1 })
+  .toArray()
+
+// Avoid - transfers entire documents
+const docs = await collection.find({}).toArray()
+const names = docs.map(d => ({ name: d.name }))
+```
+
+### 4. Use Range-Based Pagination for Deep Pages
+
+```typescript
+// Good for page 1000
+const docs = await collection.find({ _id: { $gt: lastSeenId } })
+  .limit(20)
+  .toArray()
+
+// Slow for page 1000
+const docs = await collection.find({})
+  .skip(19980)
+  .limit(20)
+  .toArray()
+```
+
+### 5. Close Cursors on Errors
+
+```typescript
+const cursor = collection.find({})
+try {
+  await processWithCursor(cursor)
+} finally {
+  await cursor.close()
+}
+```

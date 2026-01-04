@@ -1,0 +1,699 @@
+---
+title: Full-Text Search
+description: Implement powerful full-text search in MondoDB using SQLite FTS5
+---
+
+# Full-Text Search
+
+MondoDB provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
+
+## Overview
+
+Full-text search in MondoDB enables:
+
+- **Natural language search** - Find documents matching search terms
+- **Phrase matching** - Search for exact phrases
+- **Wildcard queries** - Match partial terms with prefix matching
+- **Autocomplete** - Build type-ahead search functionality
+- **Boolean operators** - Combine search terms with AND, OR, NOT logic
+- **Relevance scoring** - Results ranked by BM25 algorithm
+- **Highlights and snippets** - Show matched terms in context
+
+## Creating Text Indexes
+
+Before you can search, create a text index on the fields you want to search.
+
+### Single Field Index
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://your-worker.workers.dev')
+await client.connect()
+
+const db = client.db('mydb')
+const articles = db.collection('articles')
+
+// Create a text index on the content field
+await articles.createIndex({ content: 'text' })
+```
+
+### Multi-Field Index
+
+Index multiple fields for searching across different parts of your documents:
+
+```typescript
+// Create a text index on multiple fields
+await articles.createIndex({
+  title: 'text',
+  content: 'text',
+  tags: 'text'
+})
+```
+
+### Weighted Fields
+
+Assign weights to fields to control their importance in search ranking. Higher weights mean matches in that field rank higher:
+
+```typescript
+await articles.createIndex(
+  { title: 'text', content: 'text', tags: 'text' },
+  {
+    weights: {
+      title: 10,    // Title matches are 10x more important
+      content: 5,   // Content matches are 5x more important
+      tags: 1       // Tags are baseline importance
+    }
+  }
+)
+```
+
+### Language Options
+
+Configure language settings for stemming and tokenization:
+
+```typescript
+// English stemming (default) - "running" matches "run", "runs", etc.
+await articles.createIndex(
+  { content: 'text' },
+  { default_language: 'english' }
+)
+
+// Disable stemming for exact matching
+await articles.createIndex(
+  { content: 'text' },
+  { default_language: 'none' }
+)
+```
+
+**Important:** Only one text index per collection is allowed. Creating a second text index will throw an error.
+
+## The $search Aggregation Stage
+
+The `$search` stage performs full-text search and must be the first stage in an aggregation pipeline.
+
+### Basic Text Search
+
+```typescript
+// Search for documents containing "mongodb" and "database"
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: {
+        query: 'mongodb database',
+        path: 'content'
+      }
+    }
+  }
+]).toArray()
+```
+
+Multiple search terms are combined with AND logic by default - documents must contain all terms.
+
+### Searching Multiple Fields
+
+Search across multiple fields by specifying an array of paths:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: {
+        query: 'javascript tutorial',
+        path: ['title', 'content', 'tags']
+      }
+    }
+  }
+]).toArray()
+```
+
+### Searching All Indexed Fields
+
+Omit the `path` parameter to search all fields in the text index:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: {
+        query: 'react hooks'
+      }
+    }
+  }
+]).toArray()
+```
+
+## Search Operators
+
+MondoDB supports several search operators for different use cases.
+
+### text Operator
+
+The `text` operator performs standard full-text search:
+
+```typescript
+{
+  $search: {
+    text: {
+      query: 'search terms',     // The search query
+      path: 'fieldName',         // Field(s) to search
+      fuzzy: {                   // Optional fuzzy matching
+        maxEdits: 2,             // Maximum edit distance (1 or 2)
+        prefixLength: 3          // Characters that must match exactly
+      },
+      score: {
+        boost: 2.5               // Score multiplier
+      }
+    }
+  }
+}
+```
+
+### phrase Operator
+
+Search for exact phrases where words must appear in order:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      phrase: {
+        query: 'machine learning algorithms',
+        path: 'content'
+      }
+    }
+  }
+]).toArray()
+```
+
+Phrase options:
+
+```typescript
+{
+  $search: {
+    phrase: {
+      query: 'full text search',
+      path: 'content',
+      slop: 2,          // Allow up to 2 words between terms
+      score: {
+        boost: 1.5
+      }
+    }
+  }
+}
+```
+
+### wildcard Operator
+
+Match terms using wildcard patterns:
+
+```typescript
+// Find all documents with words starting with "data"
+const results = await articles.aggregate([
+  {
+    $search: {
+      wildcard: {
+        query: 'data*',
+        path: 'content'
+      }
+    }
+  }
+]).toArray()
+```
+
+**Note:** Wildcards only support prefix matching (trailing `*`). Mid-string or leading wildcards are not supported by FTS5.
+
+### autocomplete Operator
+
+Build type-ahead search functionality with prefix matching on all terms:
+
+```typescript
+// Autocomplete as user types "mach"
+const results = await articles.aggregate([
+  {
+    $search: {
+      autocomplete: {
+        query: 'mach',
+        path: 'title'
+      }
+    }
+  },
+  { $limit: 10 }
+]).toArray()
+// Matches: "machine", "machinery", "machining", etc.
+```
+
+Autocomplete with multiple terms:
+
+```typescript
+// User has typed "mach learn"
+const results = await articles.aggregate([
+  {
+    $search: {
+      autocomplete: {
+        query: 'mach learn',
+        path: 'title',
+        tokenOrder: 'sequential'  // Terms must appear in order
+      }
+    }
+  }
+]).toArray()
+// Matches: "machine learning", "machinery learned", etc.
+```
+
+Autocomplete options:
+
+```typescript
+{
+  $search: {
+    autocomplete: {
+      query: 'search term',
+      path: 'fieldName',
+      tokenOrder: 'any' | 'sequential',  // Default: 'any'
+      fuzzy: {
+        maxEdits: 1,
+        prefixLength: 2,
+        maxExpansions: 50
+      }
+    }
+  }
+}
+```
+
+### compound Operator
+
+Combine multiple search clauses with boolean logic:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      compound: {
+        // Documents MUST match these clauses (AND)
+        must: [
+          { text: { query: 'javascript', path: 'tags' } }
+        ],
+        // Documents SHOULD match these clauses (OR - boosts score)
+        should: [
+          { text: { query: 'tutorial beginner', path: 'title' } }
+        ],
+        // Documents MUST NOT match these clauses (NOT)
+        mustNot: [
+          { text: { query: 'advanced expert', path: 'tags' } }
+        ],
+        // Same as must but doesn't affect scoring
+        filter: [
+          { text: { query: 'published', path: 'status' } }
+        ],
+        // Minimum number of should clauses that must match
+        minimumShouldMatch: 1
+      }
+    }
+  }
+]).toArray()
+```
+
+**Compound clause types:**
+
+| Clause | Description | Affects Score |
+|--------|-------------|---------------|
+| `must` | All clauses must match | Yes |
+| `should` | At least one should match (optional) | Yes |
+| `mustNot` | No clauses can match | No |
+| `filter` | All clauses must match | No |
+
+## Scoring and Ranking
+
+MondoDB uses the BM25 algorithm for relevance scoring. Results are automatically sorted by relevance score (highest first).
+
+### Including Search Score
+
+To access the relevance score in your results:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      text: { query: 'mongodb tutorial', path: 'content' }
+    }
+  },
+  {
+    $project: {
+      title: 1,
+      content: 1,
+      score: { $meta: 'searchScore' }
+    }
+  }
+]).toArray()
+
+// Results include _searchScore field
+// [{ title: '...', content: '...', score: 2.5 }, ...]
+```
+
+### Score Boosting
+
+Boost the score of specific search clauses:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $search: {
+      compound: {
+        should: [
+          {
+            text: {
+              query: 'featured',
+              path: 'tags',
+              score: { boost: 5 }  // 5x score boost
+            }
+          },
+          {
+            text: {
+              query: 'popular',
+              path: 'tags',
+              score: { boost: 2 }  // 2x score boost
+            }
+          }
+        ]
+      }
+    }
+  }
+]).toArray()
+```
+
+## Highlights and Snippets
+
+MondoDB supports highlighting matched terms and extracting relevant snippets from search results.
+
+### Highlight Function
+
+Wrap matched terms with HTML tags:
+
+```typescript
+// The highlight function marks matching terms
+// highlight(fts_table, column_index, start_tag, end_tag)
+// Returns: "Learn about <b>MongoDB</b> and <b>database</b> concepts"
+```
+
+Highlight options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `path` | (required) | Field to highlight |
+| `columnIndex` | 0 | Column index in FTS table |
+| `startTag` | `<b>` | Opening tag for matched terms |
+| `endTag` | `</b>` | Closing tag for matched terms |
+
+### Snippet Function
+
+Extract text snippets around matched terms:
+
+```typescript
+// The snippet function returns context around matches
+// snippet(fts_table, column_index, start_tag, end_tag, ellipsis, tokens)
+// Returns: "...powerful <b>MongoDB</b> features for <b>database</b> management..."
+```
+
+Snippet options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `path` | (required) | Field to extract snippet from |
+| `columnIndex` | 0 | Column index in FTS table |
+| `startTag` | `<b>` | Opening tag for matched terms |
+| `endTag` | `</b>` | Closing tag for matched terms |
+| `ellipsis` | `...` | String for truncated text |
+| `maxTokens` | 10 | Maximum tokens to return |
+
+## Hybrid Search
+
+Combine full-text search with vector similarity search for improved results. MondoDB supports two fusion algorithms:
+
+### Reciprocal Rank Fusion (RRF)
+
+RRF combines rankings from multiple search methods:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $rankFusion: {
+      input: {
+        pipelines: {
+          // Full-text search pipeline
+          text: [
+            {
+              $search: {
+                text: { query: 'machine learning', path: 'content' }
+              }
+            }
+          ],
+          // Vector search pipeline
+          vector: [
+            {
+              $vectorSearch: {
+                index: 'embedding_index',
+                path: 'embedding',
+                queryVector: [0.1, 0.2, ...],
+                limit: 100
+              }
+            }
+          ]
+        }
+      },
+      combination: {
+        ranker: 'rrf',
+        k: 60  // RRF constant (default: 60)
+      },
+      limit: 10
+    }
+  }
+]).toArray()
+```
+
+### Score Fusion
+
+Combine normalized scores with configurable weights:
+
+```typescript
+const results = await articles.aggregate([
+  {
+    $scoreFusion: {
+      input: {
+        pipelines: {
+          text: [
+            { $search: { text: { query: 'AI research', path: 'content' } } }
+          ],
+          vector: [
+            { $vectorSearch: { /* ... */ } }
+          ]
+        }
+      },
+      combination: {
+        weights: {
+          vector: 0.7,  // 70% weight to vector similarity
+          text: 0.3     // 30% weight to text relevance
+        },
+        normalizeScores: true
+      },
+      limit: 10
+    }
+  }
+]).toArray()
+```
+
+## Common Search Patterns
+
+### Basic Search Box
+
+```typescript
+async function search(query: string) {
+  return articles.aggregate([
+    {
+      $search: {
+        text: {
+          query,
+          path: ['title', 'content']
+        }
+      }
+    },
+    { $limit: 20 },
+    {
+      $project: {
+        title: 1,
+        excerpt: { $substr: ['$content', 0, 200] },
+        score: { $meta: 'searchScore' }
+      }
+    }
+  ]).toArray()
+}
+```
+
+### Faceted Search
+
+Combine search with filtering and facets:
+
+```typescript
+async function facetedSearch(query: string, category?: string) {
+  const pipeline: any[] = [
+    {
+      $search: {
+        compound: {
+          must: [
+            { text: { query, path: ['title', 'content'] } }
+          ],
+          filter: category ? [
+            { text: { query: category, path: 'category' } }
+          ] : []
+        }
+      }
+    }
+  ]
+
+  return articles.aggregate([
+    ...pipeline,
+    {
+      $facet: {
+        results: [
+          { $limit: 20 },
+          { $project: { title: 1, category: 1 } }
+        ],
+        categories: [
+          { $group: { _id: '$category', count: { $sum: 1 } } },
+          { $sort: { count: -1 } }
+        ],
+        totalCount: [
+          { $count: 'count' }
+        ]
+      }
+    }
+  ]).toArray()
+}
+```
+
+### Type-Ahead Autocomplete
+
+```typescript
+async function autocomplete(partial: string) {
+  if (partial.length < 2) return []
+
+  return articles.aggregate([
+    {
+      $search: {
+        autocomplete: {
+          query: partial,
+          path: 'title',
+          tokenOrder: 'sequential'
+        }
+      }
+    },
+    { $limit: 10 },
+    { $project: { title: 1, _id: 0 } }
+  ]).toArray()
+}
+```
+
+### Search with Filters
+
+```typescript
+async function searchWithFilters(
+  query: string,
+  filters: { author?: string; dateFrom?: Date; tags?: string[] }
+) {
+  const filterClauses: any[] = []
+
+  if (filters.author) {
+    filterClauses.push({
+      text: { query: filters.author, path: 'author' }
+    })
+  }
+
+  return articles.aggregate([
+    {
+      $search: {
+        compound: {
+          must: [
+            { text: { query, path: ['title', 'content'] } }
+          ],
+          filter: filterClauses
+        }
+      }
+    },
+    // Apply additional filters with $match
+    ...(filters.dateFrom ? [{
+      $match: { createdAt: { $gte: filters.dateFrom } }
+    }] : []),
+    ...(filters.tags?.length ? [{
+      $match: { tags: { $in: filters.tags } }
+    }] : []),
+    { $limit: 50 }
+  ]).toArray()
+}
+```
+
+### Phrase Search with Fallback
+
+```typescript
+async function smartSearch(query: string) {
+  // First try exact phrase match
+  let results = await articles.aggregate([
+    {
+      $search: {
+        phrase: { query, path: 'content' }
+      }
+    },
+    { $limit: 10 }
+  ]).toArray()
+
+  // Fall back to regular text search if no phrase matches
+  if (results.length === 0) {
+    results = await articles.aggregate([
+      {
+        $search: {
+          text: { query, path: 'content' }
+        }
+      },
+      { $limit: 10 }
+    ]).toArray()
+  }
+
+  return results
+}
+```
+
+## FTS5 Query Syntax
+
+Under the hood, MondoDB translates search operators to SQLite FTS5 MATCH syntax:
+
+| MondoDB Operator | FTS5 Syntax | Example |
+|-----------------|-------------|---------|
+| text (single term) | `term` | `mongodb` |
+| text (multiple terms) | `term1 term2` | `mongodb database` |
+| text (with path) | `column:term` | `title:mongodb` |
+| phrase | `"phrase"` | `"mongodb database"` |
+| wildcard (prefix) | `term*` | `data*` |
+| compound must | `term1 AND term2` | `mongodb AND tutorial` |
+| compound should | `term1 OR term2` | `mongodb OR postgres` |
+| compound mustNot | `NOT term` | `NOT deprecated` |
+
+## Performance Tips
+
+1. **Create appropriate text indexes** - Only index fields you need to search
+2. **Use path restrictions** - Searching specific fields is faster than searching all fields
+3. **Limit results early** - Add `$limit` after `$search` to stop processing once enough results are found
+4. **Use filter clauses** - `filter` clauses in compound queries don't affect scoring and can be optimized
+5. **Consider query complexity** - Simple text queries are faster than complex compound queries
+6. **Index field weights** - Weight important fields higher to improve result relevance without post-processing
+
+## Limitations
+
+- Only one text index per collection
+- Wildcard queries only support prefix matching (trailing `*`)
+- FTS5 uses Unicode61 tokenizer - may not handle all languages optimally
+- Fuzzy matching has limited edit distance (1-2)
+- `$search` must be the first stage in an aggregation pipeline
+
+## Next Steps
+
+- [Aggregation Pipeline](/docs/guides/aggregation) - Learn about other pipeline stages
+- [Indexing](/docs/guides/indexing) - Create indexes for better performance
+- [Vector Search](/docs/guides/vector-search) - Semantic similarity search

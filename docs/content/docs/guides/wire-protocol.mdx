@@ -1,0 +1,571 @@
+---
+title: Wire Protocol
+description: MongoDB wire protocol support for Compass, mongosh, and native drivers
+---
+
+# Wire Protocol
+
+MondoDB includes a MongoDB-compatible wire protocol server that enables connections from standard MongoDB tools and drivers. This allows you to use MongoDB Compass, mongosh, and any MongoDB driver with MondoDB for local development, debugging, and testing.
+
+## Overview
+
+The wire protocol implementation provides:
+
+- **MongoDB Compass Support** - Browse and manage your data visually
+- **mongosh Compatibility** - Use the MongoDB shell for ad-hoc queries
+- **Native Driver Support** - Connect with official MongoDB drivers (Node.js, Python, etc.)
+- **SCRAM-SHA-256 Authentication** - Secure authentication for production use
+- **TLS/SSL Support** - Encrypted connections for secure communication
+
+## Quick Start
+
+### Starting the Server
+
+Use the MondoDB CLI to start a local wire protocol server:
+
+```bash
+# Start with default settings (localhost:27017)
+npx mondodb serve
+
+# Specify port and host
+npx mondodb serve --port 27018 --host 0.0.0.0
+
+# With authentication
+npx mondodb serve --auth --username admin --password secret
+
+# With TLS
+npx mondodb serve --tls --cert ./server.crt --key ./server.key
+```
+
+### Connecting with MongoDB Compass
+
+1. Start the wire protocol server
+2. Open MongoDB Compass
+3. Connect using: `mongodb://localhost:27017`
+
+### Connecting with mongosh
+
+```bash
+mongosh mongodb://localhost:27017
+```
+
+With authentication:
+
+```bash
+mongosh mongodb://admin:secret@localhost:27017/admin
+```
+
+## TCP Server Configuration
+
+### ServerOptions
+
+```typescript
+import { WireProtocolServer, createServer } from 'mondodb/wire'
+import { LocalSQLiteBackend } from 'mondodb/wire'
+
+const backend = new LocalSQLiteBackend('.mondodb')
+
+const server = new WireProtocolServer(backend, {
+  port: 27017,        // Port to listen on (default: 27017)
+  host: 'localhost',  // Host to bind to (default: 'localhost')
+  verbose: false,     // Enable verbose logging
+  tls: undefined,     // TLS configuration (see below)
+  auth: undefined,    // Authentication configuration (see below)
+})
+
+await server.start()
+```
+
+### Helper Function
+
+For convenience, use the `createServer` function:
+
+```typescript
+import { createServer, LocalSQLiteBackend } from 'mondodb/wire'
+
+const backend = new LocalSQLiteBackend('.mondodb')
+const server = await createServer(backend, {
+  port: 27017,
+  host: 'localhost',
+})
+
+console.log(server.connectionString) // mongodb://localhost:27017
+```
+
+### Server Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `address` | `{ host: string; port: number; tls: boolean }` | Server address info |
+| `isTls` | `boolean` | Whether server uses TLS |
+| `connectionString` | `string` | MongoDB connection string |
+
+### Server Methods
+
+| Method | Description |
+|--------|-------------|
+| `start()` | Start the server |
+| `stop()` | Stop the server |
+
+## TLS/SSL Configuration
+
+Enable TLS for secure connections:
+
+```typescript
+import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+
+const server = new WireProtocolServer(backend, {
+  port: 27017,
+  tls: {
+    key: './server.key',      // Private key path or Buffer
+    cert: './server.crt',     // Certificate path or Buffer
+    ca: './ca.crt',           // Optional: CA certificate
+    passphrase: 'secret',     // Optional: Key passphrase
+    requestCert: false,       // Optional: Request client cert (mTLS)
+    rejectUnauthorized: true, // Optional: Reject invalid client certs
+    minVersion: 'TLSv1.2',    // Optional: Minimum TLS version
+    maxVersion: 'TLSv1.3',    // Optional: Maximum TLS version
+  },
+})
+```
+
+### TlsOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `key` | `string \| Buffer` | Required | Private key in PEM format |
+| `cert` | `string \| Buffer` | Required | Certificate chain in PEM format |
+| `ca` | `string \| Buffer \| Array` | System CAs | Trusted CA certificates |
+| `passphrase` | `string` | - | Passphrase for encrypted private key |
+| `requestCert` | `boolean` | `false` | Request client certificates (mTLS) |
+| `rejectUnauthorized` | `boolean` | `true` | Reject invalid client certificates |
+| `minVersion` | `string` | `'TLSv1.2'` | Minimum TLS version |
+| `maxVersion` | `string` | `'TLSv1.3'` | Maximum TLS version |
+| `serverName` | `string` | - | Server name for SNI |
+| `ALPNProtocols` | `string[]` | - | ALPN protocols to advertise |
+
+### Generating Self-Signed Certificates
+
+For local development, generate self-signed certificates:
+
+```bash
+# Generate CA private key and certificate
+openssl genrsa -out ca.key 4096
+openssl req -new -x509 -days 365 -key ca.key -out ca.crt \
+  -subj "/CN=MondoDB CA"
+
+# Generate server private key and CSR
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr \
+  -subj "/CN=localhost"
+
+# Sign server certificate with CA
+openssl x509 -req -days 365 -in server.csr -CA ca.crt -CAkey ca.key \
+  -CAcreateserial -out server.crt
+```
+
+### Connecting with TLS
+
+```bash
+# mongosh with TLS
+mongosh "mongodb://localhost:27017" --tls --tlsCAFile ./ca.crt
+
+# MongoDB Compass
+# Use connection string: mongodb://localhost:27017/?tls=true
+# Provide CA certificate in connection settings
+```
+
+## Authentication
+
+MondoDB supports SCRAM-SHA-256 authentication, the same mechanism used by MongoDB.
+
+### Enabling Authentication
+
+```typescript
+import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+
+const server = new WireProtocolServer(backend, {
+  port: 27017,
+  auth: {
+    enabled: true,
+    username: 'admin',
+    password: 'secretpassword',
+  },
+})
+```
+
+### AuthOptions
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `enabled` | `boolean` | Enable authentication requirement |
+| `username` | `string` | Username for SCRAM-SHA-256 |
+| `password` | `string` | Password for SCRAM-SHA-256 |
+
+### Connecting with Authentication
+
+```bash
+# mongosh
+mongosh "mongodb://admin:secretpassword@localhost:27017/admin"
+
+# MongoDB Compass
+# Use connection string: mongodb://admin:secretpassword@localhost:27017/admin
+```
+
+### Commands Allowed Without Authentication
+
+The following commands can be executed without authentication:
+
+| Command | Description |
+|---------|-------------|
+| `hello`, `ismaster`, `isMaster` | Handshake commands |
+| `ping` | Connection test |
+| `buildInfo`, `buildinfo` | Server version info |
+| `whatsmyuri` | Client connection info |
+| `getParameter` | Server parameters |
+| `getCmdLineOpts` | Command line options |
+| `saslStart`, `saslContinue` | Authentication commands |
+| `authenticate`, `logout` | Authentication management |
+
+All other commands (CRUD, aggregation, admin) require authentication when enabled.
+
+### SCRAM-SHA-256 Implementation
+
+MondoDB implements SCRAM-SHA-256 per RFC 5802 and RFC 7677:
+
+1. **Client initiates** with username and random nonce
+2. **Server responds** with salt, iteration count, and combined nonce
+3. **Client proves** identity using PBKDF2-derived key
+4. **Server verifies** and returns signature
+
+```typescript
+import { createScramCredentials, InMemoryCredentialsProvider } from 'mondodb/wire'
+
+// Create credentials programmatically
+const credentials = await createScramCredentials(
+  'admin',           // username
+  'secretpassword',  // password
+  'admin',           // database
+  15000              // iteration count (default: 15000)
+)
+
+// Use custom credentials provider
+const provider = new InMemoryCredentialsProvider()
+await provider.addUser('admin', 'secretpassword', 'admin')
+```
+
+## Backend Interface
+
+The wire protocol server uses a backend interface for database operations. This allows for different storage implementations.
+
+### MondoBackend Interface
+
+```typescript
+interface MondoBackend {
+  // Database operations
+  listDatabases(): Promise<DatabaseInfo[]>
+  createDatabase(name: string): Promise<void>
+  dropDatabase(name: string): Promise<void>
+  databaseExists(name: string): Promise<boolean>
+
+  // Collection operations
+  listCollections(db: string, filter?: Document): Promise<CollectionInfo[]>
+  createCollection(db: string, name: string, options?: Document): Promise<void>
+  dropCollection(db: string, name: string): Promise<void>
+  collectionExists(db: string, name: string): Promise<boolean>
+  collStats(db: string, collection: string): Promise<CollStats>
+  dbStats(db: string): Promise<DbStats>
+
+  // CRUD operations
+  find(db: string, collection: string, options: FindOptions): Promise<FindResult>
+  insertOne(db: string, collection: string, doc: Document): Promise<InsertResult>
+  insertMany(db: string, collection: string, docs: Document[]): Promise<InsertResult>
+  updateOne(db: string, collection: string, filter: Document, update: Document, options?: UpdateOptions): Promise<UpdateResult>
+  updateMany(db: string, collection: string, filter: Document, update: Document, options?: UpdateOptions): Promise<UpdateResult>
+  deleteOne(db: string, collection: string, filter: Document): Promise<DeleteResult>
+  deleteMany(db: string, collection: string, filter: Document): Promise<DeleteResult>
+
+  // Count and distinct
+  count(db: string, collection: string, query?: Document): Promise<number>
+  distinct(db: string, collection: string, field: string, query?: Document): Promise<unknown[]>
+
+  // Aggregation
+  aggregate(db: string, collection: string, pipeline: Document[], options?: AggregateOptions): Promise<AggregateResult>
+
+  // Index operations
+  listIndexes(db: string, collection: string): Promise<IndexInfo[]>
+  createIndexes(db: string, collection: string, indexes: IndexSpec[]): Promise<string[]>
+  dropIndex(db: string, collection: string, indexName: string): Promise<void>
+  dropIndexes(db: string, collection: string): Promise<void>
+
+  // Cursor management
+  createCursor(state: CursorState): void
+  getCursor(id: bigint): CursorState | undefined
+  advanceCursor(id: bigint, count: number): Document[]
+  closeCursor(id: bigint): boolean
+  cleanupExpiredCursors(): void
+}
+```
+
+### LocalSQLiteBackend
+
+The built-in SQLite backend for local development:
+
+```typescript
+import { LocalSQLiteBackend } from 'mondodb/wire'
+
+// Create backend with data directory
+const backend = new LocalSQLiteBackend('.mondodb')
+
+// Each database is stored as a separate SQLite file
+// .mondodb/mydb.sqlite
+// .mondodb/analytics.sqlite
+```
+
+### Implementing Custom Backends
+
+Create custom backends for different storage systems:
+
+```typescript
+import type { MondoBackend, DatabaseInfo, CollectionInfo } from 'mondodb/wire'
+
+class MyCustomBackend implements MondoBackend {
+  async listDatabases(): Promise<DatabaseInfo[]> {
+    // Your implementation
+    return [{ name: 'mydb', sizeOnDisk: 1000, empty: false }]
+  }
+
+  async find(db: string, collection: string, options: FindOptions): Promise<FindResult> {
+    // Your implementation
+    return { documents: [], cursorId: 0n, hasMore: false }
+  }
+
+  // ... implement all other methods
+}
+
+const server = new WireProtocolServer(new MyCustomBackend(), {
+  port: 27017,
+})
+```
+
+## Supported Commands
+
+### Handshake & Discovery
+
+| Command | Description |
+|---------|-------------|
+| `hello` / `ismaster` | Initial handshake and server info |
+| `ping` | Connection health check |
+| `buildInfo` | Server version and build info |
+| `hostInfo` | Host system information |
+| `whatsmyuri` | Client connection URI |
+| `getLog` | Server logs |
+| `getParameter` | Server parameters |
+| `getCmdLineOpts` | Command line options |
+
+### Admin Commands
+
+| Command | Description |
+|---------|-------------|
+| `listDatabases` | List all databases |
+| `listCollections` | List collections in a database |
+| `create` | Create a collection |
+| `drop` | Drop a collection |
+| `dropDatabase` | Drop a database |
+| `collStats` | Collection statistics |
+| `dbStats` | Database statistics |
+| `serverStatus` | Server status information |
+
+### CRUD Commands
+
+| Command | Description |
+|---------|-------------|
+| `find` | Find documents |
+| `insert` | Insert documents |
+| `update` | Update documents |
+| `delete` | Delete documents |
+| `count` | Count documents |
+| `distinct` | Get distinct values |
+| `getMore` | Fetch more cursor results |
+| `killCursors` | Close cursors |
+
+### Aggregation Commands
+
+| Command | Description |
+|---------|-------------|
+| `aggregate` | Run aggregation pipeline |
+
+### Index Commands
+
+| Command | Description |
+|---------|-------------|
+| `listIndexes` | List indexes on a collection |
+| `createIndexes` | Create indexes |
+| `dropIndexes` | Drop indexes |
+
+## CLI Usage
+
+The MondoDB CLI provides convenient commands for the wire protocol server:
+
+### serve
+
+Start the wire protocol server:
+
+```bash
+# Basic usage
+npx mondodb serve
+
+# All options
+npx mondodb serve \
+  --port 27017 \
+  --host localhost \
+  --data .mondodb \
+  --verbose \
+  --auth \
+  --username admin \
+  --password secret \
+  --tls \
+  --cert ./server.crt \
+  --key ./server.key \
+  --ca ./ca.crt
+```
+
+### CLI Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--port, -p` | `27017` | Port to listen on |
+| `--host, -h` | `localhost` | Host to bind to |
+| `--data, -d` | `.mondodb` | Data directory for SQLite files |
+| `--verbose, -v` | `false` | Enable verbose logging |
+| `--auth` | `false` | Enable authentication |
+| `--username, -u` | - | Authentication username |
+| `--password` | - | Authentication password |
+| `--tls` | `false` | Enable TLS |
+| `--cert` | - | TLS certificate file |
+| `--key` | - | TLS private key file |
+| `--ca` | - | TLS CA certificate file |
+
+## Complete Example
+
+### Server Setup
+
+```typescript
+import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+
+const backend = new LocalSQLiteBackend('./data')
+
+const server = new WireProtocolServer(backend, {
+  port: 27017,
+  host: '0.0.0.0',
+  verbose: true,
+  auth: {
+    enabled: true,
+    username: 'admin',
+    password: 'secure-password',
+  },
+  tls: {
+    key: './certs/server.key',
+    cert: './certs/server.crt',
+    ca: './certs/ca.crt',
+    minVersion: 'TLSv1.2',
+  },
+})
+
+await server.start()
+console.log(`Server running at ${server.connectionString}`)
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await server.stop()
+  backend.close()
+  process.exit(0)
+})
+```
+
+### Client Connection (Node.js)
+
+```typescript
+import { MongoClient } from 'mongodb'
+
+const uri = 'mongodb://admin:secure-password@localhost:27017/mydb?tls=true'
+
+const client = new MongoClient(uri, {
+  tls: true,
+  tlsCAFile: './certs/ca.crt',
+})
+
+await client.connect()
+
+const db = client.db('mydb')
+const collection = db.collection('users')
+
+// Insert documents
+await collection.insertOne({ name: 'Alice', email: 'alice@example.com' })
+
+// Query documents
+const users = await collection.find({ name: 'Alice' }).toArray()
+console.log(users)
+
+await client.close()
+```
+
+### Using with MongoDB Compass
+
+1. Start the server with authentication and TLS
+2. Open MongoDB Compass
+3. Click "New Connection"
+4. Enter connection string: `mongodb://admin:secure-password@localhost:27017/?tls=true`
+5. Under "Advanced Connection Options" > "TLS/SSL":
+   - Enable TLS
+   - Provide CA certificate file
+6. Click "Connect"
+
+## Security Considerations
+
+1. **Always use authentication in production** - Even for local development, enable authentication to match production behavior
+2. **Use TLS for network connections** - Enable TLS when exposing the server beyond localhost
+3. **Use strong passwords** - The SCRAM-SHA-256 mechanism provides secure password verification
+4. **Limit network exposure** - Bind to localhost unless external access is required
+5. **Monitor connections** - Enable verbose logging to track connection activity
+
+## Troubleshooting
+
+### Connection Refused
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:27017
+```
+
+- Ensure the server is running
+- Check the port is correct
+- Verify no firewall blocking
+
+### Authentication Failed
+
+```
+Error: Authentication failed
+```
+
+- Verify username and password
+- Ensure authentication is enabled on the server
+- Check you're connecting to the correct auth database (usually `admin`)
+
+### TLS Handshake Failed
+
+```
+Error: unable to verify the first certificate
+```
+
+- Provide the CA certificate to the client
+- For self-signed certs, use `--tlsAllowInvalidCertificates` for testing only
+- Verify certificate chain is complete
+
+### Command Not Supported
+
+```
+Error: no such command: 'someCommand'
+```
+
+- Check the list of supported commands above
+- Some MongoDB features may not be implemented yet

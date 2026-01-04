@@ -1,0 +1,493 @@
+---
+title: AgentFS
+description: MondoDB-backed virtual filesystem for AI agents with glob, grep, KV store, and audit logging
+---
+
+# AgentFS
+
+AgentFS is a MondoDB-backed virtual filesystem designed specifically for AI agents. It provides a complete file system abstraction with POSIX-like semantics, along with powerful search capabilities, key-value storage, and immutable audit logging for tool calls.
+
+## Overview
+
+AgentFS enables AI agents to:
+
+- **Store and manage files** in a virtual filesystem backed by MondoDB
+- **Search files** using glob patterns and regex-based content search
+- **Persist data** using a key-value store for session data, caches, and configuration
+- **Audit tool calls** with an append-only, tamper-evident audit trail
+- **Integrate with AI SDKs** via adapters for Anthropic MCP and Vercel AI SDK
+
+## Installation
+
+```typescript
+import {
+  MonDoAgent,
+  AgentFilesystem,
+  AgentGrep,
+  AgentFSKVStore,
+  ToolCallAuditLog,
+} from '@mondodb/agentfs'
+```
+
+## Core Components
+
+### MonDoAgent
+
+The `MonDoAgent` class is the main entry point for AI agent operations. It integrates the virtual filesystem, glob, grep, KV store, and audit logging with Cloudflare Agent infrastructure.
+
+```typescript
+import { MonDoAgent } from '@mondodb/agentfs'
+
+// Create agent with Cloudflare Agent context
+const agent = new MonDoAgent(ctx, env)
+await agent.init()
+
+// Filesystem operations (auto-audited)
+await agent.fs.writeFile('/config.json', '{"debug": true}')
+const content = await agent.fs.readFile('/config.json')
+
+// Find files with glob patterns
+const tsFiles = await agent.glob('**/*.ts')
+
+// Search file contents
+const matches = await agent.grep('TODO', { glob: '**/*.ts' })
+
+// Key-value storage (auto-audited)
+await agent.kv.set('session:123', { user: 'alice' })
+const session = await agent.kv.get('session:123')
+
+// View audit log
+const entries = await agent.audit.list({ limit: 10 })
+```
+
+### Virtual Filesystem (VFS)
+
+The `AgentFilesystem` class provides a virtual filesystem with POSIX-like semantics backed by MondoDB.
+
+```typescript
+import { AgentFilesystem } from '@mondodb/agentfs'
+
+const fs = new AgentFilesystem(database)
+
+// Write and read files
+await fs.writeFile('/src/index.ts', 'export const hello = "world"')
+const content = await fs.readFile('/src/index.ts')
+
+// Directory operations
+await fs.mkdir('/src/components')
+const entries = await fs.readdir('/src')
+// ['components', 'index.ts']
+
+// File statistics
+const stat = await fs.stat('/src/index.ts')
+// { type: 'file', size: 27, createdAt: Date, updatedAt: Date }
+
+// Check existence
+const exists = await fs.exists('/src/index.ts')
+// true
+
+// Delete files and directories
+await fs.deleteFile('/src/index.ts')
+await fs.rmdir('/src/components')
+```
+
+**Key Features:**
+
+- **Implicit directory creation**: Parent directories are created automatically when writing files
+- **Path normalization**: Paths are normalized (removes duplicate slashes, resolves `.` and `..`)
+- **POSIX error codes**: Errors follow POSIX conventions (ENOENT, EISDIR, ENOTDIR, EEXIST, ENOTEMPTY, EPERM)
+- **O(1) lookups**: File paths are used as document IDs for efficient retrieval
+
+### Glob Pattern Matching
+
+AgentFS supports standard glob patterns for file discovery:
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `*` | Matches any characters except `/` | `*.ts` matches `index.ts` |
+| `**` | Matches any path segments | `**/*.ts` matches `src/lib/util.ts` |
+| `?` | Matches any single character | `file?.ts` matches `file1.ts` |
+| `[abc]` | Matches any character in set | `[abc].ts` matches `a.ts` |
+| `[a-z]` | Matches any character in range | `[a-z].ts` matches `x.ts` |
+| `[!abc]` | Matches any character NOT in set | `[!0-9].ts` matches `a.ts` |
+| `{a,b,c}` | Matches any alternative | `*.{ts,js}` matches `index.ts` or `index.js` |
+
+```typescript
+// Find all TypeScript files
+const tsFiles = await agent.glob('**/*.ts')
+
+// Find files in src directory
+const srcFiles = await agent.glob('/src/**/*')
+
+// Find config files with multiple extensions
+const configFiles = await agent.glob('*.{json,yaml,yml}')
+
+// Using glob utilities directly
+import { matchGlob, filterGlob, GlobMatcher, compileGlob } from '@mondodb/agentfs'
+
+// Test a single path
+const matches = matchGlob('**/*.ts', '/src/index.ts')
+// true
+
+// Filter an array of paths
+const filtered = filterGlob('**/*.ts', ['/src/index.ts', '/README.md', '/lib/util.ts'])
+// ['/src/index.ts', '/lib/util.ts']
+
+// Compile for repeated matching (efficient)
+const compiled = compileGlob('**/*.ts')
+compiled.match('/src/index.ts') // true
+
+// Use GlobMatcher for include/exclude patterns
+const matcher = new GlobMatcher(['**/*.ts', '!**/*.test.ts'])
+matcher.match('/src/index.ts')      // true
+matcher.match('/src/index.test.ts') // false
+```
+
+### Grep-like Content Search
+
+The `AgentGrep` class provides regex-based content search across files:
+
+```typescript
+import { AgentGrep } from '@mondodb/agentfs'
+
+const grep = new AgentGrep(fs)
+
+// Basic search
+const matches = await grep.grep('function\\s+\\w+', {
+  glob: '**/*.ts',
+  caseInsensitive: false,
+  maxResults: 100
+})
+
+// Each match contains:
+// {
+//   file: '/src/utils.ts',
+//   line: 42,
+//   column: 1,
+//   content: 'function processData(input: string) {'
+// }
+
+// Search with context lines
+const withContext = await grep.grep('TODO', {
+  glob: '**/*.ts',
+  contextLines: 2
+})
+// context: { before: ['...', '...'], after: ['...', '...'] }
+
+// Get only file paths with matches
+const files = await grep.grepFiles('TODO', { glob: '**/*.ts' })
+// ['/src/index.ts', '/src/utils.ts']
+
+// Count matches per file
+const counts = await grep.grepCount('console\\.log')
+// Map { '/src/debug.ts' => 5, '/src/app.ts' => 2 }
+
+// Search multiple patterns
+const multiMatch = await grep.grepAny(['TODO', 'FIXME', 'HACK'])
+
+// Stream results for large searches
+await grep.grepStream('pattern', {}, async (match) => {
+  console.log(`Found in ${match.file}:${match.line}`)
+})
+```
+
+### Key-Value Store
+
+The `AgentFSKVStore` provides simple key-value storage backed by MondoDB:
+
+```typescript
+import { AgentFSKVStore } from '@mondodb/agentfs'
+
+const kv = new AgentFSKVStore(backend)
+
+// Set and get values (any JSON-serializable type)
+await kv.set('user:123', { name: 'Alice', email: 'alice@example.com' })
+const user = await kv.get('user:123')
+
+// Check existence
+const exists = await kv.has('user:123')
+
+// Delete entries
+const deleted = await kv.delete('user:123')
+// true if key existed
+
+// List keys by prefix
+const userKeys = await kv.keys('user:')
+// ['user:123', 'user:456', 'user:789']
+
+// Get full entries with metadata
+const entries = await kv.entries('session:')
+// [{ key, value, createdAt, updatedAt }, ...]
+
+// Clear entries by prefix
+const clearedCount = await kv.clear('cache:')
+// 42
+```
+
+### Tool Call Audit Log
+
+The `ToolCallAuditLog` provides an append-only, immutable audit trail for AI agent tool calls:
+
+```typescript
+import { ToolCallAuditLog, createInMemoryAuditBackend } from '@mondodb/agentfs'
+
+const audit = new ToolCallAuditLog(createInMemoryAuditBackend())
+
+// Record a tool call
+const id = await audit.record(
+  'fs.readFile',
+  { path: '/config.json' },
+  { content: '{"key": "value"}', success: true },
+  {
+    startTime: new Date(),
+    endTime: new Date(),
+    metadata: { sessionId: 'abc123' }
+  }
+)
+
+// List entries with pagination
+const entries = await audit.list({ limit: 10, offset: 0 })
+
+// Find by tool name
+const fsOperations = await audit.findByTool('fs.writeFile')
+
+// Find by time range
+const recentCalls = await audit.findByTimeRange(
+  new Date('2024-01-01'),
+  new Date()
+)
+
+// Get single entry
+const entry = await audit.findById(id)
+
+// Count total entries
+const count = await audit.count()
+
+// Updates and deletes are NOT allowed - audit logs are immutable
+await audit.update(id, {}) // throws ImmutableEntryError
+await audit.delete(id)     // throws ImmutableEntryError
+```
+
+**Audit Entry Structure:**
+
+```typescript
+interface ToolCallEntry {
+  id: string                     // Unique identifier
+  tool: string                   // Tool name (e.g., 'fs.readFile')
+  inputs: Record<string, unknown>  // Input parameters
+  outputs: Record<string, unknown> // Results/output
+  timestamp: Date                 // When recorded
+  durationMs?: number             // Execution duration
+  metadata?: Record<string, unknown> // Custom metadata
+}
+```
+
+## SDK Adapters
+
+AgentFS provides adapters for popular AI SDKs, making it easy to give AI models access to the virtual filesystem.
+
+### Anthropic MCP Adapter
+
+The MCP adapter creates an MCP-compatible server with AgentFS tools:
+
+```typescript
+import { createMonDoMcpServer, AnthropicMCPAdapter } from '@mondodb/agentfs/adapters'
+
+const server = createMonDoMcpServer({
+  fs: agentFilesystem,
+  kv: agentKVStore,
+  grep: agentGrep,
+  audit: toolCallAuditLog, // optional
+}, {
+  name: 'my-agentfs',
+  version: '1.0.0',
+  enableAudit: true,
+  retry: {
+    maxRetries: 3,
+    initialDelayMs: 1000,
+    maxDelayMs: 30000,
+    backoffMultiplier: 2,
+    jitter: true,
+  },
+  timeout: {
+    requestTimeoutMs: 30000,
+    idleTimeoutMs: 60000,
+  },
+})
+
+// List available tools
+const tools = await server.listTools()
+// [{ name: 'glob', ... }, { name: 'grep', ... }, { name: 'read', ... }, ...]
+
+// Call a tool
+const result = await server.callTool('read', { path: '/src/index.ts' })
+```
+
+**Available MCP Tools:**
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `glob` | Find files matching pattern | `pattern` |
+| `grep` | Search file contents | `pattern`, `glob?`, `caseInsensitive?`, `maxResults?`, `contextLines?` |
+| `read` | Read file contents | `path` |
+| `write` | Write file contents | `path`, `content` |
+| `edit` | Replace text in file | `path`, `old_string`, `new_string` |
+| `kv_get` | Get KV value | `key` |
+| `kv_set` | Set KV value | `key`, `value` |
+| `audit_list` | List audit entries | `limit?`, `offset?`, `tool?` |
+
+### Vercel AI SDK Adapter
+
+The Vercel adapter creates tool definitions compatible with the Vercel AI SDK:
+
+```typescript
+import { createAgentFSVercelTools } from '@mondodb/agentfs/adapters'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+const tools = createAgentFSVercelTools({
+  fs: agentFilesystem,
+  grep: agentGrep,
+  options: {
+    retry: { maxRetries: 3 },
+    timeout: { requestTimeoutMs: 30000 },
+  },
+})
+
+// Use with generateText
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools,
+  maxSteps: 10,
+  prompt: 'Find all TypeScript files and read index.ts',
+})
+```
+
+**Available Vercel Tools:**
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `glob` | Find files matching pattern | `pattern: string` |
+| `grep` | Search file contents | `pattern: string`, `glob?: string`, `caseInsensitive?: boolean`, `maxResults?: number` |
+| `read` | Read file contents | `path: string` |
+| `write` | Write content to file | `path: string`, `content: string` |
+| `edit` | Replace text in file | `path: string`, `old_string: string`, `new_string: string` |
+| `ls` | List directory contents | `path: string` |
+| `mkdir` | Create directory | `path: string` |
+| `rm` | Delete file | `path: string` |
+
+## Complete Example
+
+Here is a complete example of setting up an AI agent with filesystem access:
+
+```typescript
+import { MonDoAgent } from '@mondodb/agentfs'
+import { createAgentFSVercelTools } from '@mondodb/agentfs/adapters'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+
+// Create the agent (in a Cloudflare Worker/Durable Object)
+const agent = new MonDoAgent(ctx, env)
+await agent.init()
+
+// Seed some files
+await agent.fs.writeFile('/README.md', '# My Project\n\nWelcome!')
+await agent.fs.writeFile('/src/index.ts', 'export const main = () => console.log("Hello")')
+await agent.fs.writeFile('/src/utils.ts', '// TODO: implement this\nexport const helper = () => {}')
+
+// Create Vercel AI SDK tools
+const tools = createAgentFSVercelTools({
+  fs: agent.fs,
+  grep: { grep: agent.grep.bind(agent) },
+})
+
+// Use with an AI model
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools,
+  maxSteps: 10,
+  prompt: 'Find all TODO comments in the codebase and summarize them',
+})
+
+console.log(result.text)
+
+// Check the audit log
+const auditEntries = await agent.audit.list({ limit: 20 })
+console.log('Tool calls made:', auditEntries.map(e => e.tool))
+```
+
+## WebSocket Integration
+
+MonDoAgent supports WebSocket connections for real-time tool execution:
+
+```typescript
+// In your Cloudflare Worker
+export default {
+  async fetch(request, env, ctx) {
+    const upgradeHeader = request.headers.get('Upgrade')
+    if (upgradeHeader === 'websocket') {
+      const [client, server] = Object.values(new WebSocketPair())
+
+      const agent = new MonDoAgent(doCtx, env)
+      await agent.onConnect(server, request)
+
+      return new Response(null, { status: 101, webSocket: client })
+    }
+  }
+}
+
+// Client-side WebSocket usage
+const ws = new WebSocket('wss://your-worker.example.com')
+
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data)
+  console.log('Received:', message)
+}
+
+// Call a tool via WebSocket
+ws.send(JSON.stringify({
+  type: 'tool_call',
+  id: 'call-1',
+  tool: 'fs.readFile',
+  inputs: { path: '/config.json' }
+}))
+```
+
+## Error Handling
+
+AgentFS uses POSIX-style error codes:
+
+| Error Code | Description |
+|------------|-------------|
+| `ENOENT` | File or directory does not exist |
+| `EISDIR` | Illegal operation on a directory |
+| `ENOTDIR` | Not a directory |
+| `EEXIST` | File already exists |
+| `ENOTEMPTY` | Directory not empty |
+| `EPERM` | Operation not permitted |
+
+```typescript
+try {
+  await fs.readFile('/nonexistent.txt')
+} catch (error) {
+  if (error.message.startsWith('ENOENT:')) {
+    console.log('File does not exist')
+  }
+}
+```
+
+## Best Practices
+
+1. **Use auto-auditing**: When using `MonDoAgent`, all filesystem and KV operations are automatically logged to the audit trail.
+
+2. **Compile glob patterns**: For repeated matching, use `compileGlob()` to avoid recompiling the regex each time.
+
+3. **Set maxResults**: When searching large codebases, always set `maxResults` to prevent unbounded result sets.
+
+4. **Use streaming grep**: For large searches, use `grepStream()` to process results as they are found.
+
+5. **Leverage context lines**: When searching for code patterns, use `contextLines` to understand the surrounding code.
+
+6. **Use prefixes for KV keys**: Organize your KV store with prefixes like `session:`, `cache:`, `config:` for easy management.
+
+7. **Review audit logs**: Periodically review the audit log to understand agent behavior and debug issues.

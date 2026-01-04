@@ -1,0 +1,445 @@
+---
+title: RPC Layer
+description: Learn how to use the RPC communication layer for efficient client-server communication in Mondodb.
+---
+
+The RPC layer provides a high-performance communication mechanism between clients and Mondodb's Cloudflare Workers backend. It supports HTTP batch requests, WebSocket sessions, request deduplication, and service bindings for seamless integration.
+
+## Overview
+
+Mondodb's RPC layer implements a capnweb-style protocol optimized for Cloudflare Workers. The architecture consists of:
+
+- **RpcClient**: Client-side handler for HTTP and WebSocket transports
+- **RpcTarget**: Server-side request router and method dispatcher
+- **MondoEntrypoint**: Worker entrypoint for service binding support
+- **BatchedRpcExecutor**: Automatic request batching for improved throughput
+- **PipelineTracker**: Promise pipelining for chained operations
+
+## RpcClient
+
+The `RpcClient` class provides the client-side interface for communicating with Mondodb workers.
+
+### Basic Usage
+
+```typescript
+import { RpcClient } from 'mondodb/rpc'
+
+// Create an HTTP client
+const client = new RpcClient('https://your-worker.workers.dev/rpc')
+
+// Make RPC calls
+const result = await client.call('find', ['mydb', 'users', { active: true }])
+```
+
+### Configuration Options
+
+```typescript
+import { RpcClient, RpcClientOptions } from 'mondodb/rpc'
+
+const options: RpcClientOptions = {
+  // Enable automatic reconnection on failures
+  autoReconnect: true,
+
+  // Maximum retry attempts (default: 3)
+  maxRetries: 5,
+
+  // Delay between retries in milliseconds (default: 1000)
+  reconnectInterval: 2000,
+
+  // Enable request deduplication (default: false)
+  deduplicate: true,
+
+  // Deduplication TTL in milliseconds (default: 1000)
+  deduplicationTtl: 500,
+
+  // Request timeout in milliseconds (default: 30000)
+  timeout: 60000,
+}
+
+const client = new RpcClient('https://your-worker.workers.dev/rpc', options)
+```
+
+## HTTP Batch Requests
+
+Batch mode allows you to queue multiple requests and send them in a single HTTP call, reducing network overhead.
+
+### Starting a Batch
+
+```typescript
+const client = new RpcClient('https://your-worker.workers.dev/rpc')
+
+// Start batch mode
+client.startBatch()
+
+// Queue multiple operations (these return immediately with promises)
+const findPromise = client.call('find', ['mydb', 'users', {}])
+const countPromise = client.call('count', ['mydb', 'users', {}])
+const statsPromise = client.call('stats', ['mydb'])
+
+// Send all queued requests
+await client.endBatch()
+
+// Await individual results
+const users = await findPromise
+const count = await countPromise
+const stats = await statsPromise
+```
+
+### Server-Side Batch Handling
+
+The server automatically processes batch requests sent to the `/batch` endpoint:
+
+```typescript
+// Batch requests are sent to /rpc/batch
+// Response format:
+{
+  results: [
+    { id: '1', result: [...] },
+    { id: '2', result: 42 },
+    { id: '3', error: 'Collection not found' }
+  ]
+}
+```
+
+## WebSocket Sessions
+
+For real-time applications requiring persistent connections, use WebSocket transport.
+
+### Establishing a WebSocket Connection
+
+```typescript
+import { RpcClient } from 'mondodb/rpc'
+
+// Use ws:// or wss:// protocol for WebSocket transport
+const client = new RpcClient('wss://your-worker.workers.dev/ws')
+
+// Connect to the WebSocket endpoint
+await client.connectWebSocket()
+
+// Make RPC calls over WebSocket
+const result = await client.call('find', ['mydb', 'users', {}])
+
+// Listen for server-initiated events
+client.on('change', (event) => {
+  console.log('Document changed:', event)
+})
+
+// Clean up when done
+client.close()
+```
+
+### WebSocket Transport Features
+
+The `WebSocketRpcTransport` class handles:
+
+- Automatic message ID generation
+- Request timeout management
+- Pending request tracking
+- Message handler registration for streaming responses
+
+```typescript
+import { WebSocketRpcTransport } from 'mondodb/rpc'
+
+// Create transport from an existing WebSocket
+const ws = new WebSocket('wss://your-worker.workers.dev/ws')
+const transport = new WebSocketRpcTransport(ws, { timeout: 30000 })
+
+// Send requests
+const result = await transport.send({ method: 'find', params: ['mydb', 'users', {}] })
+
+// Register message handlers for streaming
+const unsubscribe = transport.onMessage((message) => {
+  console.log('Received:', message)
+})
+
+// Cleanup
+unsubscribe()
+transport.close()
+```
+
+## Request Deduplication
+
+The `RequestDeduplicator` prevents duplicate concurrent requests from being sent to the server.
+
+### How It Works
+
+When deduplication is enabled, identical requests (same method and params) made within the TTL window share the same promise:
+
+```typescript
+const client = new RpcClient('https://your-worker.workers.dev/rpc', {
+  deduplicate: true,
+  deduplicationTtl: 1000, // 1 second window
+})
+
+// These two calls share the same underlying request
+const promise1 = client.call('find', ['mydb', 'users', { id: '123' }])
+const promise2 = client.call('find', ['mydb', 'users', { id: '123' }])
+
+// Both resolve with the same result
+const [result1, result2] = await Promise.all([promise1, promise2])
+```
+
+### Manual Deduplicator Usage
+
+```typescript
+import { RequestDeduplicator } from 'mondodb/rpc'
+
+const deduplicator = new RequestDeduplicator({ ttl: 2000 })
+
+// Generate cache key
+const key = RequestDeduplicator.generateKey('find', ['mydb', 'users', {}])
+
+// Check if request is in-flight
+if (deduplicator.has(key)) {
+  return deduplicator.get(key)
+}
+
+// Execute and cache
+const promise = executeRequest()
+deduplicator.set(key, promise)
+
+// Clean up when done
+deduplicator.destroy()
+```
+
+## Workers RPC Service Binding
+
+Mondodb can be deployed as a Cloudflare Worker with service bindings, allowing other workers to call it directly without HTTP overhead.
+
+### Configuring Service Bindings
+
+In your `wrangler.toml`:
+
+```toml
+[[services]]
+binding = "MONDO"
+service = "mondodb"
+entrypoint = "MondoEntrypoint"
+```
+
+### Using the Service Binding
+
+```typescript
+// In your consuming worker
+export default {
+  async fetch(request: Request, env: Env) {
+    // Connect using the service binding
+    await env.MONDO.connect('mongodb://localhost/mydb')
+
+    // Execute operations directly
+    const users = await env.MONDO.find('mydb', 'users', { active: true })
+
+    return Response.json(users)
+  }
+}
+```
+
+### MondoEntrypoint Interface
+
+The `MondoEntrypoint` class implements the `MondoBindings` interface:
+
+```typescript
+interface MondoBindings {
+  connect(connectionString: string): Promise<{ connected: boolean; database?: string }>
+  db(name: string): Promise<DatabaseRef>
+  collection(dbName: string, collectionName: string): Promise<CollectionRef>
+}
+```
+
+### Available Methods
+
+```typescript
+// Connection
+await env.MONDO.connect('mongodb://localhost/mydb')
+
+// Database operations
+const dbRef = await env.MONDO.db('mydb')
+
+// Collection operations
+const collRef = await env.MONDO.collection('mydb', 'users')
+
+// CRUD operations
+const docs = await env.MONDO.find('mydb', 'users', { active: true })
+const { insertedId } = await env.MONDO.insertOne('mydb', 'users', { name: 'Alice' })
+const { matchedCount, modifiedCount } = await env.MONDO.updateOne(
+  'mydb', 'users',
+  { _id: insertedId },
+  { $set: { verified: true } }
+)
+const { deletedCount } = await env.MONDO.deleteOne('mydb', 'users', { _id: insertedId })
+```
+
+## Auto-Reconnection
+
+The RPC client handles connection failures gracefully with automatic retry logic.
+
+### Configuring Reconnection
+
+```typescript
+const client = new RpcClient('https://your-worker.workers.dev/rpc', {
+  autoReconnect: true,
+  maxRetries: 5,
+  reconnectInterval: 2000, // Wait 2 seconds between retries
+})
+
+// Listen for reconnection events
+client.on('reconnect', (event: ReconnectEvent) => {
+  console.log(`Reconnection attempt ${event.attempt}`)
+  if (event.lastError) {
+    console.log('Last error:', event.lastError.message)
+  }
+})
+```
+
+### Retry Behavior
+
+When a request fails:
+
+1. The client waits for `reconnectInterval` milliseconds
+2. A `reconnect` event is emitted with the attempt number
+3. The request is retried
+4. If `maxRetries` is exceeded, the error is thrown
+
+For WebSocket connections, the client automatically attempts to reconnect when the connection closes.
+
+## Server-Side RPC Target
+
+The `RpcTarget` base class provides method registration and invocation on the server.
+
+### Defining an RPC Target
+
+```typescript
+import { RpcTarget } from 'mondodb/rpc'
+
+class MyRpcTarget extends RpcTarget {
+  // Define allowed methods (security allowlist)
+  protected override allowedMethods = new Set([
+    'getData',
+    'processItem',
+  ])
+
+  async getData(id: string): Promise<unknown> {
+    // Implementation
+  }
+
+  async processItem(item: Record<string, unknown>): Promise<void> {
+    // Implementation
+  }
+}
+```
+
+### Method Security
+
+The `allowedMethods` set provides a security allowlist that prevents:
+
+- Invocation of inherited methods like `constructor` or `toString`
+- Prototype pollution attacks
+- Access to internal methods
+
+Only methods in the allowlist can be called via RPC.
+
+## Batched Executor
+
+The `BatchedRpcExecutor` automatically coalesces multiple requests for improved throughput.
+
+```typescript
+import { BatchedRpcExecutor } from 'mondodb/rpc'
+
+const executor = new BatchedRpcExecutor(durableObjectStub, {
+  maxBatchSize: 100,    // Flush when batch reaches this size
+  flushInterval: 10,    // Auto-flush after 10ms of inactivity
+})
+
+// Queue operations
+const result1 = executor.execute('find', { collection: 'users', query: {} })
+const result2 = executor.execute('count', { collection: 'users' })
+
+// Operations are automatically batched and sent together
+const [users, count] = await Promise.all([result1, result2])
+
+// Force flush if needed
+await executor.flush()
+```
+
+## Promise Pipelining
+
+Pipeline operations to reduce round-trips when performing chained calls.
+
+```typescript
+import { PipelinedRpcProxy } from 'mondodb/rpc'
+
+const proxy = new PipelinedRpcProxy(rpcTarget)
+
+// Chain operations without waiting for intermediate results
+const users = await proxy
+  .db('mydb')
+  .collection('users')
+  .find({ active: true })
+```
+
+## Error Handling
+
+RPC operations return structured errors that can be handled appropriately:
+
+```typescript
+try {
+  await client.call('find', ['mydb', 'nonexistent', {}])
+} catch (error) {
+  if (error instanceof Error) {
+    console.error('RPC Error:', error.message)
+  }
+}
+```
+
+### HTTP Endpoint Errors
+
+The HTTP endpoint returns MongoDB-compatible error responses:
+
+```typescript
+// Error response format
+{
+  ok: 0,
+  code: 26,  // NAMESPACE_NOT_FOUND
+  codeName: 'NamespaceNotFound',
+  errmsg: 'Collection not found: nonexistent'
+}
+```
+
+## Health and Diagnostics
+
+The `MondoEntrypoint` exposes health check endpoints:
+
+```typescript
+// Health check
+fetch('https://your-worker.workers.dev/health')
+// Response: { "status": "healthy" }
+
+// Bindings check (diagnostics)
+fetch('https://your-worker.workers.dev/bindings')
+// Response: { "MONDO_DATABASE": true, "LOADER": false, ... }
+```
+
+## Type Definitions
+
+The RPC layer exports comprehensive TypeScript types:
+
+```typescript
+import type {
+  RpcRequest,
+  RpcResponse,
+  RpcClientOptions,
+  BatchResponse,
+  EventHandler,
+  ReconnectEvent,
+  DeduplicatorOptions,
+  DatabaseRef,
+  CollectionRef,
+  MondoEnv,
+} from 'mondodb/rpc'
+```
+
+## Next Steps
+
+- Learn about [CRUD Operations](/docs/guides/crud) for document manipulation
+- Explore [Aggregation](/docs/guides/aggregation) for data processing pipelines
+- Configure [Indexing](/docs/guides/indexing) for query optimization

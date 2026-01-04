@@ -1,4 +1,4 @@
 {
   "title": "Guides",
-  "pages": ["index", "crud", "aggregation", "indexing", "transactions", "connection"]
+  "pages": ["index", "cli", "studio", "crud", "cursors", "bulk-write", "aggregation", "functions", "indexing", "full-text-search", "geospatial", "ttl-indexes", "vector-search", "transactions", "change-streams", "connection", "wire-protocol", "rpc", "mcp-protocol", "agentfs", "cloudflare-workers", "error-handling"]
 }

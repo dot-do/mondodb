@@ -1,0 +1,617 @@
+---
+title: MCP Protocol
+description: Integrate AI agents with MondoDB using the Model Context Protocol
+---
+
+# MCP Protocol
+
+MondoDB provides native support for the Model Context Protocol (MCP), enabling AI agents to interact with your database through a standardized tool-calling interface. This guide covers how to create MCP servers, available database tools, and SDK adapters for popular AI frameworks.
+
+## Overview
+
+The Model Context Protocol (MCP) is a standard for AI agents to discover and invoke tools. MondoDB's MCP implementation provides:
+
+- **Database Tools**: Search, fetch, and execute operations on your data
+- **SDK Adapters**: Ready-to-use integrations for Anthropic and Vercel AI SDK
+- **Sandboxed Execution**: Secure code execution with controlled database access
+- **Transport Options**: HTTP with SSE and stdio for CLI integration
+
+## Creating an MCP Server
+
+Use `createMcpServer()` to create an MCP server instance:
+
+```typescript
+import { createMcpServer, type DatabaseAccess } from 'mondodb/mcp'
+
+// Implement the DatabaseAccess interface
+const dbAccess: DatabaseAccess = {
+  async find(collection, filter, options) {
+    return db.collection(collection).find(filter, options).toArray()
+  },
+  async findOne(collection, filter) {
+    return db.collection(collection).findOne(filter)
+  },
+  async insertOne(collection, document) {
+    const result = await db.collection(collection).insertOne(document)
+    return { insertedId: result.insertedId.toString() }
+  },
+  async insertMany(collection, documents) {
+    const result = await db.collection(collection).insertMany(documents)
+    return { insertedIds: Object.values(result.insertedIds).map(id => id.toString()) }
+  },
+  async updateOne(collection, filter, update) {
+    const result = await db.collection(collection).updateOne(filter, update)
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount }
+  },
+  async updateMany(collection, filter, update) {
+    const result = await db.collection(collection).updateMany(filter, update)
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount }
+  },
+  async deleteOne(collection, filter) {
+    const result = await db.collection(collection).deleteOne(filter)
+    return { deletedCount: result.deletedCount }
+  },
+  async deleteMany(collection, filter) {
+    const result = await db.collection(collection).deleteMany(filter)
+    return { deletedCount: result.deletedCount }
+  },
+  async aggregate(collection, pipeline) {
+    return db.collection(collection).aggregate(pipeline).toArray()
+  },
+  async countDocuments(collection, filter) {
+    return db.collection(collection).countDocuments(filter)
+  },
+  async listCollections() {
+    const collections = await db.listCollections().toArray()
+    return collections.map(c => c.name)
+  },
+  async listDatabases() {
+    const dbs = await client.db().admin().listDatabases()
+    return dbs.databases.map(d => d.name)
+  },
+  getProxy() {
+    return this
+  }
+}
+
+// Create the MCP server
+const server = createMcpServer({
+  dbAccess,
+  name: 'my-database-server',
+  version: '1.0.0'
+})
+```
+
+### Server Configuration
+
+The `McpServerConfig` interface accepts the following options:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `dbAccess` | `DatabaseAccess` | Required. Database access interface for tool implementations |
+| `codeLoader` | `CodeLoader` | Optional. Enables the `do` tool for sandboxed code execution |
+| `name` | `string` | Server name (default: `'mondodb'`) |
+| `version` | `string` | Server version (default: `'1.0.0'`) |
+
+---
+
+## Available Database Tools
+
+MondoDB's MCP server provides three built-in tools for AI agents:
+
+### search
+
+Search for documents across collections. Returns results in OpenAI Deep Research format.
+
+```typescript
+// Tool input schema
+{
+  query: string       // Required. Search query
+  limit?: number      // Max results (default: 100)
+  collection?: string // Specific collection to search
+  database?: string   // Database name (default: 'default')
+}
+```
+
+**Query Formats:**
+
+1. **JSON Filter**: Direct MongoDB query syntax
+   ```
+   {"status": "active", "age": {"$gte": 25}}
+   ```
+
+2. **Collection:Query**: Prefixed format
+   ```
+   users: name = Alice
+   mydb.users: status = active
+   ```
+
+3. **Natural Language**: Full-text search
+   ```
+   find users named Alice
+   ```
+
+**Response Format:**
+
+```typescript
+{
+  results: [
+    {
+      id: "database.collection.objectId",
+      title: "Document Title",
+      url: "mongodb://database/collection/objectId",
+      text: "Preview text snippet..."
+    }
+  ]
+}
+```
+
+### fetch
+
+Retrieve a full document by its ID.
+
+```typescript
+// Tool input schema
+{
+  id: string  // Required. Format: database.collection.objectId
+}
+```
+
+**Response Format:**
+
+```typescript
+{
+  id: "mydb.users.507f1f77bcf86cd799439011",
+  title: "John Doe",
+  url: "mongodb://mydb/users/507f1f77bcf86cd799439011",
+  text: "{ \"_id\": \"507f1f77bcf86cd799439011\", \"name\": \"John Doe\", ... }",
+  metadata: {
+    database: "mydb",
+    collection: "users",
+    _id: "507f1f77bcf86cd799439011"
+  }
+}
+```
+
+### do
+
+Execute JavaScript code in a secure sandbox. Only available when a `codeLoader` is configured.
+
+```typescript
+// Tool input schema
+{
+  code: string         // Required. JavaScript code to execute
+  description?: string // Optional. Description for logging/auditing
+}
+```
+
+**Response Format:**
+
+```typescript
+{
+  success: boolean,
+  result?: any,       // Return value from the code
+  logs?: string[],    // Captured console.log output
+  error?: string,     // Error message if failed
+  duration?: number   // Execution time in milliseconds
+}
+```
+
+---
+
+## SDK Adapters
+
+MondoDB provides adapters for integrating MCP servers with popular AI SDKs.
+
+### Anthropic Adapter
+
+Use with Claude models via Anthropic's SDK:
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk'
+import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+
+// Create the MCP server
+const server = createMcpServer({ dbAccess })
+
+// Create the Anthropic adapter
+const adapter = createAnthropicAdapter({
+  server,
+  retry: { maxRetries: 3 },
+  timeout: { requestTimeoutMs: 30000 }
+})
+
+// Initialize the adapter
+await adapter.initialize()
+
+// Get tools in Anthropic format
+const tools = await adapter.getTools()
+
+// Create a message with tool use
+const client = new Anthropic()
+const response = await client.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: 1024,
+  tools,
+  messages: [
+    { role: 'user', content: 'Find all active users in the database' }
+  ]
+})
+
+// Handle tool use blocks
+for (const block of response.content) {
+  if (block.type === 'tool_use') {
+    const result = await adapter.handleToolUse(block)
+    // result is in Anthropic tool_result format
+    console.log(result)
+  }
+}
+```
+
+**Adapter Configuration:**
+
+```typescript
+interface AnthropicAdapterConfig {
+  server: McpServer
+  retry?: {
+    maxRetries?: number        // Default: 3
+    initialDelayMs?: number    // Default: 1000
+    maxDelayMs?: number        // Default: 30000
+    backoffMultiplier?: number // Default: 2
+    jitter?: boolean           // Default: true
+  }
+  timeout?: {
+    requestTimeoutMs?: number  // Default: 30000
+    connectTimeoutMs?: number  // Default: 10000
+    idleTimeoutMs?: number     // Default: 60000
+  }
+  streamingThreshold?: number  // Default: 100KB
+  verboseErrors?: boolean      // Default: true in dev
+}
+```
+
+### Vercel AI SDK Adapter
+
+Use with Vercel AI SDK for Next.js and other frameworks:
+
+```typescript
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
+import { createMcpServer, createVercelAdapter } from 'mondodb/mcp'
+
+// Create the MCP server
+const server = createMcpServer({ dbAccess })
+
+// Create the Vercel adapter
+const adapter = createVercelAdapter({
+  server,
+  streamingThreshold: 50 * 1024, // 50KB
+  defaultStreaming: true
+})
+
+// Initialize the adapter
+await adapter.initialize()
+
+// Get tools in Vercel AI SDK format
+const tools = await adapter.getTools()
+
+// Use with generateText
+const result = await generateText({
+  model: openai('gpt-4'),
+  tools,
+  prompt: 'Search for documents about machine learning'
+})
+
+// Handle tool calls
+for (const toolCall of result.toolCalls) {
+  const toolResult = await adapter.handleToolCall(toolCall)
+  console.log(toolResult)
+}
+```
+
+**Streaming with Vercel Adapter:**
+
+```typescript
+// Create a streaming executor
+const searchStream = adapter.createStreamingExecutor('search')
+
+// Stream results
+for await (const chunk of searchStream({ query: 'AI documents' })) {
+  process.stdout.write(chunk)
+}
+
+// Or create a ReadableStream for HTTP responses
+const stream = adapter.createReadableStream('search', { query: 'AI' })
+return new Response(stream)
+```
+
+---
+
+## Sandboxed Code Execution
+
+The `do` tool executes code in a secure Worker sandbox with controlled database access.
+
+### Setting Up a Code Loader
+
+```typescript
+import { createMcpServer, createWorkerEvaluator } from 'mondodb/mcp'
+
+// Create a code loader for sandbox execution
+const codeLoader = createWorkerEvaluator({
+  fetcher: env.SANDBOX_WORKER, // Service binding to sandbox worker
+  dbAccess
+})
+
+// Create server with code execution enabled
+const server = createMcpServer({
+  dbAccess,
+  codeLoader
+})
+```
+
+### Database API in Sandbox
+
+Code executed via the `do` tool has access to a `db` object with the following API:
+
+```typescript
+// Collection operations
+const users = await db.collection('users').find({ status: 'active' })
+const user = await db.collection('users').findOne({ email: 'alice@example.com' })
+
+// Mutations
+const { insertedId } = await db.collection('users').insertOne({
+  name: 'Alice',
+  email: 'alice@example.com'
+})
+
+await db.collection('users').updateOne(
+  { _id: insertedId },
+  { $set: { verified: true } }
+)
+
+await db.collection('logs').deleteMany({ createdAt: { $lt: cutoffDate } })
+
+// Aggregation
+const stats = await db.collection('orders').aggregate([
+  { $group: { _id: '$status', count: { $sum: 1 } } }
+])
+
+// Metadata
+const collections = await db.listCollections()
+const databases = await db.listDatabases()
+```
+
+### Security Validations
+
+The sandbox validates user code before execution, blocking dangerous patterns:
+
+- Node.js globals (`process`, `require`, `__dirname`, `__filename`)
+- Dynamic imports (`import()`)
+- Code generation (`eval`, `Function()`)
+- Global object access (`globalThis`, `self`)
+
+---
+
+## Transport Options
+
+### HTTP Transport
+
+Handle MCP requests over HTTP with Server-Sent Events (SSE) support:
+
+```typescript
+import { createMcpServer, createHttpMcpHandler } from 'mondodb/mcp'
+
+const server = createMcpServer({ dbAccess })
+
+const handler = createHttpMcpHandler({
+  server,
+  cors: {
+    origin: '*',
+    methods: ['POST', 'OPTIONS']
+  },
+  auth: async (request) => {
+    const token = request.headers.get('Authorization')
+    if (!token) return { authenticated: false }
+    return { authenticated: true, userId: 'user-123' }
+  },
+  rateLimit: {
+    windowMs: 60000,
+    maxRequests: 100
+  }
+})
+
+// Use in Cloudflare Workers
+export default {
+  fetch: handler
+}
+```
+
+### stdio Transport
+
+For CLI and pipe-based communication:
+
+```typescript
+import { createMcpServer, createStdioTransport } from 'mondodb/mcp'
+
+const server = createMcpServer({ dbAccess })
+
+const transport = createStdioTransport({
+  server,
+  debug: {
+    enabled: true,
+    callback: (entry) => console.error('[DEBUG]', entry)
+  },
+  gracefulShutdown: {
+    enabled: true,
+    timeoutMs: 5000
+  }
+})
+
+// Start listening on stdin/stdout
+await transport.start()
+```
+
+---
+
+## Code Examples
+
+### AI Agent Database Query
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk'
+import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+
+async function runAgent(userQuery: string) {
+  const server = createMcpServer({ dbAccess })
+  const adapter = createAnthropicAdapter({ server })
+  await adapter.initialize()
+
+  const client = new Anthropic()
+  const tools = await adapter.getTools()
+
+  let messages = [
+    { role: 'user', content: userQuery }
+  ]
+
+  // Agentic loop
+  while (true) {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      tools,
+      messages
+    })
+
+    // Check if the model wants to use tools
+    const toolUseBlocks = response.content.filter(b => b.type === 'tool_use')
+
+    if (toolUseBlocks.length === 0) {
+      // No more tool calls, return the final response
+      const textBlocks = response.content.filter(b => b.type === 'text')
+      return textBlocks.map(b => b.text).join('\n')
+    }
+
+    // Execute tool calls
+    const toolResults = await adapter.handleToolUses(toolUseBlocks)
+
+    // Add assistant message and tool results
+    messages.push({ role: 'assistant', content: response.content })
+    messages.push({ role: 'user', content: toolResults })
+  }
+}
+
+// Usage
+const answer = await runAgent('Find all orders over $1000 and calculate the total revenue')
+console.log(answer)
+```
+
+### Custom Tool Registration
+
+```typescript
+const server = createMcpServer({ dbAccess })
+
+// Register a custom tool
+server.tool(
+  'analyze_sentiment',
+  {
+    type: 'object',
+    properties: {
+      collection: { type: 'string', description: 'Collection to analyze' },
+      field: { type: 'string', description: 'Text field to analyze' }
+    },
+    required: ['collection', 'field']
+  },
+  async ({ collection, field }) => {
+    const docs = await dbAccess.find(collection, {}, { limit: 100 })
+
+    // Analyze sentiment (placeholder)
+    const sentiments = docs.map(doc => ({
+      id: doc._id,
+      text: doc[field],
+      sentiment: analyzeSentiment(doc[field])
+    }))
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ results: sentiments }) }]
+    }
+  },
+  {
+    title: 'Analyze Sentiment',
+    readOnlyHint: true,
+    openWorldHint: false
+  }
+)
+```
+
+### Next.js API Route
+
+```typescript
+// app/api/mcp/route.ts
+import { createMcpServer, createHttpMcpHandler } from 'mondodb/mcp'
+import { getDbAccess } from '@/lib/database'
+
+export async function POST(request: Request) {
+  const dbAccess = await getDbAccess()
+  const server = createMcpServer({ dbAccess })
+
+  const handler = createHttpMcpHandler({
+    server,
+    cors: { origin: process.env.ALLOWED_ORIGINS }
+  })
+
+  return handler(request)
+}
+```
+
+---
+
+## Error Handling
+
+MCP tools return structured error responses:
+
+```typescript
+// Error response format
+{
+  content: [
+    {
+      type: 'text',
+      text: '{"error": "Document not found"}'
+    }
+  ],
+  isError: true
+}
+```
+
+The adapters provide error classification and retry logic:
+
+```typescript
+import { McpError, McpErrorCode, isRetryableError } from 'mondodb/mcp'
+
+try {
+  const result = await adapter.handleToolUse(toolUse)
+} catch (error) {
+  if (error instanceof McpError) {
+    console.log('Error code:', error.code)
+    console.log('Retryable:', error.retryable)
+
+    if (error.code === McpErrorCode.RateLimited) {
+      const retryAfter = error.data?.retryAfter
+      await sleep(retryAfter)
+    }
+  }
+}
+```
+
+**Error Codes:**
+
+| Code | Name | Description |
+|------|------|-------------|
+| `-32700` | ParseError | Invalid JSON |
+| `-32600` | InvalidRequest | Invalid request object |
+| `-32601` | MethodNotFound | Method does not exist |
+| `-32602` | InvalidParams | Invalid method parameters |
+| `-32603` | InternalError | Internal server error |
+| `429` | RateLimited | Too many requests |
+| `401` | Unauthorized | Authentication required |
+| `404` | ToolNotFound | Tool does not exist |
+| `500` | ExecutionError | Tool execution failed |

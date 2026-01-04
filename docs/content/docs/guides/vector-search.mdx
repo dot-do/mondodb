@@ -1,0 +1,746 @@
+---
+title: Vector Search
+description: Semantic similarity search with Cloudflare Vectorize and Workers AI embeddings
+---
+
+# Vector Search
+
+MondoDB integrates with Cloudflare Vectorize and Workers AI to provide powerful vector search capabilities. This enables semantic similarity search, document recommendations, and retrieval-augmented generation (RAG) applications.
+
+## Overview
+
+Vector search finds documents based on semantic similarity rather than exact keyword matching. Instead of searching for documents containing specific words, you can find documents that are conceptually similar to a query - even if they use different terminology.
+
+**How it works:**
+
+1. Documents are converted into high-dimensional vectors (embeddings) that capture their semantic meaning
+2. Query text is also converted into a vector
+3. The search finds documents whose vectors are closest to the query vector
+4. Results are ranked by similarity score
+
+**Use cases:**
+
+- **Semantic search**: Find relevant documents even when exact terms don't match
+- **Document similarity**: Find articles, products, or content similar to a reference
+- **Question answering**: Retrieve relevant context for LLM-based Q&A systems
+- **Recommendations**: Suggest related items based on content similarity
+- **RAG applications**: Ground LLM responses in your document corpus
+
+---
+
+## Setting Up Vectorize
+
+### Cloudflare Configuration
+
+First, create a Vectorize index in your Cloudflare account:
+
+```bash
+# Create a Vectorize index with 1024 dimensions (for bge-m3)
+wrangler vectorize create my-index --dimensions=1024 --metric=cosine
+```
+
+Then bind the index and Workers AI in your `wrangler.jsonc`:
+
+```jsonc
+{
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "my-index"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  }
+}
+```
+
+### MondoDB Configuration
+
+Configure MondoDB to use Vectorize for automatic embedding generation:
+
+```typescript
+import { MongoClient } from 'mondodb';
+
+const client = new MongoClient({
+  // ... other options
+  vectorize: env.VECTORIZE,
+  ai: env.AI,
+  embeddingModel: '@cf/baai/bge-m3' // Optional, this is the default
+});
+```
+
+---
+
+## Embedding Models
+
+MondoDB uses Cloudflare Workers AI to generate embeddings. The default model is `@cf/baai/bge-m3`, which offers:
+
+| Feature | Value |
+|---------|-------|
+| Dimensions | 1024 |
+| Languages | 100+ (multilingual) |
+| Context Window | 8192 tokens |
+| Use Case | General-purpose semantic search |
+
+### Available Models
+
+```typescript
+// Default - BGE-M3 (recommended for most use cases)
+embeddingModel: '@cf/baai/bge-m3'
+
+// Alternative models (check Cloudflare Workers AI for availability)
+embeddingModel: '@cf/baai/bge-base-en-v1.5'    // 768 dimensions, English only
+embeddingModel: '@cf/baai/bge-small-en-v1.5'   // 384 dimensions, English only
+```
+
+When choosing a model, consider:
+
+- **Dimensions**: Higher dimensions capture more nuance but use more storage
+- **Language support**: BGE-M3 supports multilingual content
+- **Performance**: Smaller models are faster but may be less accurate
+
+---
+
+## Automatic Embedding Generation
+
+MondoDB can automatically generate and store embeddings when documents are inserted or updated.
+
+### EmbeddingManager
+
+The `EmbeddingManager` class handles the embedding pipeline:
+
+```typescript
+import { EmbeddingManager } from 'mondodb/embedding';
+
+const embedder = new EmbeddingManager({
+  vectorize: env.VECTORIZE,
+  ai: env.AI,
+  collection: 'articles',
+  model: '@cf/baai/bge-m3',
+  serialization: {
+    serializer: 'yaml',
+    auto: {
+      excludeFields: ['_id', 'createdAt', 'updatedAt'],
+      metadataFields: ['category', 'author']
+    }
+  }
+});
+```
+
+### Embedding Single Documents
+
+```typescript
+// Insert a document and generate its embedding
+const doc = {
+  _id: 'article-123',
+  title: 'Introduction to Vector Search',
+  content: 'Vector search enables semantic similarity...',
+  category: 'technology',
+  author: 'Jane Doe'
+};
+
+// Generate and store embedding
+const result = await embedder.embedDocument(doc);
+console.log(result);
+// { count: 1, ids: ['articles:article-123'] }
+```
+
+### Batch Embedding
+
+```typescript
+// Embed multiple documents efficiently
+const docs = [
+  { _id: 'doc-1', title: 'First Article', content: '...' },
+  { _id: 'doc-2', title: 'Second Article', content: '...' },
+  { _id: 'doc-3', title: 'Third Article', content: '...' }
+];
+
+const result = await embedder.embedDocuments(docs);
+console.log(result);
+// { count: 3, ids: ['articles:doc-1', 'articles:doc-2', 'articles:doc-3'] }
+```
+
+The batch operation automatically handles Cloudflare's 100-vector-per-upsert limit.
+
+### Deleting Embeddings
+
+```typescript
+// Remove embedding when document is deleted
+await embedder.deleteDocument('article-123');
+
+// Batch delete
+await embedder.deleteDocuments(['doc-1', 'doc-2', 'doc-3']);
+```
+
+---
+
+## Document Serialization
+
+Before generating embeddings, documents are serialized into text. MondoDB provides flexible serialization options.
+
+### Serialization Formats
+
+```typescript
+// YAML format (default) - preserves structure, readable
+serialization: { serializer: 'yaml' }
+// Output: "title: Introduction to Vector Search\ncontent: Vector search enables..."
+
+// JSON format - compact, includes structure
+serialization: { serializer: 'json' }
+// Output: {"title":"Introduction to Vector Search","content":"Vector search enables..."}
+
+// Text format - extracts values only
+serialization: { serializer: 'text' }
+// Output: "Introduction to Vector Search Vector search enables..."
+```
+
+### Field Filtering
+
+Control which fields are included in the embedding:
+
+```typescript
+serialization: {
+  serializer: 'yaml',
+  auto: {
+    // Include only specific fields
+    includeFields: ['title', 'content', 'summary'],
+
+    // Or exclude specific fields
+    excludeFields: ['_id', 'createdAt', 'internalNotes'],
+
+    // Limit nested object depth
+    maxDepth: 3
+  }
+}
+```
+
+### Default Exclusions
+
+The serializer automatically excludes:
+
+- `_id` field
+- Fields ending in `Id` (e.g., `userId`, `parentId`)
+- Timestamp fields (`createdAt`, `updatedAt`)
+- Mongoose version key (`__v`)
+- Existing embedding/vector fields (`embedding`, `vector`, `_embedding`, etc.)
+
+### Metadata Extraction
+
+Extract specific fields as searchable metadata:
+
+```typescript
+serialization: {
+  serializer: 'yaml',
+  auto: {
+    metadataFields: ['category', 'author', 'tags']
+  }
+}
+
+// The extracted metadata is stored with the vector for filtering
+```
+
+---
+
+## The $vectorSearch Stage
+
+Use `$vectorSearch` as the first stage in an aggregation pipeline to perform vector similarity search.
+
+### Basic Vector Search
+
+```typescript
+// Search with a pre-computed query vector
+const results = await collection.aggregate([
+  {
+    $vectorSearch: {
+      index: 'my-index',
+      path: 'embedding',
+      queryVector: [0.1, 0.2, 0.3, /* ... 1024 dimensions */],
+      limit: 10
+    }
+  }
+]).toArray();
+```
+
+### Text-to-Vector Search
+
+When Workers AI is configured, you can search using natural language:
+
+```typescript
+// Search with natural language query (auto-converted to vector)
+const results = await collection.aggregate([
+  {
+    $vectorSearch: {
+      index: 'my-index',
+      path: 'embedding',
+      queryText: 'how to implement semantic search',
+      limit: 10
+    }
+  }
+]).toArray();
+```
+
+### Vector Search Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `index` | string | Name of the Vectorize index (required) |
+| `path` | string | Path to the vector field in documents (required) |
+| `queryVector` | number[] | Query vector for similarity search |
+| `queryText` | string | Text query to convert to vector (requires AI binding) |
+| `numCandidates` | number | Number of candidates to consider (default: limit * 10) |
+| `limit` | number | Maximum results to return (required) |
+| `filter` | object | Pre-filter documents before vector search |
+
+### Filtering Results
+
+Apply metadata filters before vector search for more targeted results:
+
+```typescript
+const results = await collection.aggregate([
+  {
+    $vectorSearch: {
+      index: 'my-index',
+      path: 'embedding',
+      queryText: 'machine learning tutorials',
+      limit: 10,
+      filter: {
+        category: 'technology',
+        published: true
+      }
+    }
+  }
+]).toArray();
+```
+
+### Combining with Other Stages
+
+Vector search results can be processed by subsequent pipeline stages:
+
+```typescript
+const results = await collection.aggregate([
+  // Vector search
+  {
+    $vectorSearch: {
+      index: 'my-index',
+      path: 'embedding',
+      queryText: 'database optimization',
+      limit: 20
+    }
+  },
+  // Add the similarity score
+  {
+    $addFields: {
+      searchScore: { $meta: 'vectorSearchScore' }
+    }
+  },
+  // Filter by score threshold
+  {
+    $match: {
+      searchScore: { $gte: 0.8 }
+    }
+  },
+  // Project only needed fields
+  {
+    $project: {
+      title: 1,
+      summary: 1,
+      searchScore: 1
+    }
+  },
+  // Limit final results
+  { $limit: 10 }
+]).toArray();
+```
+
+---
+
+## Hybrid Search
+
+Combine vector search with full-text search for the best of both approaches.
+
+### Why Hybrid Search?
+
+- **Vector search**: Great for semantic similarity and conceptual matching
+- **Text search**: Great for exact terms, names, and specific keywords
+- **Hybrid**: Combines both for more robust results
+
+### Implementation Pattern
+
+```typescript
+// Perform both searches and merge results
+const [vectorResults, textResults] = await Promise.all([
+  // Vector search for semantic similarity
+  collection.aggregate([
+    {
+      $vectorSearch: {
+        index: 'vector-index',
+        path: 'embedding',
+        queryText: query,
+        limit: 20
+      }
+    },
+    { $addFields: { vectorScore: { $meta: 'vectorSearchScore' } } }
+  ]).toArray(),
+
+  // Text search for keyword matching
+  collection.aggregate([
+    {
+      $search: {
+        text: { query, path: ['title', 'content'] }
+      }
+    },
+    { $addFields: { textScore: { $meta: 'searchScore' } } },
+    { $limit: 20 }
+  ]).toArray()
+]);
+
+// Merge and rank results (reciprocal rank fusion or custom scoring)
+const merged = mergeResults(vectorResults, textResults);
+```
+
+### Reciprocal Rank Fusion
+
+A common technique for combining ranked results:
+
+```typescript
+function reciprocalRankFusion(
+  resultSets: Array<Array<{ _id: string; score: number }>>,
+  k: number = 60
+): Array<{ _id: string; score: number }> {
+  const scores = new Map<string, number>();
+
+  for (const results of resultSets) {
+    results.forEach((doc, rank) => {
+      const rrf = 1 / (k + rank + 1);
+      scores.set(doc._id, (scores.get(doc._id) || 0) + rrf);
+    });
+  }
+
+  return Array.from(scores.entries())
+    .map(([_id, score]) => ({ _id, score }))
+    .sort((a, b) => b.score - a.score);
+}
+```
+
+---
+
+## Code Examples
+
+### Semantic Search
+
+Find documents semantically similar to a query:
+
+```typescript
+async function semanticSearch(query: string, limit: number = 10) {
+  const results = await collection.aggregate([
+    {
+      $vectorSearch: {
+        index: 'articles-index',
+        path: 'embedding',
+        queryText: query,
+        numCandidates: limit * 10,
+        limit
+      }
+    },
+    {
+      $project: {
+        title: 1,
+        excerpt: { $substr: ['$content', 0, 200] },
+        score: { $meta: 'vectorSearchScore' }
+      }
+    }
+  ]).toArray();
+
+  return results;
+}
+
+// Usage
+const articles = await semanticSearch('best practices for api design');
+```
+
+### Document Similarity
+
+Find documents similar to an existing document:
+
+```typescript
+async function findSimilar(documentId: string, limit: number = 5) {
+  // Get the reference document's embedding
+  const refDoc = await collection.findOne({ _id: documentId });
+  if (!refDoc?.embedding) throw new Error('Document has no embedding');
+
+  // Find similar documents (excluding the reference)
+  const results = await collection.aggregate([
+    {
+      $vectorSearch: {
+        index: 'articles-index',
+        path: 'embedding',
+        queryVector: refDoc.embedding,
+        limit: limit + 1 // Get one extra to exclude self
+      }
+    },
+    {
+      $match: { _id: { $ne: documentId } }
+    },
+    { $limit: limit }
+  ]).toArray();
+
+  return results;
+}
+
+// Usage
+const similar = await findSimilar('article-123');
+```
+
+### RAG Context Retrieval
+
+Retrieve relevant context for a RAG application:
+
+```typescript
+async function getRAGContext(
+  question: string,
+  options: { limit?: number; minScore?: number } = {}
+) {
+  const { limit = 5, minScore = 0.7 } = options;
+
+  const results = await collection.aggregate([
+    {
+      $vectorSearch: {
+        index: 'knowledge-base',
+        path: 'embedding',
+        queryText: question,
+        numCandidates: limit * 20,
+        limit: limit * 2 // Get extra for score filtering
+      }
+    },
+    {
+      $addFields: {
+        relevanceScore: { $meta: 'vectorSearchScore' }
+      }
+    },
+    {
+      $match: {
+        relevanceScore: { $gte: minScore }
+      }
+    },
+    { $limit: limit },
+    {
+      $project: {
+        content: 1,
+        source: 1,
+        relevanceScore: 1
+      }
+    }
+  ]).toArray();
+
+  // Format for LLM context
+  const context = results
+    .map(doc => `[Source: ${doc.source}]\n${doc.content}`)
+    .join('\n\n---\n\n');
+
+  return { context, sources: results };
+}
+
+// Usage with an LLM
+async function answerQuestion(question: string) {
+  const { context, sources } = await getRAGContext(question);
+
+  const prompt = `
+    Answer the question based on the following context.
+    If the answer is not in the context, say "I don't know."
+
+    Context:
+    ${context}
+
+    Question: ${question}
+
+    Answer:
+  `;
+
+  const answer = await llm.complete(prompt);
+  return { answer, sources };
+}
+```
+
+### Product Recommendations
+
+Build a recommendation system:
+
+```typescript
+async function getRecommendations(
+  userId: string,
+  options: { limit?: number; excludeOwned?: boolean } = {}
+) {
+  const { limit = 10, excludeOwned = true } = options;
+
+  // Get user's recently viewed/purchased items
+  const userHistory = await getUserHistory(userId);
+  if (userHistory.length === 0) return [];
+
+  // Average the embeddings of recent items
+  const avgEmbedding = averageVectors(
+    userHistory.map(item => item.embedding)
+  );
+
+  // Build exclusion filter
+  const excludeIds = excludeOwned
+    ? await getUserOwnedProducts(userId)
+    : [];
+
+  // Find similar products
+  const recommendations = await products.aggregate([
+    {
+      $vectorSearch: {
+        index: 'products-index',
+        path: 'embedding',
+        queryVector: avgEmbedding,
+        limit: limit + excludeIds.length
+      }
+    },
+    {
+      $match: {
+        _id: { $nin: excludeIds },
+        inStock: true
+      }
+    },
+    { $limit: limit },
+    {
+      $project: {
+        name: 1,
+        price: 1,
+        image: 1,
+        score: { $meta: 'vectorSearchScore' }
+      }
+    }
+  ]).toArray();
+
+  return recommendations;
+}
+```
+
+### Semantic Deduplication
+
+Find and merge duplicate or near-duplicate content:
+
+```typescript
+async function findDuplicates(
+  threshold: number = 0.95
+): Promise<Array<{ original: string; duplicates: string[] }>> {
+  const allDocs = await collection.find({}).toArray();
+  const duplicateGroups: Array<{ original: string; duplicates: string[] }> = [];
+  const processed = new Set<string>();
+
+  for (const doc of allDocs) {
+    if (processed.has(doc._id)) continue;
+
+    // Find near-duplicates
+    const similar = await collection.aggregate([
+      {
+        $vectorSearch: {
+          index: 'content-index',
+          path: 'embedding',
+          queryVector: doc.embedding,
+          limit: 10
+        }
+      },
+      {
+        $addFields: { similarity: { $meta: 'vectorSearchScore' } }
+      },
+      {
+        $match: {
+          _id: { $ne: doc._id },
+          similarity: { $gte: threshold }
+        }
+      }
+    ]).toArray();
+
+    if (similar.length > 0) {
+      duplicateGroups.push({
+        original: doc._id,
+        duplicates: similar.map(s => s._id)
+      });
+      similar.forEach(s => processed.add(s._id));
+    }
+
+    processed.add(doc._id);
+  }
+
+  return duplicateGroups;
+}
+```
+
+---
+
+## Performance Tips
+
+1. **Choose appropriate dimensions**: Smaller embeddings (384) are faster but less accurate than larger ones (1024).
+
+2. **Use numCandidates wisely**: Higher values improve recall but slow down queries. Start with `limit * 10`.
+
+3. **Pre-filter when possible**: Use the `filter` option to reduce the search space before vector comparison.
+
+4. **Batch embedding operations**: Use `embedDocuments()` instead of multiple `embedDocument()` calls.
+
+5. **Cache embeddings**: Store embeddings in documents to avoid regenerating them.
+
+6. **Index metadata fields**: If you filter on metadata, ensure those fields are indexed in Vectorize.
+
+---
+
+## Troubleshooting
+
+### "AI binding not configured"
+
+Ensure you have the AI binding in your `wrangler.jsonc`:
+
+```jsonc
+{
+  "ai": {
+    "binding": "AI"
+  }
+}
+```
+
+And pass it when creating the client:
+
+```typescript
+const client = new MongoClient({
+  ai: env.AI,
+  // ...
+});
+```
+
+### "Vectorize index not found"
+
+Verify the index exists and is correctly bound:
+
+```bash
+# List your indexes
+wrangler vectorize list
+
+# Check the binding name matches your code
+```
+
+### Dimension Mismatch
+
+If you get dimension errors, ensure your index was created with the correct dimensions for your model:
+
+| Model | Dimensions |
+|-------|------------|
+| @cf/baai/bge-m3 | 1024 |
+| @cf/baai/bge-base-en-v1.5 | 768 |
+| @cf/baai/bge-small-en-v1.5 | 384 |
+
+```bash
+# Recreate index with correct dimensions
+wrangler vectorize delete my-index
+wrangler vectorize create my-index --dimensions=1024 --metric=cosine
+```
+
+---
+
+## Next Steps
+
+- [Aggregation Pipeline](/docs/guides/aggregation) - Full aggregation reference
+- [Indexing](/docs/guides/indexing) - Optimize query performance
+- [CRUD Operations](/docs/guides/crud) - Basic document operations

@@ -1,0 +1,647 @@
+---
+title: Error Handling
+description: Handle errors gracefully and implement retry logic in MondoDB
+---
+
+# Error Handling
+
+MondoDB provides MongoDB-compatible error handling with specialized error classes, error codes, and built-in retry mechanisms. This guide covers error types, handling patterns, and strategies for building robust applications.
+
+## Error Types
+
+MondoDB includes several error classes for different failure scenarios:
+
+### BulkWriteException
+
+Thrown when bulk write operations fail. Contains partial results and error details:
+
+```typescript
+import { BulkWriteException, BulkWriteError } from 'mondodb/client'
+
+try {
+  await collection.bulkWrite([
+    { insertOne: { document: { _id: '1', name: 'Alice' } } },
+    { insertOne: { document: { _id: '1', name: 'Duplicate' } } }, // Duplicate key
+    { insertOne: { document: { _id: '2', name: 'Bob' } } },
+  ])
+} catch (error) {
+  if (error instanceof BulkWriteException) {
+    console.log('Partial results:', error.result)
+    console.log('Inserted count:', error.result.insertedCount)
+
+    // Examine individual errors
+    for (const writeError of error.writeErrors) {
+      console.log(`Operation ${writeError.index} failed:`, writeError.errmsg)
+      console.log('Error code:', writeError.code)
+    }
+  }
+}
+```
+
+**Properties:**
+- `result: BulkWriteResult` - Partial results from successful operations
+- `writeErrors: BulkWriteError[]` - Array of errors with index, code, and message
+
+### AggregationError
+
+Thrown when aggregation pipeline execution fails:
+
+```typescript
+import { AggregationError } from 'mondodb/client'
+
+try {
+  const results = await collection.aggregate([
+    { $match: { status: 'active' } },
+    { $group: { _id: '$category', total: { $sum: '$amount' } } },
+  ]).toArray()
+} catch (error) {
+  if (error instanceof AggregationError) {
+    console.log('Aggregation failed:', error.message)
+    // Access underlying errors if multiple stages failed
+    for (const err of error.errors) {
+      console.log('Stage error:', err.message)
+    }
+  }
+}
+```
+
+### ImmutableEntryError
+
+Thrown when attempting to modify immutable audit log entries (used with AgentFS):
+
+```typescript
+import { ImmutableEntryError } from 'mondodb/agentfs'
+
+try {
+  await auditCollection.updateOne(
+    { id: 'audit-entry-123' },
+    { $set: { modified: true } }
+  )
+} catch (error) {
+  if (error instanceof ImmutableEntryError) {
+    console.log('Cannot modify audit entries:', error.message)
+  }
+}
+```
+
+### MCP Error Classes
+
+For MCP (Model Context Protocol) integrations, MondoDB provides specialized error classes:
+
+```typescript
+import {
+  McpError,
+  ConnectionError,
+  TimeoutError,
+  RateLimitError,
+  AuthenticationError,
+  ToolNotFoundError,
+  ToolExecutionError,
+  InvalidParamsError,
+} from 'mondodb/mcp/adapters/errors'
+
+// Connection errors (retryable)
+throw new ConnectionError('Failed to connect to database')
+
+// Timeout errors (retryable)
+throw new TimeoutError('Operation timed out', 30000) // 30 second timeout
+
+// Rate limit errors (retryable with delay)
+throw new RateLimitError('Too many requests', 5000) // Retry after 5 seconds
+
+// Authentication errors (not retryable)
+throw new AuthenticationError('Invalid credentials')
+
+// Tool errors
+throw new ToolNotFoundError('unknown_tool')
+throw new ToolExecutionError('search', 'Search query failed')
+
+// Invalid parameters (not retryable)
+throw new InvalidParamsError('Missing required field: filter')
+```
+
+## Error Codes
+
+MondoDB uses MongoDB-compatible error codes:
+
+```typescript
+import { ErrorCode, getErrorCodeName } from 'mondodb/types/rpc'
+
+// Common error codes
+ErrorCode.OK                  // 0 - Success
+ErrorCode.INTERNAL_ERROR      // 1 - Internal server error
+ErrorCode.BAD_VALUE           // 2 - Invalid value provided
+ErrorCode.UNAUTHORIZED        // 13 - Authentication required
+ErrorCode.NAMESPACE_NOT_FOUND // 26 - Collection not found
+ErrorCode.INDEX_NOT_FOUND     // 27 - Index not found
+ErrorCode.COMMAND_NOT_FOUND   // 59 - Unknown command
+ErrorCode.DATABASE_NOT_FOUND  // 60 - Database not found
+ErrorCode.DUPLICATE_KEY       // 11000 - Duplicate key error
+
+// Get human-readable name from code
+const name = getErrorCodeName(11000) // Returns 'DuplicateKey'
+```
+
+### MCP Error Codes
+
+For MCP integrations, JSON-RPC 2.0 compliant codes are used:
+
+```typescript
+import { McpErrorCode } from 'mondodb/mcp/adapters/errors'
+
+// Standard JSON-RPC errors
+McpErrorCode.ParseError       // -32700 - Invalid JSON
+McpErrorCode.InvalidRequest   // -32600 - Invalid request object
+McpErrorCode.MethodNotFound   // -32601 - Method does not exist
+McpErrorCode.InvalidParams    // -32602 - Invalid parameters
+McpErrorCode.InternalError    // -32603 - Internal error
+
+// Server errors
+McpErrorCode.ServerError      // -32000 - Generic server error
+McpErrorCode.ServerBusy       // -32001 - Server overloaded
+McpErrorCode.ServerShutdown   // -32002 - Server shutting down
+
+// MCP-specific errors
+McpErrorCode.ToolNotFound     // -32800 - Tool not found
+McpErrorCode.ToolExecutionError // -32801 - Tool execution failed
+McpErrorCode.ResourceNotFound // -32802 - Resource not found
+
+// Transport errors
+McpErrorCode.ConnectionError  // -32900 - Connection failed
+McpErrorCode.ConnectionTimeout // -32901 - Operation timed out
+McpErrorCode.RateLimited      // -32903 - Rate limit exceeded
+McpErrorCode.AuthenticationFailed // -32904 - Auth failed
+```
+
+## Try-Catch Patterns
+
+### Basic Error Handling
+
+```typescript
+async function safeOperation() {
+  try {
+    const result = await collection.insertOne({
+      name: 'New Document',
+      createdAt: new Date(),
+    })
+    return result
+  } catch (error) {
+    // Log error details
+    console.error('Insert failed:', error.message)
+
+    // Re-throw or handle gracefully
+    throw error
+  }
+}
+```
+
+### Error Type Checking
+
+```typescript
+async function handleDatabaseErrors() {
+  try {
+    await collection.insertOne({ _id: existingId, name: 'Test' })
+  } catch (error) {
+    if (error instanceof Error) {
+      // Check for specific error codes
+      const mongoError = error as { code?: number; errmsg?: string }
+
+      switch (mongoError.code) {
+        case 11000: // Duplicate key
+          console.log('Document already exists')
+          return null
+        case 26: // Namespace not found
+          console.log('Collection does not exist')
+          throw error
+        default:
+          console.log('Unexpected error:', mongoError.errmsg || error.message)
+          throw error
+      }
+    }
+    throw error
+  }
+}
+```
+
+## Duplicate Key Errors
+
+Duplicate key errors (code 11000) occur when inserting a document with an `_id` that already exists, or when a unique index constraint is violated:
+
+```typescript
+async function insertWithDuplicateHandling(document: Document) {
+  try {
+    return await collection.insertOne(document)
+  } catch (error) {
+    const mongoError = error as { code?: number; errmsg?: string }
+
+    if (mongoError.code === 11000) {
+      // Parse the error message to identify the duplicate field
+      const errorMessage = mongoError.errmsg || ''
+
+      if (errorMessage.includes('_id')) {
+        console.log('Document with this ID already exists')
+        // Option 1: Return existing document
+        return await collection.findOne({ _id: document._id })
+      }
+
+      if (errorMessage.includes('email')) {
+        console.log('Email already registered')
+        throw new Error('EMAIL_ALREADY_EXISTS')
+      }
+
+      throw new Error('DUPLICATE_KEY_ERROR')
+    }
+
+    throw error
+  }
+}
+```
+
+### Upsert Pattern for Avoiding Duplicates
+
+Use `upsert` to avoid duplicate key errors when you want to update or insert:
+
+```typescript
+// Insert if not exists, update if exists
+const result = await collection.updateOne(
+  { email: 'user@example.com' },
+  {
+    $set: { name: 'Updated Name', updatedAt: new Date() },
+    $setOnInsert: { createdAt: new Date() },
+  },
+  { upsert: true }
+)
+
+if (result.upsertedId) {
+  console.log('Created new document:', result.upsertedId)
+} else {
+  console.log('Updated existing document')
+}
+```
+
+## Transaction Conflict Handling
+
+Transactions can fail due to conflicts with concurrent operations. MondoDB supports automatic retry for transient transaction errors:
+
+### Using withTransaction (Recommended)
+
+The `withTransaction()` helper automatically handles retries:
+
+```typescript
+const session = client.startSession()
+
+try {
+  const result = await session.withTransaction(async () => {
+    const accounts = db.collection('accounts')
+
+    // This entire block will be retried on TransientTransactionError
+    await accounts.updateOne(
+      { userId: 'alice' },
+      { $inc: { balance: -100 } },
+      { session }
+    )
+
+    await accounts.updateOne(
+      { userId: 'bob' },
+      { $inc: { balance: 100 } },
+      { session }
+    )
+
+    return { success: true }
+  })
+
+  console.log('Transfer completed:', result)
+} finally {
+  await session.endSession()
+}
+```
+
+### Manual Transaction Retry
+
+For fine-grained control over retry behavior:
+
+```typescript
+async function transferFundsWithRetry(
+  from: string,
+  to: string,
+  amount: number,
+  maxRetries = 5
+) {
+  const session = client.startSession()
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      session.startTransaction()
+
+      const accounts = db.collection('accounts')
+
+      // Check balance
+      const source = await accounts.findOne({ userId: from }, { session })
+      if (!source || source.balance < amount) {
+        throw new Error('INSUFFICIENT_FUNDS')
+      }
+
+      // Perform transfer
+      await accounts.updateOne(
+        { userId: from },
+        { $inc: { balance: -amount } },
+        { session }
+      )
+
+      await accounts.updateOne(
+        { userId: to },
+        { $inc: { balance: amount } },
+        { session }
+      )
+
+      await session.commitTransaction()
+      return { success: true, attempt }
+    } catch (error) {
+      lastError = error as Error
+
+      // Check if error has TransientTransactionError label
+      const mongoError = error as {
+        hasErrorLabel?: (label: string) => boolean
+      }
+
+      const isTransient = mongoError.hasErrorLabel?.('TransientTransactionError')
+
+      // Abort current transaction
+      if (session.inTransaction) {
+        await session.abortTransaction()
+      }
+
+      // Don't retry non-transient errors
+      if (!isTransient) {
+        throw error
+      }
+
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(100 * Math.pow(2, attempt), 5000)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  await session.endSession()
+  throw lastError || new Error('Transaction failed after max retries')
+}
+```
+
+## Network Error Recovery
+
+Handle network errors with automatic reconnection:
+
+```typescript
+import { isRetryableError, getRetryDelay } from 'mondodb/mcp/adapters/errors'
+
+async function resilientOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error as Error
+
+      // Check if error is retryable (connection, timeout, rate limit)
+      if (!isRetryableError(lastError)) {
+        throw error
+      }
+
+      // Get appropriate retry delay
+      const delay = getRetryDelay(lastError, 1000 * (attempt + 1))
+      console.log(`Retry attempt ${attempt + 1} after ${delay}ms`)
+
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError
+}
+
+// Usage
+const result = await resilientOperation(async () => {
+  return await collection.find({ status: 'active' }).toArray()
+})
+```
+
+## Retry Logic Patterns
+
+### Exponential Backoff with Jitter
+
+```typescript
+interface RetryConfig {
+  maxRetries: number
+  initialDelayMs: number
+  maxDelayMs: number
+  backoffMultiplier: number
+  jitter: boolean
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 10000,
+  backoffMultiplier: 2,
+  jitter: true,
+}
+
+function calculateRetryDelay(attempt: number, config: RetryConfig): number {
+  // Calculate base delay with exponential backoff
+  let delay = config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt)
+
+  // Cap at maximum delay
+  delay = Math.min(delay, config.maxDelayMs)
+
+  // Add jitter to prevent thundering herd
+  if (config.jitter) {
+    const jitterRange = delay * 0.2 // +/- 20%
+    delay += (Math.random() - 0.5) * 2 * jitterRange
+  }
+
+  return Math.round(delay)
+}
+
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  config: RetryConfig = DEFAULT_RETRY_CONFIG
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error as Error
+
+      if (attempt >= config.maxRetries) {
+        break
+      }
+
+      // Check if error is retryable
+      if (!isRetryableError(lastError)) {
+        throw error
+      }
+
+      const delay = calculateRetryDelay(attempt, config)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError || new Error('Operation failed after max retries')
+}
+```
+
+### Circuit Breaker Pattern
+
+Prevent cascading failures with a circuit breaker:
+
+```typescript
+enum CircuitState {
+  CLOSED = 'CLOSED',     // Normal operation
+  OPEN = 'OPEN',         // Failing, reject requests
+  HALF_OPEN = 'HALF_OPEN' // Testing if service recovered
+}
+
+class CircuitBreaker {
+  private state = CircuitState.CLOSED
+  private failures = 0
+  private lastFailureTime = 0
+
+  constructor(
+    private readonly failureThreshold = 5,
+    private readonly resetTimeoutMs = 30000
+  ) {}
+
+  async execute<T>(operation: () => Promise<T>): Promise<T> {
+    // Check if circuit should transition from OPEN to HALF_OPEN
+    if (this.state === CircuitState.OPEN) {
+      if (Date.now() - this.lastFailureTime >= this.resetTimeoutMs) {
+        this.state = CircuitState.HALF_OPEN
+      } else {
+        throw new Error('Circuit breaker is OPEN - request rejected')
+      }
+    }
+
+    try {
+      const result = await operation()
+
+      // Success - reset circuit
+      if (this.state === CircuitState.HALF_OPEN) {
+        this.state = CircuitState.CLOSED
+      }
+      this.failures = 0
+
+      return result
+    } catch (error) {
+      this.failures++
+      this.lastFailureTime = Date.now()
+
+      // Open circuit if threshold exceeded
+      if (this.failures >= this.failureThreshold) {
+        this.state = CircuitState.OPEN
+        console.log('Circuit breaker OPENED after', this.failures, 'failures')
+      }
+
+      throw error
+    }
+  }
+}
+
+// Usage
+const breaker = new CircuitBreaker(5, 30000)
+
+async function safeQuery() {
+  return breaker.execute(async () => {
+    return await collection.find({ status: 'active' }).toArray()
+  })
+}
+```
+
+### Timeout Handling
+
+Wrap operations with timeouts to prevent hanging:
+
+```typescript
+async function withTimeout<T>(
+  operation: () => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Operation timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
+
+  return Promise.race([operation(), timeoutPromise])
+}
+
+// Usage
+try {
+  const result = await withTimeout(
+    () => collection.aggregate(complexPipeline).toArray(),
+    30000 // 30 second timeout
+  )
+} catch (error) {
+  if (error.message.includes('timed out')) {
+    console.log('Query took too long, consider adding indexes')
+  }
+  throw error
+}
+```
+
+## Error Classification
+
+Classify errors for appropriate handling:
+
+```typescript
+import { classifyError, McpErrorCode } from 'mondodb/mcp/adapters/errors'
+
+function handleError(error: Error): void {
+  const errorCode = classifyError(error)
+
+  switch (errorCode) {
+    case McpErrorCode.ConnectionError:
+    case McpErrorCode.ConnectionTimeout:
+      console.log('Network issue - will retry')
+      break
+
+    case McpErrorCode.RateLimited:
+      console.log('Rate limited - backing off')
+      break
+
+    case McpErrorCode.AuthenticationFailed:
+      console.log('Auth failed - check credentials')
+      break
+
+    case McpErrorCode.ParseError:
+      console.log('Invalid data format')
+      break
+
+    default:
+      console.log('Internal error:', error.message)
+  }
+}
+```
+
+## Best Practices
+
+1. **Always use try-catch** - Wrap database operations in try-catch blocks
+2. **Check error codes** - Use specific error codes to determine appropriate handling
+3. **Use withTransaction** - Let MondoDB handle transaction retries automatically
+4. **Implement exponential backoff** - Avoid overwhelming the server with rapid retries
+5. **Add jitter to delays** - Prevent thundering herd problems in distributed systems
+6. **Set timeouts** - Prevent operations from hanging indefinitely
+7. **Log errors** - Include error codes and messages for debugging
+8. **Fail gracefully** - Provide meaningful error messages to users
+9. **Consider circuit breakers** - Protect against cascading failures
+
+## Next Steps
+
+- Learn about [Transactions](/docs/guides/transactions) for atomic operations
+- Explore [CRUD Operations](/docs/guides/crud) for database interactions
+- Understand [Indexing](/docs/guides/indexing) for query optimization

@@ -1,0 +1,459 @@
+---
+title: TTL Indexes
+description: Automatically expire and delete documents after a specified time period using TTL indexes
+---
+
+# TTL Indexes
+
+TTL (Time-To-Live) indexes enable automatic document expiration in MondoDB. Documents are automatically deleted after a specified number of seconds, making TTL indexes ideal for session management, cache entries, temporary data, and log rotation.
+
+## Overview
+
+A TTL index is a special single-field index that MondoDB uses to automatically remove documents from a collection after a specified amount of time. The index monitors a date field in each document and removes documents once the time has elapsed.
+
+Key characteristics:
+- TTL indexes work on a **single date field**
+- Only **one TTL index** is allowed per collection
+- Documents expire based on the date value plus `expireAfterSeconds`
+- Background cleanup runs periodically (default: every 60 seconds)
+- Documents without the TTL field or with invalid dates are not expired
+
+## Creating a TTL Index
+
+Use `createIndex()` with the `expireAfterSeconds` option to create a TTL index:
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('mondodb://your-worker.workers.dev')
+await client.connect()
+
+const db = client.db('mydb')
+const sessions = db.collection('sessions')
+
+// Documents expire 1 hour after the createdAt timestamp
+await sessions.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+```
+
+### expireAfterSeconds Values
+
+| Value | Duration |
+|-------|----------|
+| `0` | Expire immediately when date passes |
+| `60` | 1 minute |
+| `3600` | 1 hour |
+| `86400` | 24 hours (1 day) |
+| `604800` | 7 days |
+| `2592000` | 30 days |
+
+```typescript
+// Sessions expire 30 minutes after last access
+await sessions.createIndex(
+  { lastAccess: 1 },
+  { expireAfterSeconds: 1800 }
+)
+
+// Logs expire after 7 days
+await logs.createIndex(
+  { timestamp: 1 },
+  { expireAfterSeconds: 604800 }
+)
+
+// Cache entries expire after 5 minutes
+await cache.createIndex(
+  { cachedAt: 1 },
+  { expireAfterSeconds: 300 }
+)
+```
+
+## How Expiration Works
+
+### Expiration Calculation
+
+MondoDB calculates the expiration time for each document as:
+
+```
+expirationTime = documentDateFieldValue + expireAfterSeconds
+```
+
+A document is considered expired when:
+
+```
+currentTime > expirationTime
+```
+
+### Date Field Requirements
+
+The TTL field must contain a valid date value. MondoDB supports:
+
+- **Date objects**: `new Date()`
+- **ISO 8601 strings**: `"2024-01-15T10:30:00.000Z"`
+- **Unix timestamps** (milliseconds): `1705315800000`
+
+```typescript
+// All of these are valid TTL field values
+await collection.insertOne({
+  data: 'example',
+  expiresAt: new Date()
+})
+
+await collection.insertOne({
+  data: 'example',
+  expiresAt: new Date().toISOString()
+})
+
+await collection.insertOne({
+  data: 'example',
+  expiresAt: Date.now()
+})
+```
+
+### Documents That Don't Expire
+
+A document will **not** be expired if:
+
+- The TTL field is missing from the document
+- The TTL field value is `null` or `undefined`
+- The TTL field contains an invalid date
+- The TTL field contains a non-date value (string, number that isn't a timestamp)
+
+```typescript
+// This document will NOT expire (no TTL field)
+await collection.insertOne({
+  data: 'permanent record'
+})
+
+// This document will NOT expire (null value)
+await collection.insertOne({
+  data: 'keep forever',
+  createdAt: null
+})
+
+// This document will NOT expire (invalid date)
+await collection.insertOne({
+  data: 'also permanent',
+  createdAt: 'not-a-date'
+})
+```
+
+### Background Cleanup Process
+
+MondoDB runs a background process that:
+
+1. Scans collections with TTL indexes
+2. Identifies documents past their expiration time
+3. Deletes expired documents
+4. Runs every 60 seconds by default
+
+This means documents may exist briefly past their expiration time until the next cleanup cycle.
+
+## Use Cases
+
+### Session Management
+
+Store user sessions that automatically expire after inactivity:
+
+```typescript
+const sessions = db.collection('sessions')
+
+// Create TTL index on lastActivity field
+await sessions.createIndex(
+  { lastActivity: 1 },
+  { expireAfterSeconds: 3600, name: 'session_expiry' }
+)
+
+// Create a new session
+await sessions.insertOne({
+  _id: 'session_abc123',
+  userId: 'user_456',
+  lastActivity: new Date(),
+  data: {
+    cart: [],
+    preferences: {}
+  }
+})
+
+// Update session activity (resets expiration timer)
+await sessions.updateOne(
+  { _id: 'session_abc123' },
+  { $set: { lastActivity: new Date() } }
+)
+```
+
+### Cache Entries
+
+Implement a self-cleaning cache:
+
+```typescript
+const cache = db.collection('cache')
+
+// Cache entries expire after 5 minutes
+await cache.createIndex(
+  { cachedAt: 1 },
+  { expireAfterSeconds: 300 }
+)
+
+// Cache a response
+async function cacheResponse(key: string, data: unknown) {
+  await cache.updateOne(
+    { _id: key },
+    {
+      $set: {
+        cachedAt: new Date(),
+        data
+      }
+    },
+    { upsert: true }
+  )
+}
+
+// Get from cache (returns null if expired/missing)
+async function getCached(key: string) {
+  const doc = await cache.findOne({ _id: key })
+  return doc?.data ?? null
+}
+```
+
+### Temporary Data
+
+Store verification codes or one-time tokens:
+
+```typescript
+const verificationCodes = db.collection('verification_codes')
+
+// Codes expire after 15 minutes
+await verificationCodes.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 900 }
+)
+
+// Create a verification code
+async function createVerificationCode(email: string) {
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+  await verificationCodes.insertOne({
+    email,
+    code,
+    createdAt: new Date()
+  })
+
+  return code
+}
+
+// Verify a code
+async function verifyCode(email: string, code: string) {
+  const doc = await verificationCodes.findOneAndDelete({
+    email,
+    code
+  })
+
+  return doc !== null
+}
+```
+
+### Log Rotation
+
+Automatically clean up old logs:
+
+```typescript
+const logs = db.collection('logs')
+
+// Logs expire after 30 days
+await logs.createIndex(
+  { timestamp: 1 },
+  { expireAfterSeconds: 2592000 }
+)
+
+// Log an event
+async function logEvent(level: string, message: string, meta?: object) {
+  await logs.insertOne({
+    timestamp: new Date(),
+    level,
+    message,
+    ...meta
+  })
+}
+```
+
+### Rate Limiting
+
+Track rate limit windows that auto-expire:
+
+```typescript
+const rateLimits = db.collection('rate_limits')
+
+// Rate limit windows expire after 1 minute
+await rateLimits.createIndex(
+  { windowStart: 1 },
+  { expireAfterSeconds: 60 }
+)
+
+async function checkRateLimit(ip: string, limit: number) {
+  const window = await rateLimits.findOneAndUpdate(
+    { _id: ip },
+    {
+      $inc: { count: 1 },
+      $setOnInsert: { windowStart: new Date() }
+    },
+    { upsert: true, returnDocument: 'after' }
+  )
+
+  return (window?.count ?? 0) <= limit
+}
+```
+
+## Limitations and Constraints
+
+### Single Field Only
+
+TTL indexes must be created on a single field. Compound TTL indexes are not supported:
+
+```typescript
+// Valid: single field
+await collection.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+
+// Invalid: compound index - will throw error
+await collection.createIndex(
+  { userId: 1, createdAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+// Error: TTL indexes must be on a single field
+```
+
+### One Per Collection
+
+Only one TTL index is allowed per collection:
+
+```typescript
+// First TTL index - works
+await collection.createIndex(
+  { createdAt: 1 },
+  { expireAfterSeconds: 3600 }
+)
+
+// Second TTL index - will throw error
+await collection.createIndex(
+  { expiresAt: 1 },
+  { expireAfterSeconds: 0 }
+)
+// Error: Collection already has a TTL index
+```
+
+### Expiration Timing
+
+Documents may persist slightly past their expiration time:
+- Background cleanup runs every 60 seconds by default
+- High load may delay cleanup
+- Do not rely on exact-second expiration for security-critical applications
+
+### Not Real-Time
+
+TTL expiration is eventual, not immediate:
+- Queries may return expired documents briefly
+- Use additional application-level checks for time-sensitive data
+
+```typescript
+// For critical timing, add an application-level check
+const session = await sessions.findOne({ _id: sessionId })
+
+if (session && session.expiresAt < new Date()) {
+  // Document is expired but not yet cleaned up
+  return null
+}
+
+return session
+```
+
+## Managing TTL Indexes
+
+### Listing TTL Indexes
+
+```typescript
+const indexes = await collection.listIndexes()
+
+const ttlIndexes = indexes.filter(idx => idx.expireAfterSeconds !== undefined)
+
+console.log(ttlIndexes)
+// [{ name: 'createdAt_1', key: { createdAt: 1 }, expireAfterSeconds: 3600, v: 2 }]
+```
+
+### Removing a TTL Index
+
+```typescript
+// Drop the TTL index by name
+await collection.dropIndex('createdAt_1')
+```
+
+### Changing Expiration Time
+
+To change the `expireAfterSeconds` value, drop and recreate the index:
+
+```typescript
+// Remove existing TTL index
+await collection.dropIndex('session_ttl')
+
+// Create new TTL index with different expiration
+await collection.createIndex(
+  { lastActivity: 1 },
+  { expireAfterSeconds: 7200, name: 'session_ttl' } // 2 hours instead of 1
+)
+```
+
+## Complete Example
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+async function setupTTLCollections() {
+  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  await client.connect()
+
+  const db = client.db('myapp')
+
+  // Sessions: expire 1 hour after last activity
+  const sessions = db.collection('sessions')
+  await sessions.createIndex(
+    { lastActivity: 1 },
+    { expireAfterSeconds: 3600, name: 'session_ttl' }
+  )
+
+  // Password reset tokens: expire after 15 minutes
+  const resetTokens = db.collection('reset_tokens')
+  await resetTokens.createIndex(
+    { createdAt: 1 },
+    { expireAfterSeconds: 900, name: 'reset_ttl' }
+  )
+
+  // API response cache: expire after 5 minutes
+  const cache = db.collection('api_cache')
+  await cache.createIndex(
+    { cachedAt: 1 },
+    { expireAfterSeconds: 300, name: 'cache_ttl' }
+  )
+
+  // Application logs: expire after 30 days
+  const logs = db.collection('logs')
+  await logs.createIndex(
+    { timestamp: 1 },
+    { expireAfterSeconds: 2592000, name: 'log_ttl' }
+  )
+
+  // Verify indexes
+  console.log('Sessions:', await sessions.listIndexes())
+  console.log('Reset tokens:', await resetTokens.listIndexes())
+  console.log('Cache:', await cache.listIndexes())
+  console.log('Logs:', await logs.listIndexes())
+}
+```
+
+## Related
+
+- [Indexing](/docs/guides/indexing) - Complete guide to all index types
+- [CRUD Operations](/docs/guides/crud) - Document operations including insertions with TTL fields
+- [API Reference: Collection](/docs/api-reference/collection) - Full API documentation

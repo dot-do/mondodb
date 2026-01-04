@@ -1,0 +1,511 @@
+---
+title: Bulk Write Operations
+description: Execute multiple write operations efficiently in a single batch with MondoDB
+---
+
+# Bulk Write Operations
+
+Bulk write operations allow you to execute multiple insert, update, replace, and delete operations in a single request. This provides significant performance benefits when you need to perform many write operations, as it reduces the number of round trips to the database.
+
+## Overview
+
+The `bulkWrite()` method accepts an array of write operations and executes them as a batch. Each operation in the array can be one of six types:
+
+- `insertOne` - Insert a single document
+- `updateOne` - Update a single document
+- `updateMany` - Update multiple documents
+- `replaceOne` - Replace a single document
+- `deleteOne` - Delete a single document
+- `deleteMany` - Delete multiple documents
+
+```typescript
+const result = await collection.bulkWrite([
+  { insertOne: { document: { name: 'Alice', status: 'active' } } },
+  { updateOne: { filter: { name: 'Bob' }, update: { $set: { status: 'inactive' } } } },
+  { deleteOne: { filter: { name: 'Charlie' } } }
+])
+
+console.log(result)
+// {
+//   acknowledged: true,
+//   insertedCount: 1,
+//   matchedCount: 1,
+//   modifiedCount: 1,
+//   deletedCount: 1,
+//   upsertedCount: 0,
+//   insertedIds: { 0: ObjectId("...") },
+//   upsertedIds: {}
+// }
+```
+
+---
+
+## The bulkWrite() Method
+
+### Signature
+
+```typescript
+collection.bulkWrite(
+  operations: BulkWriteOperation[],
+  options?: BulkWriteOptions
+): Promise<BulkWriteResult>
+```
+
+### Parameters
+
+- `operations` - Array of write operations to execute
+- `options` (optional) - Bulk write options
+  - `ordered` - Execute operations in order (default: `true`)
+  - `bypassDocumentValidation` - Skip document validation
+  - `comment` - Comment to attach to the operation
+
+### Return Value
+
+`BulkWriteResult` contains:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `acknowledged` | `boolean` | Whether the write was acknowledged |
+| `insertedCount` | `number` | Number of documents inserted |
+| `matchedCount` | `number` | Number of documents matched for update/replace |
+| `modifiedCount` | `number` | Number of documents modified |
+| `deletedCount` | `number` | Number of documents deleted |
+| `upsertedCount` | `number` | Number of documents upserted |
+| `insertedIds` | `Record<number, ObjectId>` | Map of operation index to inserted `_id` |
+| `upsertedIds` | `Record<number, ObjectId>` | Map of operation index to upserted `_id` |
+
+---
+
+## Operation Types
+
+### insertOne
+
+Insert a single document into the collection.
+
+```typescript
+{
+  insertOne: {
+    document: { name: 'Alice', email: 'alice@example.com', age: 30 }
+  }
+}
+```
+
+If no `_id` is provided, one will be automatically generated. You can provide a custom `_id`:
+
+```typescript
+{
+  insertOne: {
+    document: { _id: new ObjectId(), name: 'Bob' }
+  }
+}
+```
+
+### updateOne
+
+Update a single document matching the filter.
+
+```typescript
+{
+  updateOne: {
+    filter: { name: 'Alice' },
+    update: { $set: { age: 31 } },
+    upsert: false,  // optional, default: false
+    arrayFilters: [] // optional, for filtering array elements
+  }
+}
+```
+
+**Options:**
+- `filter` - Query filter to find the document
+- `update` - Update operations using update operators (`$set`, `$inc`, etc.)
+- `upsert` - If `true`, insert a document if no match is found
+- `arrayFilters` - Array of filters for updating specific array elements
+
+### updateMany
+
+Update all documents matching the filter.
+
+```typescript
+{
+  updateMany: {
+    filter: { status: 'pending' },
+    update: { $set: { status: 'processed' } },
+    upsert: false
+  }
+}
+```
+
+### replaceOne
+
+Replace a single document entirely (preserving `_id`).
+
+```typescript
+{
+  replaceOne: {
+    filter: { name: 'Alice' },
+    replacement: { name: 'Alice Smith', email: 'alice.smith@example.com', age: 31 },
+    upsert: false
+  }
+}
+```
+
+Note: The replacement document must not contain update operators. All fields except `_id` are replaced.
+
+### deleteOne
+
+Delete a single document matching the filter.
+
+```typescript
+{
+  deleteOne: {
+    filter: { status: 'deleted' }
+  }
+}
+```
+
+### deleteMany
+
+Delete all documents matching the filter.
+
+```typescript
+{
+  deleteMany: {
+    filter: { status: 'expired' }
+  }
+}
+```
+
+---
+
+## Ordered vs Unordered Operations
+
+### Ordered Operations (Default)
+
+By default, `bulkWrite()` executes operations in order. If an error occurs, execution stops and remaining operations are not executed.
+
+```typescript
+// Ordered execution (default)
+const result = await collection.bulkWrite([
+  { insertOne: { document: { name: 'First' } } },
+  { insertOne: { document: { name: 'Second' } } },  // If this fails...
+  { insertOne: { document: { name: 'Third' } } }    // This won't execute
+], { ordered: true })
+```
+
+**Use ordered operations when:**
+- Operations depend on each other's results
+- You need sequential updates (e.g., insert then update)
+- Data consistency requires all-or-nothing semantics
+
+### Unordered Operations
+
+With `ordered: false`, operations may execute in any order and all operations are attempted regardless of individual failures.
+
+```typescript
+// Unordered execution
+const result = await collection.bulkWrite([
+  { insertOne: { document: { name: 'First' } } },
+  { insertOne: { document: { name: 'Second' } } },  // If this fails...
+  { insertOne: { document: { name: 'Third' } } }    // This still executes
+], { ordered: false })
+```
+
+**Use unordered operations when:**
+- Operations are independent of each other
+- You want maximum throughput
+- Partial success is acceptable
+
+---
+
+## Error Handling and Partial Failures
+
+### BulkWriteException
+
+When errors occur during bulk write operations, a `BulkWriteException` is thrown. This exception contains both the partial results and error details.
+
+```typescript
+import { BulkWriteException } from 'mondodb'
+
+try {
+  await collection.bulkWrite([
+    { insertOne: { document: { _id: existingId, name: 'Duplicate' } } },
+    { insertOne: { document: { name: 'Valid' } } }
+  ])
+} catch (error) {
+  if (error instanceof BulkWriteException) {
+    // Partial results from successful operations
+    console.log('Inserted:', error.result.insertedCount)
+    console.log('Errors:', error.writeErrors.length)
+
+    // Examine individual errors
+    for (const writeError of error.writeErrors) {
+      console.log(`Operation ${writeError.index} failed: ${writeError.errmsg}`)
+      console.log(`Error code: ${writeError.code}`)
+    }
+  }
+}
+```
+
+### BulkWriteError Structure
+
+Each error in the `writeErrors` array contains:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `index` | `number` | Index of the failed operation |
+| `code` | `number` | Error code (e.g., 11000 for duplicate key) |
+| `errmsg` | `string` | Human-readable error message |
+| `op` | `BulkWriteOperation` | The operation that failed |
+
+### Handling Errors in Ordered vs Unordered Mode
+
+**Ordered mode:** Execution stops at first error. Only operations before the error are in the result.
+
+```typescript
+try {
+  await collection.bulkWrite([
+    { insertOne: { document: { name: 'A' } } },          // Succeeds
+    { insertOne: { document: { _id: existingId } } },   // Fails
+    { insertOne: { document: { name: 'C' } } }          // Never executed
+  ], { ordered: true })
+} catch (error) {
+  if (error instanceof BulkWriteException) {
+    console.log(error.result.insertedCount) // 1
+  }
+}
+```
+
+**Unordered mode:** All operations are attempted. Result includes all successful operations.
+
+```typescript
+try {
+  await collection.bulkWrite([
+    { insertOne: { document: { name: 'A' } } },          // Succeeds
+    { insertOne: { document: { _id: existingId } } },   // Fails
+    { insertOne: { document: { name: 'C' } } }          // Still executes
+  ], { ordered: false })
+} catch (error) {
+  if (error instanceof BulkWriteException) {
+    console.log(error.result.insertedCount)  // 2
+    console.log(error.writeErrors.length)    // 1
+  }
+}
+```
+
+---
+
+## Performance Benefits of Batching
+
+Bulk write operations provide significant performance improvements over individual operations:
+
+### Reduced Network Round Trips
+
+Instead of N network requests for N operations, bulk write sends everything in a single request:
+
+```typescript
+// Slow: 1000 network round trips
+for (const doc of documents) {
+  await collection.insertOne(doc)
+}
+
+// Fast: 1 network round trip
+await collection.bulkWrite(
+  documents.map(doc => ({ insertOne: { document: doc } }))
+)
+```
+
+### Batched Transaction Processing
+
+Operations within a bulk write are processed together, reducing overhead:
+
+```typescript
+// Process 1000 operations efficiently
+const operations = []
+for (let i = 0; i < 1000; i++) {
+  operations.push({ insertOne: { document: { index: i, data: `item-${i}` } } })
+}
+await collection.bulkWrite(operations)
+```
+
+### When to Use Bulk Write
+
+| Scenario | Recommendation |
+|----------|----------------|
+| Importing data (100+ documents) | Use `bulkWrite` with `insertOne` operations |
+| Batch updates | Use `bulkWrite` with `updateOne`/`updateMany` |
+| Mixed operations in one request | Use `bulkWrite` |
+| Single operation | Use individual methods (`insertOne`, etc.) |
+| Operations need different error handling | Consider individual operations |
+
+---
+
+## Code Examples
+
+### Batch Import
+
+Import a large dataset efficiently:
+
+```typescript
+// Import users from external data
+const userData = [
+  { name: 'Alice', email: 'alice@example.com', role: 'admin' },
+  { name: 'Bob', email: 'bob@example.com', role: 'user' },
+  { name: 'Carol', email: 'carol@example.com', role: 'user' },
+  // ... hundreds more
+]
+
+const operations = userData.map(user => ({
+  insertOne: { document: { ...user, createdAt: new Date() } }
+}))
+
+const result = await collection.bulkWrite(operations)
+console.log(`Imported ${result.insertedCount} users`)
+```
+
+### Mixed Operations
+
+Perform different operation types in a single batch:
+
+```typescript
+const result = await collection.bulkWrite([
+  // Insert new documents
+  { insertOne: { document: { name: 'New User', status: 'pending' } } },
+
+  // Update existing documents
+  { updateMany: {
+    filter: { status: 'pending', createdAt: { $lt: oneWeekAgo } },
+    update: { $set: { status: 'expired' } }
+  }},
+
+  // Delete old documents
+  { deleteMany: { filter: { status: 'deleted' } } },
+
+  // Upsert - update if exists, insert if not
+  { updateOne: {
+    filter: { email: 'admin@example.com' },
+    update: { $set: { role: 'admin', lastSeen: new Date() } },
+    upsert: true
+  }}
+])
+
+console.log(`Inserted: ${result.insertedCount}`)
+console.log(`Modified: ${result.modifiedCount}`)
+console.log(`Deleted: ${result.deletedCount}`)
+console.log(`Upserted: ${result.upsertedCount}`)
+```
+
+### Sequential Updates with Dependencies
+
+When operations depend on execution order:
+
+```typescript
+// Insert a document, then update it
+const result = await collection.bulkWrite([
+  { insertOne: { document: { name: 'Task', value: 0, status: 'created' } } },
+  { updateOne: {
+    filter: { name: 'Task', status: 'created' },
+    update: { $inc: { value: 1 }, $set: { status: 'initialized' } }
+  }},
+  { updateOne: {
+    filter: { name: 'Task', status: 'initialized' },
+    update: { $inc: { value: 10 }, $set: { status: 'ready' } }
+  }}
+], { ordered: true })  // Must be ordered for dependencies
+
+// Result: Task has value: 11 and status: 'ready'
+```
+
+### Batch Upsert for Sync Operations
+
+Synchronize data from an external source:
+
+```typescript
+// Sync products from external API
+const externalProducts = await fetchExternalProducts()
+
+const operations = externalProducts.map(product => ({
+  updateOne: {
+    filter: { externalId: product.id },
+    update: {
+      $set: {
+        name: product.name,
+        price: product.price,
+        updatedAt: new Date()
+      },
+      $setOnInsert: { createdAt: new Date() }
+    },
+    upsert: true
+  }
+}))
+
+const result = await collection.bulkWrite(operations)
+console.log(`Updated: ${result.matchedCount}, Created: ${result.upsertedCount}`)
+```
+
+### Bulk Delete with Conditions
+
+Clean up data based on multiple conditions:
+
+```typescript
+const result = await collection.bulkWrite([
+  // Delete expired sessions
+  { deleteMany: { filter: { type: 'session', expiresAt: { $lt: new Date() } } } },
+
+  // Delete old logs
+  { deleteMany: { filter: { type: 'log', createdAt: { $lt: thirtyDaysAgo } } } },
+
+  // Delete soft-deleted records
+  { deleteMany: { filter: { deletedAt: { $exists: true } } } }
+])
+
+console.log(`Cleaned up ${result.deletedCount} documents`)
+```
+
+### Error-Tolerant Import with Unordered Operations
+
+Import data where some records may fail (e.g., duplicates):
+
+```typescript
+const records = loadRecordsFromFile()
+const operations = records.map(record => ({
+  insertOne: { document: record }
+}))
+
+try {
+  const result = await collection.bulkWrite(operations, { ordered: false })
+  console.log(`Successfully imported ${result.insertedCount} records`)
+} catch (error) {
+  if (error instanceof BulkWriteException) {
+    console.log(`Imported ${error.result.insertedCount} of ${records.length} records`)
+    console.log(`${error.writeErrors.length} records failed (likely duplicates)`)
+
+    // Log failed records for review
+    for (const writeError of error.writeErrors) {
+      console.log(`Record ${writeError.index} failed: ${writeError.errmsg}`)
+    }
+  }
+}
+```
+
+---
+
+## Best Practices
+
+1. **Choose the right ordering mode**: Use ordered for dependent operations, unordered for independent operations requiring maximum throughput.
+
+2. **Batch size**: While bulk write handles large batches, consider chunking extremely large operations (10,000+) to manage memory and provide progress feedback.
+
+3. **Error handling**: Always wrap bulk write in try-catch and handle `BulkWriteException` to access partial results.
+
+4. **Use upsert wisely**: Upsert is powerful for sync operations but ensure your filter is specific enough to avoid unintended inserts.
+
+5. **Monitor results**: Check all result properties (`insertedCount`, `modifiedCount`, etc.) to verify operations completed as expected.
+
+```typescript
+const result = await collection.bulkWrite(operations)
+
+// Verify expected counts
+if (result.insertedCount !== expectedInserts) {
+  console.warn(`Expected ${expectedInserts} inserts, got ${result.insertedCount}`)
+}
+```
