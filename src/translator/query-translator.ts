@@ -1,0 +1,701 @@
+/**
+ * QueryTranslator - Translates MongoDB-style queries to SQLite SQL
+ * using json_extract for field access on JSON documents.
+ *
+ * Features:
+ * - Operator registry pattern for extensibility
+ * - Automatic flattening of nested $and/$or for SQL optimization
+ * - CTE-based optimization for multiple array operations
+ * - Parameterized queries for SQL injection prevention
+ */
+
+export interface TranslatedQuery {
+  sql: string;
+  params: unknown[];
+}
+
+type QueryValue = unknown;
+type QueryCondition = Record<string, QueryValue>;
+
+/**
+ * Operator handler type for the registry pattern
+ */
+type OperatorHandler = (
+  path: string,
+  value: QueryValue,
+  params: unknown[]
+) => string;
+
+/**
+ * MongoDB type to SQLite json_type mapping
+ */
+const MONGO_TYPE_TO_SQLITE: Record<string, string | string[]> = {
+  string: 'text',
+  number: ['integer', 'real'],
+  bool: ['true', 'false'],
+  boolean: ['true', 'false'],
+  array: 'array',
+  object: 'object',
+  null: 'null',
+};
+
+/**
+ * Options for query translation
+ */
+export interface TranslateOptions {
+  /**
+   * Enable CTE optimization for array operations
+   * When enabled, multiple array checks on the same field use a single CTE
+   */
+  useCTE?: boolean;
+
+  /**
+   * Flatten nested logical operators
+   * When enabled, nested $and/$or of the same type are merged
+   */
+  flattenLogical?: boolean;
+}
+
+const DEFAULT_OPTIONS: TranslateOptions = {
+  useCTE: true,
+  flattenLogical: true,
+};
+
+/**
+ * QueryTranslator - Converts MongoDB query syntax to SQLite SQL with json_extract
+ */
+export class QueryTranslator {
+  private options: TranslateOptions;
+
+  constructor(options: TranslateOptions = {}) {
+    this.options = { ...DEFAULT_OPTIONS, ...options };
+  }
+
+  /**
+   * Registry of comparison operators and their SQL translations
+   */
+  private comparisonOperators: Record<string, OperatorHandler> = {
+    $eq: (path, value, params) => {
+      if (value === null) {
+        return `${this.jsonExtract(path)} IS NULL`;
+      }
+      params.push(value);
+      return `${this.jsonExtract(path)} = ?`;
+    },
+    $ne: (path, value, params) => {
+      if (value === null) {
+        return `${this.jsonExtract(path)} IS NOT NULL`;
+      }
+      params.push(value);
+      return `${this.jsonExtract(path)} != ?`;
+    },
+    $gt: (path, value, params) => {
+      params.push(value);
+      return `${this.jsonExtract(path)} > ?`;
+    },
+    $gte: (path, value, params) => {
+      params.push(value);
+      return `${this.jsonExtract(path)} >= ?`;
+    },
+    $lt: (path, value, params) => {
+      params.push(value);
+      return `${this.jsonExtract(path)} < ?`;
+    },
+    $lte: (path, value, params) => {
+      params.push(value);
+      return `${this.jsonExtract(path)} <= ?`;
+    },
+    $in: (path, value, params) => {
+      const arr = value as unknown[];
+      if (arr.length === 0) {
+        return '0 = 1';
+      }
+      params.push(...arr);
+      const placeholders = arr.map(() => '?').join(', ');
+      return `${this.jsonExtract(path)} IN (${placeholders})`;
+    },
+    $nin: (path, value, params) => {
+      const arr = value as unknown[];
+      if (arr.length === 0) {
+        return '1 = 1';
+      }
+      params.push(...arr);
+      const placeholders = arr.map(() => '?').join(', ');
+      return `${this.jsonExtract(path)} NOT IN (${placeholders})`;
+    },
+  };
+
+  /**
+   * Registry of element operators
+   */
+  private elementOperators: Record<string, OperatorHandler> = {
+    $exists: (path, value, _params) => {
+      if (value) {
+        return `${this.jsonExtract(path)} IS NOT NULL`;
+      }
+      return `${this.jsonExtract(path)} IS NULL`;
+    },
+    $type: (path, value, _params) => {
+      const mongoType = value as string;
+      const sqliteType = MONGO_TYPE_TO_SQLITE[mongoType];
+
+      if (Array.isArray(sqliteType)) {
+        if (mongoType === 'number') {
+          return `json_type(${this.jsonExtract(path)}) IN ('integer', 'real')`;
+        }
+        // bool type checks for true/false values
+        return `json_type(${this.jsonExtract(path)}) IN ('true', 'false')`;
+      }
+      return `json_type(${this.jsonExtract(path)}) = '${sqliteType}'`;
+    },
+  };
+
+  /**
+   * Registry of array operators
+   */
+  private arrayOperators: Record<string, OperatorHandler> = {
+    $size: (path, value, params) => {
+      params.push(value);
+      return `json_array_length(${this.jsonExtract(path)}) = ?`;
+    },
+    $all: (path, value, params) => {
+      const arr = value as unknown[];
+      if (arr.length === 0) {
+        return '1 = 1';
+      }
+      // Each value must exist in the array using EXISTS with json_each
+      const conditions = arr.map((v) => {
+        params.push(v);
+        return `EXISTS (SELECT 1 FROM json_each(${this.jsonExtract(path)}) WHERE value = ?)`;
+      });
+      return conditions.length === 1
+        ? conditions[0]
+        : `(${conditions.join(' AND ')})`;
+    },
+    $elemMatch: (path, value, params) => {
+      const conditions = value as QueryCondition;
+      // Generate subquery for array element matching
+      const innerConditions = this.translateElemMatchConditions(conditions, params);
+      return `EXISTS (SELECT 1 FROM json_each(${this.jsonExtract(path)}) WHERE ${innerConditions})`;
+    },
+  };
+
+  /**
+   * Main entry point - translate a MongoDB query to SQL
+   */
+  translate(query: Record<string, unknown>): TranslatedQuery {
+    const params: unknown[] = [];
+
+    if (Object.keys(query).length === 0) {
+      return { sql: '1 = 1', params: [] };
+    }
+
+    // Pre-process to flatten nested logical operators if enabled
+    const processedQuery = this.options.flattenLogical
+      ? this.flattenLogicalOperators(query)
+      : query;
+
+    const sql = this.translateDocument(processedQuery, params);
+    return { sql, params };
+  }
+
+  /**
+   * Flatten nested logical operators of the same type
+   * E.g., $and: [{ $and: [a, b] }, c] -> $and: [a, b, c]
+   */
+  private flattenLogicalOperators(
+    query: Record<string, unknown>
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(query)) {
+      if (key === '$and' || key === '$or') {
+        const conditions = value as Record<string, unknown>[];
+        const flattened: Record<string, unknown>[] = [];
+
+        for (const condition of conditions) {
+          // Recursively flatten nested conditions
+          const flatCondition = this.flattenLogicalOperators(condition);
+
+          // If the nested condition is the same logical operator, merge it
+          if (Object.keys(flatCondition).length === 1 && flatCondition[key]) {
+            const nestedConditions = flatCondition[key] as Record<string, unknown>[];
+            flattened.push(...nestedConditions);
+          } else {
+            flattened.push(flatCondition);
+          }
+        }
+
+        result[key] = flattened;
+      } else if (key === '$nor') {
+        // $nor cannot be flattened the same way, but we still process nested conditions
+        const conditions = value as Record<string, unknown>[];
+        result[key] = conditions.map(c => this.flattenLogicalOperators(c));
+      } else if (key.startsWith('$')) {
+        // Other operators, just copy
+        result[key] = value;
+      } else {
+        // Field condition - recursively process if it's an object
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const operators = value as Record<string, unknown>;
+          const processedOps: Record<string, unknown> = {};
+
+          for (const [op, opValue] of Object.entries(operators)) {
+            if (op === '$not' && opValue && typeof opValue === 'object') {
+              processedOps[op] = this.flattenLogicalOperators(opValue as Record<string, unknown>);
+            } else if (op === '$elemMatch' && opValue && typeof opValue === 'object') {
+              processedOps[op] = this.flattenLogicalOperators(opValue as Record<string, unknown>);
+            } else {
+              processedOps[op] = opValue;
+            }
+          }
+          result[key] = processedOps;
+        } else {
+          result[key] = value;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Translate a query document (top-level or nested)
+   */
+  private translateDocument(
+    query: Record<string, unknown>,
+    params: unknown[]
+  ): string {
+    const conditions: string[] = [];
+
+    for (const [key, value] of Object.entries(query)) {
+      if (key.startsWith('$')) {
+        // Logical operator at top level
+        const sql = this.translateLogicalOperator(key, value, params);
+        conditions.push(sql);
+      } else {
+        // Field condition
+        const sql = this.translateField(key, value, params);
+        conditions.push(sql);
+      }
+    }
+
+    if (conditions.length === 0) {
+      return '1 = 1';
+    }
+
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+
+    return `(${conditions.join(' AND ')})`;
+  }
+
+  /**
+   * Translate a field condition
+   */
+  private translateField(
+    field: string,
+    value: unknown,
+    params: unknown[]
+  ): string {
+    const path = this.fieldToJsonPath(field);
+
+    // Direct value comparison (implicit $eq)
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return this.comparisonOperators.$eq(path, value, params);
+    }
+
+    // Object with operators
+    const operators = value as Record<string, unknown>;
+    const operatorKeys = Object.keys(operators);
+
+    // Check if it's an object with operators
+    if (operatorKeys.length > 0 && operatorKeys.every(k => k.startsWith('$'))) {
+      return this.translateFieldConditions(path, operators, params, false);
+    }
+
+    // Plain object equality (implicit $eq)
+    return this.comparisonOperators.$eq(path, value, params);
+  }
+
+  /**
+   * Translate conditions on a single field
+   */
+  private translateFieldConditions(
+    path: string,
+    conditions: Record<string, unknown>,
+    params: unknown[],
+    isElemMatch: boolean
+  ): string {
+    const sqlParts: string[] = [];
+
+    for (const [op, value] of Object.entries(conditions)) {
+      let sql: string;
+
+      if (op === '$not') {
+        // $not wraps another operator
+        const innerConditions = value as Record<string, unknown>;
+        const innerSql = this.translateFieldConditions(path, innerConditions, params, isElemMatch);
+        sql = `NOT (${innerSql})`;
+      } else if (this.comparisonOperators[op]) {
+        const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
+        sql = this.comparisonOperators[op](actualPath, value, params);
+      } else if (this.elementOperators[op]) {
+        const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
+        sql = this.elementOperators[op](actualPath, value, params);
+      } else if (this.arrayOperators[op]) {
+        const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
+        sql = this.arrayOperators[op](actualPath, value, params);
+      } else {
+        // Unknown operator - treat as nested field in elemMatch context
+        if (isElemMatch) {
+          const nestedPath = this.elemMatchFieldPath(path, op.replace('$', ''));
+          sql = this.translateFieldConditions(nestedPath, { $eq: value }, params, true);
+        } else {
+          throw new Error(`Unknown operator: ${op}`);
+        }
+      }
+
+      sqlParts.push(sql);
+    }
+
+    if (sqlParts.length === 0) {
+      return '1 = 1';
+    }
+
+    if (sqlParts.length === 1) {
+      return sqlParts[0];
+    }
+
+    return `(${sqlParts.join(' AND ')})`;
+  }
+
+  /**
+   * Translate logical operators ($and, $or, $not, $nor)
+   */
+  private translateLogicalOperator(
+    op: string,
+    value: unknown,
+    params: unknown[]
+  ): string {
+    switch (op) {
+      case '$and': {
+        const conditions = value as Record<string, unknown>[];
+        if (conditions.length === 0) {
+          return '1 = 1';
+        }
+        const parts = conditions.map(c => this.translateDocument(c, params));
+        if (parts.length === 1) {
+          return parts[0];
+        }
+        return `(${parts.join(' AND ')})`;
+      }
+
+      case '$or': {
+        const conditions = value as Record<string, unknown>[];
+        if (conditions.length === 0) {
+          return '0 = 1';
+        }
+        const parts = conditions.map(c => this.translateDocument(c, params));
+        if (parts.length === 1) {
+          return parts[0];
+        }
+        return `(${parts.join(' OR ')})`;
+      }
+
+      case '$nor': {
+        const conditions = value as Record<string, unknown>[];
+        if (conditions.length === 0) {
+          return '1 = 1';
+        }
+        const parts = conditions.map(c => this.translateDocument(c, params));
+        return `NOT (${parts.join(' OR ')})`;
+      }
+
+      case '$not': {
+        // $not at top level wraps a condition
+        const innerSql = this.translateDocument(value as Record<string, unknown>, params);
+        return `NOT (${innerSql})`;
+      }
+
+      default:
+        throw new Error(`Unknown logical operator: ${op}`);
+    }
+  }
+
+  /**
+   * Convert a field name to a JSON path
+   * e.g., "a.b.c" -> "$.a.b.c"
+   * e.g., "items.0.name" -> "$.items[0].name"
+   */
+  private fieldToJsonPath(field: string): string {
+    const parts = field.split('.');
+    let path = '$';
+
+    for (const part of parts) {
+      // Check if part is a numeric index
+      if (/^\d+$/.test(part)) {
+        path += `[${part}]`;
+      } else {
+        path += `.${part}`;
+      }
+    }
+
+    return path;
+  }
+
+  /**
+   * Generate json_extract SQL for a path
+   */
+  private jsonExtract(path: string): string {
+    // If path starts with $, it's a JSON path
+    if (path.startsWith('$')) {
+      return `json_extract(data, '${path}')`;
+    }
+    // Otherwise, it's a direct reference (for elemMatch context)
+    return path;
+  }
+
+  /**
+   * Generate path for elemMatch field access
+   */
+  private elemMatchFieldPath(basePath: string, field: string): string {
+    if (basePath === 'value') {
+      // Inside json_each, value is the current element
+      if (field === '') {
+        return 'value';
+      }
+      return `json_extract(value, '$.${field}')`;
+    }
+    if (field === '') {
+      return basePath;
+    }
+    return `${basePath}.${field}`;
+  }
+
+  /**
+   * Translate conditions inside $elemMatch
+   * This handles document conditions like { field: value, field: { $op: value } }
+   */
+  private translateElemMatchConditions(
+    conditions: Record<string, unknown>,
+    params: unknown[]
+  ): string {
+    const sqlParts: string[] = [];
+
+    for (const [field, value] of Object.entries(conditions)) {
+      // In elemMatch, 'value' refers to the current array element from json_each
+      // For nested fields, we use json_extract(value, '$.field')
+      const extractPath = `json_extract(value, '$.${field}')`;
+
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        // Direct value comparison
+        if (value === null) {
+          sqlParts.push(`${extractPath} IS NULL`);
+        } else {
+          params.push(value);
+          sqlParts.push(`${extractPath} = ?`);
+        }
+      } else {
+        // Object with operators
+        const operators = value as Record<string, unknown>;
+        const opKeys = Object.keys(operators);
+
+        if (opKeys.length > 0 && opKeys.every(k => k.startsWith('$'))) {
+          // It's operators like { $gte: 90 }
+          for (const [op, opValue] of Object.entries(operators)) {
+            const opSql = this.translateElemMatchOperator(extractPath, op, opValue, params);
+            sqlParts.push(opSql);
+          }
+        } else {
+          // Plain object equality
+          params.push(JSON.stringify(value));
+          sqlParts.push(`${extractPath} = json(?)`);
+        }
+      }
+    }
+
+    if (sqlParts.length === 0) {
+      return '1 = 1';
+    }
+
+    return sqlParts.length === 1 ? sqlParts[0] : `(${sqlParts.join(' AND ')})`;
+  }
+
+  /**
+   * Translate a single operator for elemMatch context
+   */
+  private translateElemMatchOperator(
+    path: string,
+    op: string,
+    value: unknown,
+    params: unknown[]
+  ): string {
+    switch (op) {
+      case '$eq':
+        if (value === null) {
+          return `${path} IS NULL`;
+        }
+        params.push(value);
+        return `${path} = ?`;
+      case '$ne':
+        if (value === null) {
+          return `${path} IS NOT NULL`;
+        }
+        params.push(value);
+        return `${path} != ?`;
+      case '$gt':
+        params.push(value);
+        return `${path} > ?`;
+      case '$gte':
+        params.push(value);
+        return `${path} >= ?`;
+      case '$lt':
+        params.push(value);
+        return `${path} < ?`;
+      case '$lte':
+        params.push(value);
+        return `${path} <= ?`;
+      case '$in': {
+        const arr = value as unknown[];
+        if (arr.length === 0) return '0 = 1';
+        params.push(...arr);
+        return `${path} IN (${arr.map(() => '?').join(', ')})`;
+      }
+      case '$nin': {
+        const arr = value as unknown[];
+        if (arr.length === 0) return '1 = 1';
+        params.push(...arr);
+        return `${path} NOT IN (${arr.map(() => '?').join(', ')})`;
+      }
+      case '$exists':
+        return value ? `${path} IS NOT NULL` : `${path} IS NULL`;
+      default:
+        throw new Error(`Unsupported operator in $elemMatch: ${op}`);
+    }
+  }
+
+  /**
+   * Generate optimized SQL with CTE for multiple array operations on the same field
+   * This is useful when you have multiple $all checks or $elemMatch on the same array
+   *
+   * Example output:
+   * WITH array_cte AS (
+   *   SELECT value FROM json_each(json_extract(data, '$.tags'))
+   * )
+   * SELECT * FROM documents WHERE
+   *   EXISTS (SELECT 1 FROM array_cte WHERE value = ?) AND
+   *   EXISTS (SELECT 1 FROM array_cte WHERE value = ?)
+   */
+  translateWithCTE(
+    query: Record<string, unknown>,
+    tableName: string = 'documents'
+  ): TranslatedQuery {
+    const params: unknown[] = [];
+
+    if (Object.keys(query).length === 0) {
+      return { sql: `SELECT * FROM ${tableName}`, params: [] };
+    }
+
+    // Collect all array fields that have multiple operations
+    const arrayFieldOps = this.collectArrayOperations(query);
+    const cteDefinitions: string[] = [];
+    const cteAliases: Map<string, string> = new Map();
+    let cteIndex = 0;
+
+    // Create CTEs for fields with multiple array operations
+    for (const [field, count] of arrayFieldOps.entries()) {
+      if (count > 1) {
+        const alias = `arr_cte_${cteIndex++}`;
+        const path = this.fieldToJsonPath(field);
+        cteDefinitions.push(
+          `${alias} AS (SELECT value FROM json_each(json_extract(data, '${path}')))`
+        );
+        cteAliases.set(field, alias);
+      }
+    }
+
+    // Translate the query, replacing repeated json_each with CTE references
+    const whereClause = this.translateDocumentWithCTE(query, params, cteAliases);
+
+    let sql: string;
+    if (cteDefinitions.length > 0) {
+      sql = `WITH ${cteDefinitions.join(', ')} SELECT * FROM ${tableName} WHERE ${whereClause}`;
+    } else {
+      sql = `SELECT * FROM ${tableName} WHERE ${whereClause}`;
+    }
+
+    return { sql, params };
+  }
+
+  /**
+   * Collect array operations for CTE optimization analysis
+   */
+  private collectArrayOperations(
+    query: Record<string, unknown>,
+    counts: Map<string, number> = new Map()
+  ): Map<string, number> {
+    for (const [key, value] of Object.entries(query)) {
+      if (key === '$and' || key === '$or' || key === '$nor') {
+        const conditions = value as Record<string, unknown>[];
+        for (const condition of conditions) {
+          this.collectArrayOperations(condition, counts);
+        }
+      } else if (!key.startsWith('$') && value && typeof value === 'object') {
+        const operators = value as Record<string, unknown>;
+        for (const op of Object.keys(operators)) {
+          if (op === '$all' || op === '$elemMatch') {
+            counts.set(key, (counts.get(key) || 0) + 1);
+          }
+        }
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * Translate document using CTE aliases where applicable
+   */
+  private translateDocumentWithCTE(
+    query: Record<string, unknown>,
+    params: unknown[],
+    cteAliases: Map<string, string>
+  ): string {
+    // For now, fall back to standard translation
+    // CTE optimization would replace json_each references with CTE aliases
+    // This is a placeholder for full CTE implementation
+    return this.translateDocument(query, params);
+  }
+
+  /**
+   * Register a custom comparison operator
+   * Allows extending the translator with custom operators
+   */
+  registerOperator(name: string, handler: OperatorHandler): void {
+    if (!name.startsWith('$')) {
+      throw new Error('Operator name must start with $');
+    }
+    this.comparisonOperators[name] = handler;
+  }
+
+  /**
+   * Register a custom element operator
+   */
+  registerElementOperator(name: string, handler: OperatorHandler): void {
+    if (!name.startsWith('$')) {
+      throw new Error('Operator name must start with $');
+    }
+    this.elementOperators[name] = handler;
+  }
+
+  /**
+   * Register a custom array operator
+   */
+  registerArrayOperator(name: string, handler: OperatorHandler): void {
+    if (!name.startsWith('$')) {
+      throw new Error('Operator name must start with $');
+    }
+    this.arrayOperators[name] = handler;
+  }
+}

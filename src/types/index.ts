@@ -1,0 +1,133 @@
+/**
+ * Common types for mondodb
+ */
+
+export { ObjectId, default as ObjectIdDefault } from './objectid'
+
+/**
+ * Index specification type
+ * Keys are field names, values are 1 (ascending) or -1 (descending)
+ */
+export type IndexSpec = Record<string, 1 | -1>
+
+/**
+ * Options for creating an index
+ */
+export interface CreateIndexOptions {
+  /** Name of the index (auto-generated if not provided) */
+  name?: string
+  /** Create a unique index */
+  unique?: boolean
+  /** Create a sparse index (only index documents with the field) */
+  sparse?: boolean
+  /** Create index in background */
+  background?: boolean
+  /** Partial filter expression for partial indexes */
+  partialFilterExpression?: Record<string, unknown>
+  /** TTL in seconds for TTL indexes */
+  expireAfterSeconds?: number
+}
+
+/**
+ * Result from createIndex operation
+ */
+export interface CreateIndexResult {
+  ok: 1
+  numIndexesBefore: number
+  numIndexesAfter: number
+  createdCollectionAutomatically: boolean
+  note?: string
+}
+
+/**
+ * Index information returned by listIndexes
+ */
+export interface IndexInfo {
+  /** Index name */
+  name: string
+  /** Index key specification */
+  key: IndexSpec
+  /** Version (always 2 for SQLite backed indexes) */
+  v: number
+  /** Whether this is a unique index */
+  unique?: boolean
+  /** Whether this is a sparse index */
+  sparse?: boolean
+  /** Partial filter expression */
+  partialFilterExpression?: Record<string, unknown>
+  /** TTL in seconds */
+  expireAfterSeconds?: number
+}
+
+/**
+ * Result from dropIndex operation
+ */
+export interface DropIndexResult {
+  ok: 1
+  nIndexesWas: number
+}
+
+/**
+ * Document type - any JSON-serializable object with optional _id
+ */
+export interface Document {
+  _id?: string | ObjectId
+  [key: string]: unknown
+}
+
+/**
+ * Insert result
+ */
+export interface InsertOneResult {
+  acknowledged: boolean
+  insertedId: string
+}
+
+/**
+ * Insert many result
+ */
+export interface InsertManyResult {
+  acknowledged: boolean
+  insertedCount: number
+  insertedIds: Record<number, string>
+}
+
+/**
+ * Delete result
+ */
+export interface DeleteResult {
+  acknowledged: boolean
+  deletedCount: number
+}
+
+/**
+ * Update result
+ */
+export interface UpdateResult {
+  acknowledged: boolean
+  matchedCount: number
+  modifiedCount: number
+  upsertedCount: number
+  upsertedId?: string
+}
+
+/**
+ * Find options
+ */
+export interface FindOptions {
+  projection?: Record<string, 0 | 1>
+  sort?: Record<string, 1 | -1>
+  limit?: number
+  skip?: number
+}
+
+/**
+ * Collection metadata stored in the database
+ */
+export interface CollectionMetadata {
+  id: number
+  name: string
+  indexes: IndexInfo[]
+  createdAt: string
+  updatedAt: string
+}
