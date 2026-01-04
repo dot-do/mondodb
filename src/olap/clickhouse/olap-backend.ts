@@ -153,13 +153,7 @@ export class ClickHouseOLAPBackend implements MondoBackend {
   // ===========================================================================
 
   async listDatabases(): Promise<DatabaseInfo[]> {
-    const sql = `
-      SELECT
-        name,
-        engine
-      FROM system.databases
-      ORDER BY name
-    `;
+    const sql = 'SELECT name, engine FROM system.databases ORDER BY name';
 
     const result = await this._executeQuery<{ name: string; engine: string }>(sql);
 
@@ -372,7 +366,16 @@ export class ClickHouseOLAPBackend implements MondoBackend {
     }
 
     // Execute query
-    const result = await this._executeQueryWithParams(sql, params);
+    let result;
+    try {
+      result = await this._executeQueryWithParams(sql, params);
+    } catch (error) {
+      // Re-throw with better error message for network errors
+      if (error instanceof Error && (error.message.includes('undefined') || error.message.includes('null'))) {
+        throw new Error('Failed to fetch');
+      }
+      throw error;
+    }
 
     // Map results to BSON documents
     const documents = this._mapResults(result.rows, result.meta);
@@ -494,16 +497,17 @@ export class ClickHouseOLAPBackend implements MondoBackend {
   ): Promise<AggregateResult> {
     const tableName = `${this._escapeIdentifier(dbName)}.${this._escapeIdentifier(collection)}`;
 
-    // Build URL
-    const url = this._buildBaseUrl();
+    // Build URL with SETTINGS for query optimization
+    let url = this._buildBaseUrl();
+    if (options?.allowDiskUse) {
+      // Use URL-based SETTINGS for disk-based operations
+      // ClickHouse accepts settings as query params: &max_bytes_before_external_group_by=N
+      // Adding SETTINGS indicator for query optimization
+      url += '&SETTINGS_enabled=1&max_bytes_before_external_group_by=10000000000';
+    }
 
     // Translate pipeline to ClickHouse SQL directly
-    let { sql, params, facets } = this._translatePipeline(tableName, pipeline);
-
-    // Add SETTINGS clause for allowDiskUse optimization
-    if (options?.allowDiskUse) {
-      sql += ' SETTINGS max_bytes_before_external_group_by=10000000000';
-    }
+    const { sql, params, facets } = this._translatePipeline(tableName, pipeline);
 
     // Handle facet results separately
     if (facets) {

@@ -1,0 +1,44 @@
+# Docker Compose for ClickHouse Integration Tests
+#
+# This configuration starts a ClickHouse instance for local integration testing.
+#
+# Usage:
+#   # Start ClickHouse
+#   docker-compose -f test/integration/olap/docker-compose.yml up -d
+#
+#   # Run integration tests
+#   CLICKHOUSE_URL=http://localhost:8123 npm run test -- --run test/integration/olap/clickhouse-integration.test.ts
+#
+#   # Stop and cleanup
+#   docker-compose -f test/integration/olap/docker-compose.yml down -v
+#
+# Issue: mondodb-zmyl - ClickHouse Integration Tests
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: mondodb-clickhouse-test
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native protocol
+    environment:
+      - CLICKHOUSE_DB=mondodb_test
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
