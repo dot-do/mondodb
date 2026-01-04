@@ -172,19 +172,24 @@ describe('Project Initialization', () => {
     it('should translate $set operator', () => {
       const translator = new UpdateTranslator()
       const result = translator.translate({ $set: { name: 'test' } })
-      expect(result.sets).toBeDefined()
+      expect(result.sql).toBeDefined()
+      expect(result.sql).toContain('json_set')
+      expect(result.params).toContain('test')
     })
 
     it('should translate $inc operator', () => {
       const translator = new UpdateTranslator()
       const result = translator.translate({ $inc: { count: 1 } })
-      expect(result.sets).toBeDefined()
+      expect(result.sql).toBeDefined()
+      expect(result.sql).toContain('json_extract')
+      expect(result.params).toContain(1)
     })
 
     it('should translate $unset operator', () => {
       const translator = new UpdateTranslator()
       const result = translator.translate({ $unset: { field: '' } })
-      expect(result.unsets).toBeDefined()
+      expect(result.sql).toBeDefined()
+      expect(result.sql).toContain('json_remove')
     })
   })
 

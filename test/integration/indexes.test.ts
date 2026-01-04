@@ -173,11 +173,25 @@ class MockSQLStatement implements SQLStatement {
     const whereClause = match[3]
     const table = this.storage._getTable(tableName)
 
-    // Parse SET clause to get column names
-    const setCols = setClause.split(',').map(s => {
-      const m = s.trim().match(/(\w+)\s*=/)
-      return m ? m[1] : null
-    }).filter(Boolean) as string[]
+    // Parse SET clause to get column names and values
+    const setItems: Array<{ col: string; isParam: boolean; literalValue?: string }> = []
+    const setParts = setClause.split(',')
+    for (const part of setParts) {
+      const colMatch = part.trim().match(/(\w+)\s*=\s*(.+)/)
+      if (colMatch) {
+        const col = colMatch[1]
+        const valueExpr = colMatch[2].trim()
+        if (valueExpr === '?') {
+          setItems.push({ col, isParam: true })
+        } else if (valueExpr.startsWith("'") && valueExpr.endsWith("'")) {
+          // Literal string value
+          setItems.push({ col, isParam: false, literalValue: valueExpr.slice(1, -1) })
+        } else if (valueExpr.includes('datetime')) {
+          // datetime function - use current time
+          setItems.push({ col, isParam: false, literalValue: new Date().toISOString() })
+        }
+      }
+    }
 
     // Parse WHERE clause to find records
     const whereMatch = whereClause.match(/id\s*=\s*\?/)
@@ -185,14 +199,18 @@ class MockSQLStatement implements SQLStatement {
       // Get the ID from the last param
       const id = String(this.params[this.params.length - 1])
 
+      let paramIdx = 0
       for (const [key, record] of table.entries()) {
         if (String(record.id) === id) {
           // Update the record
-          setCols.forEach((col, idx) => {
-            if (this.params[idx] !== undefined) {
-              record[col] = this.params[idx]
+          for (const item of setItems) {
+            if (item.isParam) {
+              record[item.col] = this.params[paramIdx]
+              paramIdx++
+            } else if (item.literalValue !== undefined) {
+              record[item.col] = item.literalValue
             }
-          })
+          }
           break
         }
       }

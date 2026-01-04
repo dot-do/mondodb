@@ -15,6 +15,7 @@ export default defineWorkersConfig({
       workers: {
         wrangler: { configPath: './wrangler.toml' },
         miniflare: {
+          // Persist DO SQLite data to this directory
           durableObjectsPersist: './test-data',
         },
       },

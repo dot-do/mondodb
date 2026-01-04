@@ -161,7 +161,7 @@ class InMemoryDatabase {
     let paramIndex = 0;
 
     // Handle _id = ? filter
-    if (sqlLower.includes('_id = ?') && !sqlLower.includes('json_extract(data, ?) = ?')) {
+    if (sqlLower.includes('_id = ?') && !sqlLower.includes('json_extract(data, ?)')) {
       // Direct _id comparison (not nested in json_extract)
       const idIndex = this.findParamIndex(sql, '_id = ?');
       if (idIndex !== -1 && params[idIndex] !== undefined) {
@@ -553,17 +553,7 @@ describe('Document CRUD Operations', () => {
         { name: 'Carol', age: 35 },
       ]);
 
-      // Debug: Get all users first
-      const all = await mondoDb.find('users', {});
-      console.log('All users:', all.length);
-
-      // Check exec calls
-      const execCalls = mockState.storage.sql.exec.mock.calls;
-      console.log('Last few exec calls:', execCalls.slice(-3).map(c => c[0]));
-
       const results = await mondoDb.find('users', { age: { $gt: 28 } });
-      console.log('GT 28 results:', results);
-      console.log('Last exec call:', mockState.storage.sql.exec.mock.calls.slice(-1));
 
       expect(results.length).toBe(2);
       expect(results.every((doc) => (doc.age as number) > 28)).toBe(true);

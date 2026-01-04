@@ -222,7 +222,7 @@ export class IndexManager {
     }
 
     // Build and execute CREATE INDEX
-    const { sql, sqliteIndexName } = buildCreateIndexSQL(
+    const { sql } = buildCreateIndexSQL(
       collectionName,
       collectionId,
       keys,

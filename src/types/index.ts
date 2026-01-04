@@ -71,7 +71,7 @@ export interface DropIndexResult {
  * Document type - any JSON-serializable object with optional _id
  */
 export interface Document {
-  _id?: string | ObjectId
+  _id?: string | import('./objectid').ObjectId
   [key: string]: unknown
 }
 

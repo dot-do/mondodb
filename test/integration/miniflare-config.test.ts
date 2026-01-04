@@ -51,9 +51,12 @@ describe('Miniflare Configuration', () => {
       const stub = env.MONDO_DATABASE.get(id);
 
       const response = await stub.fetch('http://test/health');
+      // Always consume response body to properly close the connection
+      const body = await response.text();
 
       expect(response).toBeDefined();
       expect(response.status).toBeGreaterThanOrEqual(200);
+      expect(body).toBeDefined();
     });
 
     it('should respond with JSON from health endpoint', async () => {
