@@ -8,6 +8,27 @@
 import { MongoDatabase } from './mongo-database'
 import { ObjectId } from '../types/objectid'
 import { FindCursor } from './cursor'
+import {
+  BulkWriteOperation,
+  BulkWriteOptions,
+  BulkWriteResult,
+  BulkWriteError,
+  BulkWriteException,
+  isInsertOneModel,
+  isUpdateOneModel,
+  isUpdateManyModel,
+  isReplaceOneModel,
+  isDeleteOneModel,
+  isDeleteManyModel,
+} from './bulk-write'
+import {
+  ChangeStream,
+  ChangeStreamPipeline,
+  ChangeStreamOptions,
+  ChangeEventStore,
+  StoredChangeEvent,
+} from './change-stream'
+import { ClientSession, TransactableCollection } from './session'
 
 // Base document type
 export type Document = Record<string, unknown>
@@ -39,36 +60,47 @@ export interface DeleteResult {
   deletedCount: number
 }
 
+// Session option interface (common to all operations)
+export interface SessionOption {
+  session?: ClientSession
+}
+
 // Options types
-export interface FindOptions {
+export interface FindOptions extends SessionOption {
   projection?: Record<string, 0 | 1>
   sort?: Record<string, 1 | -1>
   limit?: number
   skip?: number
 }
 
-export interface UpdateOptions {
+export interface InsertOneOptions extends SessionOption {}
+
+export interface InsertManyOptions extends SessionOption {}
+
+export interface UpdateOptions extends SessionOption {
   upsert?: boolean
   arrayFilters?: object[]
 }
 
-export interface ReplaceOptions {
+export interface ReplaceOptions extends SessionOption {
   upsert?: boolean
 }
 
-export interface FindOneAndUpdateOptions {
+export interface DeleteOptions extends SessionOption {}
+
+export interface FindOneAndUpdateOptions extends SessionOption {
   projection?: Record<string, 0 | 1>
   sort?: Record<string, 1 | -1>
   upsert?: boolean
   returnDocument?: 'before' | 'after'
 }
 
-export interface FindOneAndDeleteOptions {
+export interface FindOneAndDeleteOptions extends SessionOption {
   projection?: Record<string, 0 | 1>
   sort?: Record<string, 1 | -1>
 }
 
-export interface FindOneAndReplaceOptions {
+export interface FindOneAndReplaceOptions extends SessionOption {
   projection?: Record<string, 0 | 1>
   sort?: Record<string, 1 | -1>
   upsert?: boolean
@@ -78,11 +110,15 @@ export interface FindOneAndReplaceOptions {
 /**
  * MongoCollection provides CRUD operations for documents
  */
-export class MongoCollection<TSchema extends Document = Document> {
+export class MongoCollection<TSchema extends Document = Document>
+  implements TransactableCollection
+{
   private readonly database: MongoDatabase
   private readonly _collectionName: string
   private documents: Map<string, TSchema & { _id: ObjectId }> = new Map()
   private _created: boolean = false
+  private readonly _changeEventStore: ChangeEventStore = new ChangeEventStore()
+  private readonly _activeChangeStreams: Set<ChangeStream<TSchema>> = new Set()
 
   constructor(database: MongoDatabase, name: string) {
     this.database = database
@@ -115,10 +151,61 @@ export class MongoCollection<TSchema extends Document = Document> {
   }
 
   /**
+   * Get a unique key for this collection (used for transaction tracking)
+   * @internal
+   */
+  _getCollectionKey(): string {
+    return `${this.database.databaseName}.${this._collectionName}`
+  }
+
+  /**
+   * Create a snapshot of the current collection data
+   * @internal
+   */
+  _createSnapshot(): Map<string, Record<string, unknown>> {
+    const snapshot = new Map<string, Record<string, unknown>>()
+    for (const [key, doc] of this.documents) {
+      // Deep clone the document
+      snapshot.set(key, JSON.parse(JSON.stringify(doc)))
+    }
+    return snapshot
+  }
+
+  /**
+   * Restore collection data from a snapshot (used for transaction rollback)
+   * @internal
+   */
+  _restoreFromSnapshot(snapshot: Map<string, Record<string, unknown>>): void {
+    this.documents.clear()
+    for (const [key, doc] of snapshot) {
+      // Reconstruct ObjectId for _id field
+      const restoredDoc = { ...doc } as TSchema & { _id: ObjectId }
+      if (doc._id && typeof doc._id === 'object' && '_hexString' in (doc._id as object)) {
+        restoredDoc._id = new ObjectId((doc._id as { _hexString: string })._hexString)
+      }
+      this.documents.set(key, restoredDoc)
+    }
+  }
+
+  /**
+   * Track this collection in a session for transaction support
+   * @internal
+   */
+  private _trackInSession(session?: ClientSession): void {
+    if (session && session.inTransaction) {
+      session._trackCollection(this)
+      session._markInProgress()
+    }
+  }
+
+  /**
    * Insert a single document
    */
-  async insertOne(doc: TSchema): Promise<InsertOneResult> {
+  async insertOne(doc: TSchema, options?: InsertOneOptions): Promise<InsertOneResult> {
     await this._ensureCreated()
+
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
 
     // Generate _id if not provided
     const docWithId = { ...doc } as TSchema & { _id: ObjectId }
@@ -128,8 +215,25 @@ export class MongoCollection<TSchema extends Document = Document> {
       docWithId._id = new ObjectId(docWithId._id)
     }
 
+    // Check for duplicate _id
+    const idHex = docWithId._id.toHexString()
+    if (this.documents.has(idHex)) {
+      const error = new Error(
+        `E11000 duplicate key error collection: ${this._collectionName} dup key: { _id: "${idHex}" }`
+      )
+      ;(error as any).code = 11000
+      throw error
+    }
+
     // Store document
-    this.documents.set(docWithId._id.toHexString(), docWithId)
+    this.documents.set(idHex, docWithId)
+
+    // Emit insert change event
+    this._changeEventStore.addEvent({
+      operationType: 'insert',
+      documentId: docWithId._id,
+      fullDocument: docWithId as unknown as Record<string, unknown>,
+    })
 
     return {
       acknowledged: true,
@@ -140,13 +244,16 @@ export class MongoCollection<TSchema extends Document = Document> {
   /**
    * Insert multiple documents
    */
-  async insertMany(docs: TSchema[]): Promise<InsertManyResult> {
+  async insertMany(docs: TSchema[], options?: InsertManyOptions): Promise<InsertManyResult> {
     await this._ensureCreated()
+
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
 
     const insertedIds: Record<number, ObjectId> = {}
 
     for (let i = 0; i < docs.length; i++) {
-      const result = await this.insertOne(docs[i])
+      const result = await this.insertOne(docs[i], options)
       insertedIds[i] = result.insertedId
     }
 
@@ -223,13 +330,16 @@ export class MongoCollection<TSchema extends Document = Document> {
     update: object,
     options?: UpdateOptions
   ): Promise<UpdateResult> {
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
+
     const docs = this._findDocuments(filter)
 
     if (docs.length === 0) {
       // Handle upsert
       if (options?.upsert) {
         const newDoc = this._applyUpdate({} as TSchema, update, filter)
-        const result = await this.insertOne(newDoc)
+        const result = await this.insertOne(newDoc, options)
         return {
           acknowledged: true,
           matchedCount: 0,
@@ -251,6 +361,15 @@ export class MongoCollection<TSchema extends Document = Document> {
     const updatedDoc = this._applyUpdate(doc, update)
     this.documents.set(doc._id.toHexString(), updatedDoc)
 
+    // Emit update change event
+    const { updatedFields, removedFields } = this._extractUpdateChanges(update)
+    this._changeEventStore.addEvent({
+      operationType: 'update',
+      documentId: doc._id,
+      updatedFields,
+      removedFields,
+    })
+
     return {
       acknowledged: true,
       matchedCount: 1,
@@ -266,12 +385,15 @@ export class MongoCollection<TSchema extends Document = Document> {
     update: object,
     options?: UpdateOptions
   ): Promise<UpdateResult> {
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
+
     const docs = this._findDocuments(filter)
 
     if (docs.length === 0) {
       if (options?.upsert) {
         const newDoc = this._applyUpdate({} as TSchema, update, filter)
-        const result = await this.insertOne(newDoc)
+        const result = await this.insertOne(newDoc, options)
         return {
           acknowledged: true,
           matchedCount: 0,
@@ -289,9 +411,18 @@ export class MongoCollection<TSchema extends Document = Document> {
     }
 
     // Update all matching documents
+    const { updatedFields, removedFields } = this._extractUpdateChanges(update)
     for (const doc of docs) {
       const updatedDoc = this._applyUpdate(doc, update)
       this.documents.set(doc._id.toHexString(), updatedDoc)
+
+      // Emit update change event for each document
+      this._changeEventStore.addEvent({
+        operationType: 'update',
+        documentId: doc._id,
+        updatedFields,
+        removedFields,
+      })
     }
 
     return {
@@ -309,11 +440,14 @@ export class MongoCollection<TSchema extends Document = Document> {
     replacement: TSchema,
     options?: ReplaceOptions
   ): Promise<UpdateResult> {
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
+
     const docs = this._findDocuments(filter)
 
     if (docs.length === 0) {
       if (options?.upsert) {
-        const result = await this.insertOne(replacement)
+        const result = await this.insertOne(replacement, options)
         return {
           acknowledged: true,
           matchedCount: 0,
@@ -335,6 +469,13 @@ export class MongoCollection<TSchema extends Document = Document> {
     const replacedDoc = { ...replacement, _id: doc._id } as TSchema & { _id: ObjectId }
     this.documents.set(doc._id.toHexString(), replacedDoc)
 
+    // Emit replace change event
+    this._changeEventStore.addEvent({
+      operationType: 'replace',
+      documentId: doc._id,
+      fullDocument: replacedDoc as unknown as Record<string, unknown>,
+    })
+
     return {
       acknowledged: true,
       matchedCount: 1,
@@ -345,7 +486,10 @@ export class MongoCollection<TSchema extends Document = Document> {
   /**
    * Delete a single document
    */
-  async deleteOne(filter: object): Promise<DeleteResult> {
+  async deleteOne(filter: object, options?: DeleteOptions): Promise<DeleteResult> {
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
+
     const docs = this._findDocuments(filter)
 
     if (docs.length === 0) {
@@ -356,7 +500,14 @@ export class MongoCollection<TSchema extends Document = Document> {
     }
 
     // Delete first matching document
-    this.documents.delete(docs[0]._id.toHexString())
+    const docId = docs[0]._id
+    this.documents.delete(docId.toHexString())
+
+    // Emit delete change event
+    this._changeEventStore.addEvent({
+      operationType: 'delete',
+      documentId: docId,
+    })
 
     return {
       acknowledged: true,
@@ -367,12 +518,21 @@ export class MongoCollection<TSchema extends Document = Document> {
   /**
    * Delete multiple documents
    */
-  async deleteMany(filter: object): Promise<DeleteResult> {
+  async deleteMany(filter: object, options?: DeleteOptions): Promise<DeleteResult> {
+    // Track collection in session for transaction rollback support
+    this._trackInSession(options?.session)
+
     const docs = this._findDocuments(filter)
 
     // Delete all matching documents
     for (const doc of docs) {
       this.documents.delete(doc._id.toHexString())
+
+      // Emit delete change event
+      this._changeEventStore.addEvent({
+        operationType: 'delete',
+        documentId: doc._id,
+      })
     }
 
     return {
@@ -474,11 +634,173 @@ export class MongoCollection<TSchema extends Document = Document> {
   }
 
   /**
+   * Execute multiple write operations in a single batch
+   *
+   * @param operations - Array of bulk write operations
+   * @param options - Bulk write options
+   * @returns BulkWriteResult with operation counts
+   */
+  async bulkWrite(
+    operations: BulkWriteOperation<TSchema>[],
+    options: BulkWriteOptions = {}
+  ): Promise<BulkWriteResult> {
+    const ordered = options.ordered !== false // Default to true
+
+    // Initialize result
+    const result: BulkWriteResult = {
+      acknowledged: true,
+      insertedCount: 0,
+      matchedCount: 0,
+      modifiedCount: 0,
+      deletedCount: 0,
+      upsertedCount: 0,
+      insertedIds: {},
+      upsertedIds: {},
+    }
+
+    const writeErrors: BulkWriteError[] = []
+
+    // Process operations
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i]
+
+      try {
+        if (isInsertOneModel(op)) {
+          const insertResult = await this.insertOne(op.insertOne.document)
+          result.insertedCount++
+          result.insertedIds[i] = insertResult.insertedId
+        } else if (isUpdateOneModel(op)) {
+          const updateResult = await this.updateOne(
+            op.updateOne.filter,
+            op.updateOne.update,
+            { upsert: op.updateOne.upsert, arrayFilters: op.updateOne.arrayFilters }
+          )
+          result.matchedCount += updateResult.matchedCount
+          result.modifiedCount += updateResult.modifiedCount
+          if (updateResult.upsertedId) {
+            result.upsertedCount++
+            result.upsertedIds[i] = updateResult.upsertedId
+          }
+        } else if (isUpdateManyModel(op)) {
+          const updateResult = await this.updateMany(
+            op.updateMany.filter,
+            op.updateMany.update,
+            { upsert: op.updateMany.upsert, arrayFilters: op.updateMany.arrayFilters }
+          )
+          result.matchedCount += updateResult.matchedCount
+          result.modifiedCount += updateResult.modifiedCount
+          if (updateResult.upsertedId) {
+            result.upsertedCount++
+            result.upsertedIds[i] = updateResult.upsertedId
+          }
+        } else if (isReplaceOneModel(op)) {
+          const replaceResult = await this.replaceOne(
+            op.replaceOne.filter,
+            op.replaceOne.replacement,
+            { upsert: op.replaceOne.upsert }
+          )
+          result.matchedCount += replaceResult.matchedCount
+          result.modifiedCount += replaceResult.modifiedCount
+          if (replaceResult.upsertedId) {
+            result.upsertedCount++
+            result.upsertedIds[i] = replaceResult.upsertedId
+          }
+        } else if (isDeleteOneModel(op)) {
+          const deleteResult = await this.deleteOne(op.deleteOne.filter)
+          result.deletedCount += deleteResult.deletedCount
+        } else if (isDeleteManyModel(op)) {
+          const deleteResult = await this.deleteMany(op.deleteMany.filter)
+          result.deletedCount += deleteResult.deletedCount
+        }
+      } catch (error) {
+        const bulkError: BulkWriteError = {
+          index: i,
+          code: 11000, // Default to duplicate key error code
+          errmsg: error instanceof Error ? error.message : String(error),
+          op,
+        }
+        writeErrors.push(bulkError)
+
+        // For ordered operations, stop on first error
+        if (ordered) {
+          throw new BulkWriteException(
+            `BulkWrite operation failed: ${bulkError.errmsg}`,
+            result,
+            writeErrors
+          )
+        }
+        // For unordered, continue processing remaining operations
+      }
+    }
+
+    // If there were errors in unordered mode, throw exception with partial results
+    if (writeErrors.length > 0) {
+      throw new BulkWriteException(
+        `BulkWrite operation completed with ${writeErrors.length} error(s)`,
+        result,
+        writeErrors
+      )
+    }
+
+    return result
+  }
+
+  /**
    * Drop the collection
    */
   async drop(): Promise<boolean> {
     this.documents.clear()
     return true
+  }
+
+  /**
+   * Watch for changes on this collection
+   *
+   * Creates a change stream that emits events for insert, update, replace, and delete operations.
+   *
+   * @param pipeline - Optional aggregation pipeline for filtering events (supports $match)
+   * @param options - Change stream options
+   * @returns A ChangeStream instance
+   *
+   * @example
+   * ```typescript
+   * const changeStream = collection.watch([
+   *   { $match: { operationType: 'insert' } }
+   * ])
+   *
+   * for await (const event of changeStream) {
+   *   console.log('Change:', event.operationType, event.fullDocument)
+   * }
+   * ```
+   */
+  watch(
+    pipeline: ChangeStreamPipeline = [],
+    options: ChangeStreamOptions = {}
+  ): ChangeStream<TSchema> {
+    const changeStream = new ChangeStream<TSchema>(
+      this.database.databaseName,
+      this._collectionName,
+      pipeline,
+      options,
+      {
+        getDocumentById: async (id: ObjectId) => {
+          const doc = this.documents.get(id.toHexString())
+          return doc || null
+        },
+        getChangeEvents: async (afterSequence: number) => {
+          return this._changeEventStore.getEventsAfter(afterSequence)
+        },
+        getCurrentSequence: () => {
+          return this._changeEventStore.getCurrentSequence()
+        },
+        onClose: () => {
+          this._activeChangeStreams.delete(changeStream)
+        },
+      }
+    )
+
+    this._activeChangeStreams.add(changeStream)
+    return changeStream
   }
 
   /**
@@ -912,6 +1234,61 @@ export class MongoCollection<TSchema extends Document = Document> {
     }
 
     return doc
+  }
+
+  /**
+   * Extract updated and removed fields from an update object
+   * @internal
+   */
+  private _extractUpdateChanges(update: object): {
+    updatedFields: Record<string, unknown>
+    removedFields: string[]
+  } {
+    const updateObj = update as Record<string, unknown>
+    const updatedFields: Record<string, unknown> = {}
+    const removedFields: string[] = []
+
+    // Extract fields from $set
+    if (updateObj.$set) {
+      Object.assign(updatedFields, updateObj.$set)
+    }
+
+    // Extract fields from $unset
+    if (updateObj.$unset) {
+      removedFields.push(...Object.keys(updateObj.$unset as Record<string, unknown>))
+    }
+
+    // Extract fields from $inc, $mul, $min, $max (these set values)
+    for (const op of ['$inc', '$mul', '$min', '$max']) {
+      if (updateObj[op]) {
+        for (const key of Object.keys(updateObj[op] as Record<string, unknown>)) {
+          updatedFields[key] = (updateObj[op] as Record<string, unknown>)[key]
+        }
+      }
+    }
+
+    // Handle $push (updated fields)
+    if (updateObj.$push) {
+      for (const key of Object.keys(updateObj.$push as Record<string, unknown>)) {
+        updatedFields[key] = (updateObj.$push as Record<string, unknown>)[key]
+      }
+    }
+
+    // Handle $pull (updated fields)
+    if (updateObj.$pull) {
+      for (const key of Object.keys(updateObj.$pull as Record<string, unknown>)) {
+        updatedFields[key] = (updateObj.$pull as Record<string, unknown>)[key]
+      }
+    }
+
+    // Handle $addToSet (updated fields)
+    if (updateObj.$addToSet) {
+      for (const key of Object.keys(updateObj.$addToSet as Record<string, unknown>)) {
+        updatedFields[key] = (updateObj.$addToSet as Record<string, unknown>)[key]
+      }
+    }
+
+    return { updatedFields, removedFields }
   }
 }
 

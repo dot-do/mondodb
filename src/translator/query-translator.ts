@@ -7,11 +7,16 @@
  * - Automatic flattening of nested $and/$or for SQL optimization
  * - CTE-based optimization for multiple array operations
  * - Parameterized queries for SQL injection prevention
+ * - $text operator for full-text search with FTS5
  */
 
 export interface TranslatedQuery {
   sql: string;
   params: unknown[];
+  /** Whether this query requires an FTS5 join */
+  requiresFTS?: boolean;
+  /** The FTS5 match expression (for building full query) */
+  ftsMatch?: string;
 }
 
 type QueryValue = unknown;
@@ -372,7 +377,7 @@ export class QueryTranslator {
   }
 
   /**
-   * Translate logical operators ($and, $or, $not, $nor)
+   * Translate logical operators ($and, $or, $not, $nor, $text)
    */
   private translateLogicalOperator(
     op: string,
@@ -417,6 +422,13 @@ export class QueryTranslator {
         // $not at top level wraps a condition
         const innerSql = this.translateDocument(value as Record<string, unknown>, params);
         return `NOT (${innerSql})`;
+      }
+
+      case '$text': {
+        // $text operator for full-text search
+        const textOp = value as Record<string, unknown>;
+        const { sql } = this.translateTextOperator(textOp, params);
+        return sql;
       }
 
       default:
@@ -697,5 +709,201 @@ export class QueryTranslator {
       throw new Error('Operator name must start with $');
     }
     this.arrayOperators[name] = handler;
+  }
+
+  /**
+   * Translate a MongoDB $text query to FTS5 MATCH SQL
+   */
+  private translateTextOperator(
+    textOp: Record<string, unknown>,
+    params: unknown[]
+  ): { sql: string; ftsMatch: string } {
+    const search = textOp.$search as string;
+    const caseSensitive = textOp.$caseSensitive as boolean | undefined;
+    const diacriticSensitive = textOp.$diacriticSensitive as boolean | undefined;
+
+    // Handle empty search string
+    if (!search || search.trim() === '') {
+      return { sql: '0 = 1', ftsMatch: '' };
+    }
+
+    // Convert MongoDB text search syntax to FTS5 syntax
+    const ftsQuery = this.convertToFTS5Query(search, caseSensitive, diacriticSensitive);
+
+    params.push(ftsQuery);
+
+    // Generate the FTS5 MATCH condition
+    // This will be joined with the main documents table using rowid
+    const sql = `id IN (SELECT rowid FROM {{FTS_TABLE}} WHERE {{FTS_TABLE}} MATCH ?)`;
+
+    return { sql, ftsMatch: ftsQuery };
+  }
+
+  /**
+   * Convert MongoDB text search syntax to FTS5 query syntax
+   *
+   * MongoDB syntax:
+   * - "word" -> matches word
+   * - "word1 word2" -> matches word1 OR word2
+   * - "\"phrase\"" -> matches exact phrase
+   * - "-word" -> excludes word (negation)
+   *
+   * FTS5 syntax:
+   * - "word" -> matches word
+   * - "word1 OR word2" -> matches word1 or word2
+   * - "word1 word2" -> matches word1 AND word2
+   * - "\"phrase\"" -> matches exact phrase
+   * - "NOT word" -> excludes word
+   */
+  private convertToFTS5Query(
+    search: string,
+    caseSensitive?: boolean,
+    diacriticSensitive?: boolean
+  ): string {
+    // Escape special FTS5 characters except quotes and minus
+    const escaped = search.replace(/[&|()^~*:]/g, (char) => {
+      return '\\' + char;
+    });
+
+    const tokens: string[] = [];
+    let remaining = escaped.trim();
+
+    // Parse the search string for phrases and terms
+    while (remaining.length > 0) {
+      remaining = remaining.trim();
+
+      // Check for quoted phrase
+      if (remaining.startsWith('"')) {
+        const endQuote = remaining.indexOf('"', 1);
+        if (endQuote > 1) {
+          const phrase = remaining.slice(1, endQuote);
+          tokens.push(`"${phrase}"`);
+          remaining = remaining.slice(endQuote + 1);
+          continue;
+        }
+      }
+
+      // Check for negation
+      if (remaining.startsWith('-')) {
+        const spaceIdx = remaining.indexOf(' ');
+        const term = spaceIdx > 0 ? remaining.slice(1, spaceIdx) : remaining.slice(1);
+        if (term) {
+          tokens.push(`NOT ${term}`);
+        }
+        remaining = spaceIdx > 0 ? remaining.slice(spaceIdx + 1) : '';
+        continue;
+      }
+
+      // Regular term
+      const spaceIdx = remaining.indexOf(' ');
+      const term = spaceIdx > 0 ? remaining.slice(0, spaceIdx) : remaining;
+      if (term) {
+        tokens.push(term);
+      }
+      remaining = spaceIdx > 0 ? remaining.slice(spaceIdx + 1) : '';
+    }
+
+    // Join tokens - MongoDB uses OR by default for multiple terms
+    // FTS5 uses AND by default, so we explicitly use OR
+    if (tokens.length === 0) {
+      return '*'; // Match all if no valid tokens
+    }
+
+    // Separate NOT terms from regular terms
+    const notTerms = tokens.filter(t => t.startsWith('NOT '));
+    const regularTerms = tokens.filter(t => !t.startsWith('NOT '));
+
+    let query = '';
+    if (regularTerms.length > 0) {
+      // Use OR for regular terms (MongoDB default behavior)
+      query = regularTerms.join(' OR ');
+    }
+
+    // Add NOT terms with AND
+    if (notTerms.length > 0) {
+      if (query) {
+        query = `(${query}) AND ${notTerms.join(' AND ')}`;
+      } else {
+        // Only negations - need a base to negate from
+        query = `* AND ${notTerms.join(' AND ')}`;
+      }
+    }
+
+    return query;
+  }
+
+  /**
+   * Translate a query with $meta projection support for textScore
+   *
+   * @param query The MongoDB query (must contain $text for textScore)
+   * @param projection The projection with potential {$meta: "textScore"} fields
+   * @param sort Optional sort with potential {$meta: "textScore"} fields
+   */
+  translateWithMeta(
+    query: Record<string, unknown>,
+    projection?: Record<string, unknown>,
+    sort?: Record<string, unknown>
+  ): TranslatedQuery {
+    const params: unknown[] = [];
+
+    // Check if query has $text
+    const hasText = '$text' in query;
+
+    if (!hasText) {
+      // No text search, fall back to regular translation
+      const baseResult = this.translate(query);
+      return baseResult;
+    }
+
+    // Extract $text operator
+    const textOp = query.$text as Record<string, unknown>;
+    const { sql: textSql, ftsMatch } = this.translateTextOperator(textOp, params);
+
+    // Process remaining query conditions
+    const remainingQuery: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(query)) {
+      if (key !== '$text') {
+        remainingQuery[key] = value;
+      }
+    }
+
+    let whereClause = textSql;
+    if (Object.keys(remainingQuery).length > 0) {
+      const remainingResult = this.translateDocument(remainingQuery, params);
+      whereClause = `(${textSql}) AND (${remainingResult})`;
+    }
+
+    // Build SELECT clause with textScore if projected
+    let selectClause = '*';
+    const hasTextScoreProjection = projection && Object.values(projection).some(
+      v => v && typeof v === 'object' && (v as Record<string, unknown>).$meta === 'textScore'
+    );
+
+    if (hasTextScoreProjection) {
+      // FTS5 uses bm25() for relevance ranking
+      // bm25() returns negative values (more negative = more relevant)
+      // We negate it to get positive scores where higher = more relevant
+      selectClause = '*, -bm25({{FTS_TABLE}}) as rank';
+    }
+
+    // Build ORDER BY clause
+    let orderByClause = '';
+    if (sort) {
+      const hasTextScoreSort = Object.values(sort).some(
+        v => v && typeof v === 'object' && (v as Record<string, unknown>).$meta === 'textScore'
+      );
+
+      if (hasTextScoreSort) {
+        // Sort by rank (descending by default for textScore)
+        orderByClause = ' ORDER BY rank DESC';
+      }
+    }
+
+    return {
+      sql: `SELECT ${selectClause} WHERE ${whereClause}${orderByClause}`,
+      params,
+      requiresFTS: true,
+      ftsMatch,
+    };
   }
 }

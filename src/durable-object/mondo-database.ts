@@ -389,14 +389,18 @@ export class MondoDatabase {
         for (const [op, opValue] of Object.entries(value as Record<string, unknown>)) {
           const jsonPath = this.fieldToJsonPath(key);
           switch (op) {
-            case '$eq':
+            case '$eq': {
               conditions.push(`json_extract(data, ?) = ?`);
-              params.push(jsonPath, opValue);
+              const eqValue = typeof opValue === 'boolean' ? (opValue ? 1 : 0) : opValue;
+              params.push(jsonPath, eqValue);
               break;
-            case '$ne':
+            }
+            case '$ne': {
               conditions.push(`json_extract(data, ?) != ?`);
-              params.push(jsonPath, opValue);
+              const neValue = typeof opValue === 'boolean' ? (opValue ? 1 : 0) : opValue;
+              params.push(jsonPath, neValue);
               break;
+            }
             case '$gt':
               conditions.push(`json_extract(data, ?) > ?`);
               params.push(jsonPath, opValue);
@@ -441,7 +445,9 @@ export class MondoDatabase {
         // Implicit $eq for simple values using json_extract
         const jsonPath = this.fieldToJsonPath(key);
         conditions.push(`json_extract(data, ?) = ?`);
-        params.push(jsonPath, value);
+        // SQLite's json_extract returns 1/0 for booleans, so convert JS booleans
+        const sqlValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+        params.push(jsonPath, sqlValue);
       }
     }
 

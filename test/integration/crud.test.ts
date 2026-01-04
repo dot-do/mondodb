@@ -198,6 +198,10 @@ class InMemoryDatabase {
         results = results.filter((doc) => {
           const data = JSON.parse(doc.data);
           const fieldValue = this.getNestedValue(data, field);
+          // Handle boolean comparison
+          if (typeof fieldValue === 'boolean') {
+            return fieldValue !== (value === 1);
+          }
           return fieldValue !== value;
         });
       } else if (afterExtract.match(/\s*>=\s*\?/)) {
@@ -243,6 +247,11 @@ class InMemoryDatabase {
         results = results.filter((doc) => {
           const data = JSON.parse(doc.data);
           const fieldValue = this.getNestedValue(data, field);
+          // Handle boolean comparison: SQLite json_extract returns 1/0 for booleans
+          // and buildWhereClause converts JS booleans to 1/0, so compare appropriately
+          if (typeof fieldValue === 'boolean') {
+            return fieldValue === (value === 1);
+          }
           return fieldValue === value;
         });
       } else if (afterExtract.includes(' IN (') || afterExtract.includes('IN(')) {

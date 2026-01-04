@@ -6,9 +6,9 @@ export { ObjectId, default as ObjectIdDefault } from './objectid'
 
 /**
  * Index specification type
- * Keys are field names, values are 1 (ascending) or -1 (descending)
+ * Keys are field names, values are 1 (ascending), -1 (descending), or 'text' for text indexes
  */
-export type IndexSpec = Record<string, 1 | -1>
+export type IndexSpec = Record<string, 1 | -1 | 'text'>
 
 /**
  * Options for creating an index
@@ -26,6 +26,12 @@ export interface CreateIndexOptions {
   partialFilterExpression?: Record<string, unknown>
   /** TTL in seconds for TTL indexes */
   expireAfterSeconds?: number
+  /** Weights for text index fields (higher weight = more important) */
+  weights?: Record<string, number>
+  /** Default language for text index */
+  default_language?: string
+  /** Field containing document language override */
+  language_override?: string
 }
 
 /**
@@ -57,6 +63,12 @@ export interface IndexInfo {
   partialFilterExpression?: Record<string, unknown>
   /** TTL in seconds */
   expireAfterSeconds?: number
+  /** Weights for text index fields */
+  weights?: Record<string, number>
+  /** Default language for text index */
+  default_language?: string
+  /** Whether this is a text index */
+  textIndexVersion?: number
 }
 
 /**

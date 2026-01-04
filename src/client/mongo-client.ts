@@ -6,6 +6,26 @@
  */
 
 import { MongoDatabase } from './mongo-database'
+import {
+  ClientSession,
+  ClientSessionOptions,
+  TransactionOptions,
+  ReadConcern,
+  WriteConcern,
+  TransactionState,
+  SessionId,
+} from './session'
+
+// Re-export session types
+export {
+  ClientSession,
+  ClientSessionOptions,
+  TransactionOptions,
+  ReadConcern,
+  WriteConcern,
+  TransactionState,
+  SessionId,
+}
 
 export interface MongoClientOptions {
   host?: string
@@ -217,44 +237,13 @@ export class MongoClient {
   }
 
   /**
-   * Start a client session (placeholder for transaction support)
+   * Start a client session for transaction support
+   *
+   * @param options - Session options including default transaction options
+   * @returns A new ClientSession instance
    */
-  startSession(): ClientSession {
-    return new ClientSession(this)
-  }
-}
-
-/**
- * Client session for transaction support (placeholder)
- */
-export class ClientSession {
-  private readonly client: MongoClient
-  private _inTransaction: boolean = false
-
-  constructor(client: MongoClient) {
-    this.client = client
-  }
-
-  startTransaction(): void {
-    this._inTransaction = true
-  }
-
-  async commitTransaction(): Promise<void> {
-    this._inTransaction = false
-  }
-
-  async abortTransaction(): Promise<void> {
-    this._inTransaction = false
-  }
-
-  get inTransaction(): boolean {
-    return this._inTransaction
-  }
-
-  async endSession(): Promise<void> {
-    if (this._inTransaction) {
-      await this.abortTransaction()
-    }
+  startSession(options?: ClientSessionOptions): ClientSession {
+    return new ClientSession(this, options)
   }
 }
 
