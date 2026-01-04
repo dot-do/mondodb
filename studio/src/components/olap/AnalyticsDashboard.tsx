@@ -8,6 +8,7 @@ import Badge from '@leafygreen-ui/badge'
 import { QueryBuilder, type AggregationStage } from './QueryBuilder'
 import { ResultsViewer } from './ResultsViewer'
 import { EngineInfo, type QueryStats } from './EngineInfo'
+import rpcClient from '@lib/rpc-client'
 
 const dashboardStyles = css`
   display: flex;
@@ -87,30 +88,32 @@ export function AnalyticsDashboard({ database, collection }: AnalyticsDashboardP
     const startTime = performance.now()
 
     try {
-      // TODO: Implement actual OLAP query execution via RPC
-      // For now, simulate a query
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Convert AggregationStage[] to MongoDB pipeline format
+      const mongoPipeline = pipeline.map(stageToPipelineStage)
 
-      const mockResults = [
-        { _id: 'group1', count: 42, total: 1250.00 },
-        { _id: 'group2', count: 35, total: 980.50 },
-        { _id: 'group3', count: 28, total: 750.25 },
-      ]
+      // Execute aggregation via RPC
+      const queryResults = await rpcClient.aggregate(
+        database,
+        collection,
+        mongoPipeline
+      )
 
       const endTime = performance.now()
 
-      setResults(mockResults)
+      setResults(queryResults)
       setQueryStats({
         executionTime: Math.round(endTime - startTime),
-        rowsReturned: mockResults.length,
-        engine: pipeline.length > 1 ? 'R2SQL' : 'SQLite',
+        rowsReturned: queryResults.length,
+        // Determine engine based on pipeline complexity
+        // Complex aggregations may be routed to R2SQL/ClickHouse
+        engine: determineQueryEngine(mongoPipeline),
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Query execution failed')
     } finally {
       setIsExecuting(false)
     }
-  }, [pipeline])
+  }, [pipeline, database, collection])
 
   const handleClear = useCallback(() => {
     setPipeline([])
@@ -223,4 +226,89 @@ function convertToCSV(data: Record<string, unknown>[]): string {
   )
 
   return [headers.join(','), ...rows].join('\n')
+}
+
+/**
+ * Convert an AggregationStage to a MongoDB pipeline stage format.
+ */
+function stageToPipelineStage(stage: AggregationStage): Record<string, unknown> {
+  switch (stage.type) {
+    case '$match': {
+      const conditions: Record<string, unknown> = {}
+      for (const cond of stage.match ?? []) {
+        if (cond.operator === '$eq') {
+          conditions[cond.field] = cond.value
+        } else {
+          conditions[cond.field] = { [cond.operator]: cond.value }
+        }
+      }
+      return { $match: conditions }
+    }
+
+    case '$group': {
+      const groupStage: Record<string, unknown> = {
+        _id: stage.groupBy ? `$${stage.groupBy}` : null,
+      }
+      for (const acc of stage.accumulators ?? []) {
+        if (acc.operator === '$count') {
+          groupStage[acc.name] = { $sum: 1 }
+        } else {
+          groupStage[acc.name] = {
+            [acc.operator]: acc.field.startsWith('$') ? acc.field : `$${acc.field}`,
+          }
+        }
+      }
+      return { $group: groupStage }
+    }
+
+    case '$project':
+      return { $project: stage.project ?? {} }
+
+    case '$sort':
+      return { $sort: stage.sort ?? {} }
+
+    case '$limit':
+      return { $limit: stage.limit ?? 10 }
+
+    case '$skip':
+      return { $skip: stage.skip ?? 0 }
+
+    case '$unwind':
+      return { $unwind: `$${stage.unwindPath ?? ''}` }
+
+    default:
+      return {}
+  }
+}
+
+/**
+ * Determine which query engine to use based on pipeline complexity.
+ * Simple queries run on SQLite, complex OLAP queries route to R2SQL/ClickHouse.
+ */
+function determineQueryEngine(
+  pipeline: Record<string, unknown>[]
+): 'SQLite' | 'R2SQL' | 'ClickHouse' {
+  // Check for OLAP-specific operators that benefit from columnar storage
+  const olapOperators = ['$group', '$bucket', '$bucketAuto', '$facet', '$graphLookup']
+  const hasComplexOlap = pipeline.some(stage => {
+    const stageType = Object.keys(stage)[0]
+    return olapOperators.includes(stageType ?? '')
+  })
+
+  // Check for large data operations
+  const hasLookup = pipeline.some(stage => '$lookup' in stage)
+  const hasUnwind = pipeline.some(stage => '$unwind' in stage)
+
+  // Route to R2SQL for complex analytics
+  if (hasComplexOlap && pipeline.length >= 2) {
+    return 'R2SQL'
+  }
+
+  // Route to ClickHouse for very complex multi-stage pipelines
+  if (pipeline.length >= 4 && (hasLookup || hasUnwind)) {
+    return 'ClickHouse'
+  }
+
+  // Default to SQLite for simple queries
+  return 'SQLite'
 }
