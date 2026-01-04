@@ -3,6 +3,25 @@
  *
  * Enhanced CLI for MondoDB wire protocol server with support for
  * local SQLite backend and remote Cloudflare Workers proxy.
+ *
+ * @module cli/server
+ *
+ * @example
+ * ```typescript
+ * import { parseArgs, runServer, printStartupMessage } from './server'
+ *
+ * const options = parseArgs(process.argv.slice(2))
+ * if (options.help) {
+ *   printHelp()
+ *   process.exit(0)
+ * }
+ *
+ * const controller = await runServer(options)
+ * printStartupMessage(options)
+ *
+ * // Later, gracefully shutdown
+ * await controller.stop()
+ * ```
  */
 
 import type { MondoBackend } from '../wire/backend/interface.js'
@@ -12,7 +31,13 @@ import { WorkersProxyBackend } from '../wire/backend/workers-proxy.js'
 let LocalSQLiteBackend: typeof import('../wire/backend/local-sqlite.js').LocalSQLiteBackend
 let WireProtocolServer: typeof import('../wire/server.js').WireProtocolServer
 
-async function loadBunModules() {
+/**
+ * Lazy load Bun-specific modules to avoid issues in Node.js environments.
+ * These modules depend on bun:sqlite which is not available in Node.
+ *
+ * @internal
+ */
+async function loadBunModules(): Promise<void> {
   if (!LocalSQLiteBackend) {
     const localModule = await import('../wire/backend/local-sqlite.js')
     LocalSQLiteBackend = localModule.LocalSQLiteBackend
@@ -27,20 +52,38 @@ async function loadBunModules() {
 // Types
 // ============================================================================
 
+/**
+ * Command-line options for the MondoDB server.
+ */
 export interface CLIOptions {
+  /** Port number to listen on (1-65535) */
   port: number
+  /** Host address to bind to (e.g., 'localhost', '0.0.0.0') */
   host: string
+  /** Directory path for local SQLite data storage */
   dataDir: string
+  /** Optional URL for remote Cloudflare Workers endpoint */
   remote?: string
+  /** Enable verbose logging output */
   verbose: boolean
+  /** Display help message and exit */
   help: boolean
 }
 
+/**
+ * Controller interface for managing a running server instance.
+ * Provides methods and properties to monitor and control the server lifecycle.
+ */
 export interface ServerController {
+  /** Gracefully stop the server and close all connections */
   stop(): Promise<void>
+  /** Whether the server is currently running */
   isRunning: boolean
+  /** Whether the server is accepting new connections */
   isAcceptingConnections: boolean
+  /** Number of currently active client connections */
   activeConnections: number
+  /** The address the server is bound to */
   address: { host: string; port: number }
 }
 
@@ -49,7 +92,20 @@ export interface ServerController {
 // ============================================================================
 
 /**
- * Parse command line arguments into CLIOptions
+ * Parse command-line arguments into a CLIOptions object.
+ *
+ * Supports both long-form (--port) and short-form (-p) arguments.
+ * Unknown arguments are silently ignored.
+ *
+ * @param args - Array of command-line arguments (typically process.argv.slice(2))
+ * @returns Parsed CLI options with defaults applied
+ *
+ * @example
+ * ```typescript
+ * const options = parseArgs(['--port', '27018', '--verbose'])
+ * // options.port === 27018
+ * // options.verbose === true
+ * ```
  */
 export function parseArgs(args: string[]): CLIOptions {
   const options: CLIOptions = {
@@ -154,7 +210,25 @@ export function parseArgs(args: string[]): CLIOptions {
 // ============================================================================
 
 /**
- * Validate CLI options, throwing an error if invalid
+ * Validate CLI options and throw descriptive errors if invalid.
+ *
+ * Validates:
+ * - Port is a valid integer between 1 and 65535
+ * - Host is a non-empty string
+ * - Data directory is a non-empty string
+ * - Remote URL (if provided) is a valid HTTP/HTTPS URL
+ *
+ * @param options - CLI options to validate
+ * @throws {Error} If any option is invalid with a descriptive message
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   validateOptions({ port: 0, host: 'localhost', ... })
+ * } catch (error) {
+ *   // "Invalid port: 0. Port must be an integer between 1 and 65535."
+ * }
+ * ```
  */
 export function validateOptions(options: CLIOptions): void {
   // Validate port
@@ -203,7 +277,23 @@ export function validateOptions(options: CLIOptions): void {
 // ============================================================================
 
 /**
- * Create the appropriate backend based on options
+ * Create the appropriate storage backend based on CLI options.
+ *
+ * - If `options.remote` is set, creates a WorkersProxyBackend that forwards
+ *   requests to a remote Cloudflare Workers endpoint.
+ * - Otherwise, creates a LocalSQLiteBackend for local file-based storage.
+ *
+ * @param options - CLI options containing backend configuration
+ * @returns Promise resolving to the configured backend instance
+ *
+ * @example
+ * ```typescript
+ * // Local backend
+ * const local = await createBackend({ dataDir: './data', ... })
+ *
+ * // Remote backend
+ * const remote = await createBackend({ remote: 'https://my-worker.dev', ... })
+ * ```
  */
 export async function createBackend(options: CLIOptions): Promise<MondoBackend> {
   if (options.remote) {
@@ -223,43 +313,50 @@ export async function createBackend(options: CLIOptions): Promise<MondoBackend> 
 // ============================================================================
 
 /**
- * Print help message
+ * Print usage help message to stdout.
+ * Displays all available command-line options with descriptions and examples.
  */
 export function printHelp(): void {
   console.log(`
-Usage: mondodb [options]
+Usage: mondodb serve [options]
+
+Start a MongoDB wire protocol server backed by SQLite.
 
 Options:
-  --port, -p <port>     Port to listen on (default: 27017)
-  --host, -H <host>     Host to bind to (default: localhost)
-  --data, -d <path>     Data directory for local SQLite storage (default: ./data)
-  --remote, -r <url>    Proxy to Cloudflare Workers endpoint instead of local storage
-  --verbose, -v         Enable verbose logging
-  --help, -h            Show this help message
+  -p, --port <port>     Port to listen on (default: 27017)
+  -H, --host <host>     Host to bind to (default: localhost)
+  -d, --data <path>     Data directory for local SQLite storage (default: ./data)
+  -r, --remote <url>    Proxy/forward to remote Cloudflare Workers endpoint
+  -v, --verbose         Enable verbose logging
+  -V, --version         Show version number
+  -h, --help            Show this help message
 
 Examples:
   # Start local server on default port
-  mondodb
+  mondodb serve
 
-  # Start on custom port
-  mondodb --port 27018
+  # Start on custom port with verbose logging
+  mondodb serve --port 27018 --verbose
 
   # Bind to all interfaces
-  mondodb --host 0.0.0.0
+  mondodb serve --host 0.0.0.0
 
   # Use custom data directory
-  mondodb --data /var/lib/mondodb
+  mondodb serve --data /var/lib/mondodb
 
-  # Proxy to Cloudflare Workers
-  mondodb --remote https://my-mondodb.workers.dev
+  # Proxy to remote Cloudflare Workers
+  mondodb serve --remote https://my-mondodb.workers.dev
 
   # Combine options
-  mondodb --port 27018 --host 0.0.0.0 --verbose
+  mondodb serve --port 27018 --host 0.0.0.0 --verbose
 `)
 }
 
 /**
- * Print startup message
+ * Print server startup message to stdout.
+ * Displays connection string and backend mode information.
+ *
+ * @param options - CLI options used to start the server
  */
 export function printStartupMessage(options: CLIOptions): void {
   const connectionString = `mongodb://${options.host}:${options.port}`
@@ -276,7 +373,8 @@ export function printStartupMessage(options: CLIOptions): void {
 }
 
 /**
- * Print shutdown message
+ * Print server shutdown message to stdout.
+ * Called after graceful server shutdown completes.
  */
 export function printShutdownMessage(): void {
   console.log('MondoDB server gracefully shutdown. Clean stop complete.')
@@ -287,7 +385,35 @@ export function printShutdownMessage(): void {
 // ============================================================================
 
 /**
- * Run the wire protocol server
+ * Start the MongoDB wire protocol server with the given options.
+ *
+ * This is the main entry point for starting a MondoDB server. It:
+ * 1. Validates the provided options
+ * 2. Creates the appropriate backend (local or remote)
+ * 3. Starts the wire protocol server
+ * 4. Sets up signal handlers for graceful shutdown
+ *
+ * @param options - Server configuration options
+ * @param backend - Optional pre-configured backend (for testing)
+ * @returns Promise resolving to a ServerController for managing the server
+ * @throws {Error} If options are invalid or server fails to start
+ *
+ * @example
+ * ```typescript
+ * const controller = await runServer({
+ *   port: 27017,
+ *   host: 'localhost',
+ *   dataDir: './data',
+ *   verbose: false,
+ *   help: false,
+ * })
+ *
+ * // Check server status
+ * console.log(controller.isRunning) // true
+ *
+ * // Graceful shutdown
+ * await controller.stop()
+ * ```
  */
 export async function runServer(
   options: CLIOptions,

@@ -168,6 +168,9 @@ export function CollectionItem({
   const handleDropClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
+      if (!window.confirm(`Are you sure you want to drop collection "${collection.name}"? This cannot be undone.`)) {
+        return
+      }
       onDropCollection?.(database, collection.name)
     },
     [onDropCollection, database, collection.name]

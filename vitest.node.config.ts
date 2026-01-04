@@ -15,6 +15,8 @@ export default defineConfig({
       'test/unit/embedding/**/*.test.ts',
       'test/unit/http-cursor.test.ts',
       'test/unit/cursor.test.ts',
+      'test/unit/studio/**/*.test.ts',
+      'test/unit/studio/**/*.test.tsx',
     ],
     exclude: ['node_modules', 'dist'],
     environment: 'node',
