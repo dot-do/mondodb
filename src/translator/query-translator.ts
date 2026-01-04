@@ -1,5 +1,5 @@
 /**
- * QueryTranslator - Translates MongoDB-style queries to SQLite SQL
+ * QueryTranslator - Translates MongoDB-style queries to SQL
  * using json_extract for field access on JSON documents.
  *
  * Features:
@@ -8,9 +8,20 @@
  * - CTE-based optimization for multiple array operations
  * - Parameterized queries for SQL injection prevention
  * - $text operator for full-text search with FTS5
+ * - Multi-dialect support (SQLite, ClickHouse)
  */
 
 import { validateFieldPath } from '../utils/sql-safety.js';
+import {
+  type SQLDialect,
+  type DialectOptions,
+  validateDialect,
+  jsonExtract as dialectJsonExtract,
+  jsonType as dialectJsonType,
+  jsonTypeWithPath as dialectJsonTypeWithPath,
+  jsonArrayLength as dialectJsonArrayLength,
+  regexMatch as dialectRegexMatch,
+} from './dialect.js';
 
 export interface TranslatedQuery {
   sql: string;
@@ -49,7 +60,7 @@ const MONGO_TYPE_TO_SQLITE: Record<string, string | string[]> = {
 /**
  * Options for query translation
  */
-export interface TranslateOptions {
+export interface TranslateOptions extends DialectOptions {
   /**
    * Enable CTE optimization for array operations
    * When enabled, multiple array checks on the same field use a single CTE
@@ -66,16 +77,21 @@ export interface TranslateOptions {
 const DEFAULT_OPTIONS: TranslateOptions = {
   useCTE: true,
   flattenLogical: true,
+  dialect: 'sqlite',
 };
 
 /**
- * QueryTranslator - Converts MongoDB query syntax to SQLite SQL with json_extract
+ * QueryTranslator - Converts MongoDB query syntax to SQL with json_extract
  */
 export class QueryTranslator {
   private options: TranslateOptions;
+  private dialect: SQLDialect;
 
   constructor(options: TranslateOptions = {}) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    // Validate dialect before merging options
+    const dialect = validateDialect(options.dialect);
+    this.options = { ...DEFAULT_OPTIONS, ...options, dialect };
+    this.dialect = dialect;
   }
 
   /**
@@ -137,8 +153,10 @@ export class QueryTranslator {
     $regex: (path, value, params) => {
       // Handle both { $regex: "pattern" } and { $regex: "pattern", $options: "i" }
       // Also handle direct { field: { $regex: /pattern/i } } form
+      // Also support $regexType: 'glob' for SQLite GLOB syntax
       let pattern: string;
       let options: string = '';
+      let regexType: string = 'like'; // default to LIKE pattern matching
 
       if (typeof value === 'string') {
         pattern = value;
@@ -146,27 +164,39 @@ export class QueryTranslator {
         pattern = value.source;
         options = value.flags;
       } else if (value && typeof value === 'object') {
-        const regexObj = value as { $regex?: string; $options?: string };
+        const regexObj = value as { $regex?: string; $options?: string; $regexType?: string };
         pattern = regexObj.$regex || '';
         options = regexObj.$options || '';
+        regexType = regexObj.$regexType || 'like';
       } else {
         pattern = String(value);
       }
 
-      // Convert regex pattern to SQLite LIKE pattern
+      const fieldExpr = this.jsonExtract(path);
+      const caseInsensitive = options.includes('i');
+
+      // Handle GLOB type for SQLite
+      if (regexType === 'glob' && this.dialect === 'sqlite') {
+        params.push(pattern);
+        const typeCheck = `json_type(${fieldExpr}) = 'text'`;
+        return `(${typeCheck} AND ${fieldExpr} GLOB ?)`;
+      }
+
+      // Convert regex pattern to LIKE pattern
       // This is a simplified conversion that handles common cases
       const likePattern = this.regexToLike(pattern, options);
       params.push(likePattern);
 
       // First ensure the field is a string type (regex only works on strings)
-      const typeCheck = `json_type(${this.jsonExtract(path)}) = 'text'`;
-
-      // For case-insensitive matching, use LIKE with LOWER()
-      // SQLite LIKE is case-insensitive for ASCII by default, but we use LOWER for consistency
-      if (options.includes('i')) {
-        return `(${typeCheck} AND LOWER(${this.jsonExtract(path)}) LIKE LOWER(?))`;
+      if (this.dialect === 'clickhouse') {
+        const typeCheck = `JSONType(data, ${path.replace(/^\$\.?/, '').split('.').map(p => `'${p}'`).join(', ')}) = 'String'`;
+        const matchExpr = dialectRegexMatch(this.dialect, fieldExpr, '?', caseInsensitive);
+        return `(${typeCheck} AND ${matchExpr})`;
       }
-      return `(${typeCheck} AND ${this.jsonExtract(path)} LIKE ?)`;
+
+      const typeCheck = `json_type(${fieldExpr}) = 'text'`;
+      const matchExpr = dialectRegexMatch(this.dialect, fieldExpr, '?', caseInsensitive);
+      return `(${typeCheck} AND ${matchExpr})`;
     },
     $mod: (path, value, params) => {
       // $mod: [divisor, remainder] - matches if field % divisor == remainder
@@ -189,15 +219,22 @@ export class QueryTranslator {
       //
       // SQLite's json_extract returns NULL for both missing fields AND null values,
       // but json_type returns 'null' for explicit nulls and NULL for missing fields.
-      // So we use json_type to properly detect field existence.
+      // So we use json_type with path directly to properly detect field existence.
       if (path.startsWith('$')) {
-        // JSON path - use json_type on data column
+        // JSON path - use json_type(data, path) directly for existence checks
+        const typeExpr = dialectJsonTypeWithPath(this.dialect, 'data', path);
         if (value) {
-          return `json_type(data, '${path}') IS NOT NULL`;
+          return `${typeExpr} IS NOT NULL`;
         }
-        return `json_type(data, '${path}') IS NULL`;
+        return `${typeExpr} IS NULL`;
       }
       // Direct reference (for elemMatch context) - use json_type
+      if (this.dialect === 'clickhouse') {
+        if (value) {
+          return `JSONType(${path}) IS NOT NULL`;
+        }
+        return `JSONType(${path}) IS NULL`;
+      }
       if (value) {
         return `json_type(${path}) IS NOT NULL`;
       }
@@ -206,15 +243,26 @@ export class QueryTranslator {
     $type: (path, value, _params) => {
       const mongoType = value as string;
       const sqliteType = MONGO_TYPE_TO_SQLITE[mongoType];
+      const typeExpr = dialectJsonType(this.dialect, 'data', path);
 
       if (Array.isArray(sqliteType)) {
         if (mongoType === 'number') {
-          return `json_type(${this.jsonExtract(path)}) IN ('integer', 'real')`;
+          if (this.dialect === 'clickhouse') {
+            return `${typeExpr} IN ('Int64', 'Float64', 'UInt64')`;
+          }
+          return `${typeExpr} IN ('integer', 'real')`;
         }
         // bool type checks for true/false values
-        return `json_type(${this.jsonExtract(path)}) IN ('true', 'false')`;
+        if (this.dialect === 'clickhouse') {
+          return `${typeExpr} = 'Bool'`;
+        }
+        return `${typeExpr} IN ('true', 'false')`;
       }
-      return `json_type(${this.jsonExtract(path)}) = '${sqliteType}'`;
+      if (this.dialect === 'clickhouse') {
+        const chType = mongoType === 'string' ? 'String' : mongoType === 'array' ? 'Array' : mongoType === 'object' ? 'Object' : sqliteType;
+        return `${typeExpr} = '${chType}'`;
+      }
+      return `${typeExpr} = '${sqliteType}'`;
     },
   };
 
@@ -224,7 +272,8 @@ export class QueryTranslator {
   private arrayOperators: Record<string, OperatorHandler> = {
     $size: (path, value, params) => {
       params.push(value);
-      return `json_array_length(${this.jsonExtract(path)}) = ?`;
+      const lenExpr = dialectJsonArrayLength(this.dialect, 'data', path);
+      return `${lenExpr} = ?`;
     },
     $all: (path, value, params) => {
       const arr = value as unknown[];
@@ -398,12 +447,12 @@ export class QueryTranslator {
   ): string {
     const sqlParts: string[] = [];
 
-    // Check for $regex with sibling $options
-    const hasRegexWithOptions = '$regex' in conditions && '$options' in conditions;
+    // Check for $regex with sibling $options or $regexType
+    const hasRegexWithOptions = '$regex' in conditions && ('$options' in conditions || '$regexType' in conditions);
 
     for (const [op, value] of Object.entries(conditions)) {
-      // Skip $options when it's a sibling of $regex (handled together with $regex)
-      if (op === '$options' && hasRegexWithOptions) {
+      // Skip $options and $regexType when they're siblings of $regex (handled together with $regex)
+      if ((op === '$options' || op === '$regexType') && hasRegexWithOptions) {
         continue;
       }
 
@@ -415,9 +464,13 @@ export class QueryTranslator {
         const innerSql = this.translateFieldConditions(path, innerConditions, params, isElemMatch);
         sql = `NOT (${innerSql})`;
       } else if (op === '$regex' && hasRegexWithOptions) {
-        // Handle $regex with sibling $options
+        // Handle $regex with sibling $options or $regexType
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
-        const regexValue = { $regex: value, $options: conditions.$options };
+        const regexValue = {
+          $regex: value,
+          $options: conditions.$options,
+          $regexType: conditions.$regexType
+        };
         sql = this.comparisonOperators[op](actualPath, regexValue, params);
       } else if (this.comparisonOperators[op]) {
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
@@ -545,7 +598,7 @@ export class QueryTranslator {
   private jsonExtract(path: string): string {
     // If path starts with $, it's a JSON path
     if (path.startsWith('$')) {
-      return `json_extract(data, '${path}')`;
+      return dialectJsonExtract(this.dialect, 'data', path);
     }
     // Otherwise, it's a direct reference (for elemMatch context)
     return path;

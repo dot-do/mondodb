@@ -1,6 +1,7 @@
 /**
- * AggregationTranslator - Translates MongoDB aggregation pipelines to SQLite SQL
+ * AggregationTranslator - Translates MongoDB aggregation pipelines to SQL
  * Uses CTE-based pipeline execution for complex pipelines
+ * Supports multiple SQL dialects (SQLite, ClickHouse)
  */
 
 import type { StageResult, StageContext, PipelineStage, AggregationResult, GroupStage, LookupStage, UnwindStage, BucketStage } from './stages/types'
@@ -18,18 +19,24 @@ import { translateBucketStage } from './stages/bucket-stage'
 import { translateFacetStage, FacetTranslator } from './stages/facet-stage'
 import { translateSearchStage, type SearchStageInput, type SearchStageContext } from './stages/search-stage'
 import { optimizePipeline } from './stages/optimizer'
+import { type SQLDialect, type DialectOptions, validateDialect } from './dialect'
 
-export interface TranslatorOptions {
+export interface TranslatorOptions extends DialectOptions {
   /** Enable pipeline optimization (default: true) */
   optimize?: boolean
 }
 
 export class AggregationTranslator implements FacetTranslator {
   private readonly options: TranslatorOptions
+  private readonly dialect: SQLDialect
 
   constructor(private collection: string, options: TranslatorOptions = {}) {
+    // Validate dialect before merging options
+    const dialect = validateDialect(options.dialect)
+    this.dialect = dialect
     this.options = {
       optimize: true,
+      dialect,
       ...options
     }
   }
@@ -107,7 +114,9 @@ export class AggregationTranslator implements FacetTranslator {
     const context: StageContext = {
       collection: this.collection,
       cteIndex: 0,
-      existingParams: params
+      existingParams: params,
+      dialect: this.dialect,
+      dialectOptions: this.options
     }
 
     for (const stage of pipeline) {
@@ -192,6 +201,8 @@ export class AggregationTranslator implements FacetTranslator {
       collection: this.collection,
       cteIndex,
       existingParams: params,
+      dialect: this.dialect,
+      dialectOptions: this.options,
       get previousCte() {
         return currentSource
       }

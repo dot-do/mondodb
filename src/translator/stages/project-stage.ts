@@ -1,11 +1,13 @@
 /**
  * $project stage - Reshapes documents by including, excluding, or computing fields
  * Translates to SQL SELECT with json_object, json_remove, or computed expressions
+ * Supports multiple SQL dialects (SQLite, ClickHouse)
  */
 
 import type { StageResult, StageContext } from './types'
 import { translateExpression, isFieldReference, getFieldPath } from './expression-translator'
 import { validateFieldPath } from '../../utils/sql-safety.js'
+import { type SQLDialect, jsonExtract as dialectJsonExtract } from '../dialect'
 
 /**
  * Recursively collect all field references from a $function expression's args
@@ -45,6 +47,7 @@ export function translateProjectStage(
   context: StageContext
 ): StageResult {
   const params: unknown[] = []
+  const dialect: SQLDialect = context.dialect || 'sqlite'
   const fields = Object.entries(projection)
 
   // Check if it's an exclusion projection (all values are 0 except _id)
@@ -54,17 +57,18 @@ export function translateProjectStage(
   })
 
   if (isExclusion) {
-    return translateExclusionProject(projection, context, params)
+    return translateExclusionProject(projection, context, params, dialect)
   }
 
   // Inclusion or computed projection
-  return translateInclusionProject(projection, context, params)
+  return translateInclusionProject(projection, context, params, dialect)
 }
 
 function translateExclusionProject(
   projection: Record<string, unknown>,
   context: StageContext,
-  params: unknown[]
+  params: unknown[],
+  dialect: SQLDialect = 'sqlite'
 ): StageResult {
   const fieldsToRemove = Object.entries(projection)
     .filter(([key, value]) => value === 0 && key !== '_id')
@@ -75,9 +79,18 @@ function translateExclusionProject(
     })
 
   const source = context.previousCte || context.collection
-  const selectClause = fieldsToRemove.length > 0
-    ? `json_remove(data, ${fieldsToRemove.join(', ')}) AS data`
-    : 'data'
+
+  let selectClause: string
+  if (fieldsToRemove.length > 0) {
+    if (dialect === 'clickhouse') {
+      // ClickHouse doesn't have json_remove, would need different approach
+      selectClause = 'data' // Simplified for now
+    } else {
+      selectClause = `json_remove(data, ${fieldsToRemove.join(', ')}) AS data`
+    }
+  } else {
+    selectClause = 'data'
+  }
 
   return {
     selectClause,
@@ -88,7 +101,8 @@ function translateExclusionProject(
 function translateInclusionProject(
   projection: Record<string, unknown>,
   context: StageContext,
-  params: unknown[]
+  params: unknown[],
+  dialect: SQLDialect = 'sqlite'
 ): StageResult {
   const jsonParts: string[] = []
 
@@ -110,14 +124,16 @@ function translateInclusionProject(
     explicitFields.add(key)
     if (value === 1) {
       // Include existing field
-      jsonParts.push(`'${key}', json_extract(data, '$.${key}')`)
+      const fieldExpr = dialectJsonExtract(dialect, 'data', `$.${key}`)
+      jsonParts.push(`'${key}', ${fieldExpr}`)
     } else if (typeof value === 'string' && value.startsWith('$')) {
       // Field reference (renaming) - getFieldPath validates the field
       const fieldPath = getFieldPath(value)
-      jsonParts.push(`'${key}', json_extract(data, '${fieldPath}')`)
+      const fieldExpr = dialectJsonExtract(dialect, 'data', fieldPath)
+      jsonParts.push(`'${key}', ${fieldExpr}`)
     } else if (typeof value === 'object' && value !== null) {
       // Expression
-      const exprSql = translateExpression(value as Record<string, unknown>, params)
+      const exprSql = translateExpression(value as Record<string, unknown>, params, dialect)
       jsonParts.push(`'${key}', ${exprSql}`)
     } else if (value !== 0) {
       // Literal value
@@ -136,11 +152,14 @@ function translateInclusionProject(
     if (!explicitFields.has(fieldRef)) {
       // Validate field reference to prevent SQL injection
       validateFieldPath(fieldRef)
-      jsonParts.push(`'${fieldRef}', json_extract(data, '$.${fieldRef}')`)
+      const fieldExpr = dialectJsonExtract(dialect, 'data', `$.${fieldRef}`)
+      jsonParts.push(`'${fieldRef}', ${fieldExpr}`)
     }
   }
 
-  const selectClause = `json_object(${jsonParts.join(', ')}) AS data`
+  const selectClause = dialect === 'clickhouse'
+    ? `tuple(${jsonParts.join(', ')}) AS data`
+    : `json_object(${jsonParts.join(', ')}) AS data`
 
   return {
     selectClause,

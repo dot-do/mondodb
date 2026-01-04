@@ -9,4 +9,5 @@
 
 export * from './iceberg';
 export * from './query';
+export * from './query-executor';
 export * from './mapper';
