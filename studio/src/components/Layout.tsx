@@ -3,6 +3,7 @@ import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const layoutStyles = css`
   display: grid;
@@ -45,7 +46,9 @@ export function Layout() {
         <Header />
       </header>
       <main className={mainStyles}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

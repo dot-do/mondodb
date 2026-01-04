@@ -14,6 +14,7 @@ import { SkeletonLoader } from '../SkeletonLoader'
 import { CreateDocument } from '../documents/CreateDocument'
 import { DeleteDocument } from '../documents/DeleteDocument'
 import { AnalyticsDashboard } from '../olap'
+import { ErrorBoundary } from '../ErrorBoundary'
 import type { Document } from '@lib/rpc-client'
 
 const pageStyles = css`
@@ -188,7 +189,9 @@ export function CollectionPage() {
           </Tab>
           <Tab name="Analytics">
             <div className={tabContentStyles}>
-              <AnalyticsDashboard database={database} collection={collection} />
+              <ErrorBoundary>
+                <AnalyticsDashboard database={database} collection={collection} />
+              </ErrorBoundary>
             </div>
           </Tab>
         </Tabs>
