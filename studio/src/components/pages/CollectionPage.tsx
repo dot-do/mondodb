@@ -11,6 +11,9 @@ import { useDocumentsQuery, useDocumentCountQuery } from '@hooks/useQueries'
 import { DocumentList } from '../documents/DocumentList'
 import { QueryBar, type QueryOptions } from '../query/QueryBar'
 import { SkeletonLoader } from '../SkeletonLoader'
+import { CreateDocument } from '../documents/CreateDocument'
+import { DeleteDocument } from '../documents/DeleteDocument'
+import type { Document } from '@lib/rpc-client'
 
 const pageStyles = css`
   display: flex;
@@ -60,6 +63,11 @@ export function CollectionPage() {
   const [limit, setLimit] = useState(20)
   const [skip, setSkip] = useState(0)
 
+  // Dialog states
+  const [createOpen, setCreateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Document | null>(null)
+
   // Use empty string fallbacks for hooks (they'll be no-ops when undefined)
   // This avoids non-null assertions while maintaining hook call order
   const { data: documents, isLoading, error, refetch } = useDocumentsQuery(
@@ -84,6 +92,20 @@ export function CollectionPage() {
     return { count: count ?? 0, time: endTime - startTime }
   }, [refetch, count])
 
+  const handleDocumentDelete = useCallback((document: Document) => {
+    setDeleteTarget(document)
+    setDeleteOpen(true)
+  }, [])
+
+  const handleCreateSuccess = useCallback(() => {
+    refetch()
+  }, [refetch])
+
+  const handleDeleteSuccess = useCallback(() => {
+    setDeleteTarget(null)
+    refetch()
+  }, [refetch])
+
   return (
     <div className={pageStyles}>
       <div className={headerStyles}>
@@ -97,7 +119,12 @@ export function CollectionPage() {
           <Button variant="default" leftGlyph={<Icon glyph="Refresh" />} onClick={() => refetch()}>
             Refresh
           </Button>
-          <Button variant="primary" leftGlyph={<Icon glyph="Plus" />}>
+          <Button
+            variant="primary"
+            leftGlyph={<Icon glyph="Plus" />}
+            onClick={() => setCreateOpen(true)}
+            data-testid="insert-document-button"
+          >
             Insert Document
           </Button>
         </div>
@@ -130,6 +157,7 @@ export function CollectionPage() {
                   pageSize={limit}
                   onPageChange={(page) => setSkip((page - 1) * limit)}
                   onPageSizeChange={setLimit}
+                  onDocumentDelete={handleDocumentDelete}
                 />
               )}
             </div>
@@ -149,8 +177,41 @@ export function CollectionPage() {
               <Body>Schema analysis coming soon...</Body>
             </div>
           </Tab>
+          <Tab name="Analytics">
+            <div className={tabContentStyles}>
+              <Body>OLAP Analytics dashboard coming soon...</Body>
+              <Body style={{ marginTop: 8, color: palette.gray.dark1, fontSize: 13 }}>
+                Query your data with SQL via R2 Datalake integration.
+              </Body>
+            </div>
+          </Tab>
         </Tabs>
       </div>
+
+      {/* Create Document Dialog */}
+      <CreateDocument
+        database={database}
+        collection={collection}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
+
+      {/* Delete Document Dialog */}
+      {deleteTarget && (
+        <DeleteDocument
+          database={database}
+          collection={collection}
+          documentId={deleteTarget._id}
+          document={deleteTarget}
+          open={deleteOpen}
+          onClose={() => {
+            setDeleteOpen(false)
+            setDeleteTarget(null)
+          }}
+          onSuccess={handleDeleteSuccess}
+        />
+      )}
     </div>
   )
 }
