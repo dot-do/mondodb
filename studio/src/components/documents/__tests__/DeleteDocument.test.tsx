@@ -165,10 +165,13 @@ describe('DeleteDocument', () => {
 
       render(<DeleteDocument {...defaultProps} onClose={onClose} />)
       const cancelButtons = screen.getAllByRole('button', { name: /cancel/i })
+      const firstCancelButton = cancelButtons[0]
 
-      await act(async () => {
-        await user.click(cancelButtons[0])
-      })
+      if (firstCancelButton) {
+        await act(async () => {
+          await user.click(firstCancelButton)
+        })
+      }
 
       expect(onClose).toHaveBeenCalled()
     })

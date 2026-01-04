@@ -5,4 +5,123 @@ description: Complete API documentation for MondoDB
 
 # API Reference
 
-Detailed documentation for all MondoDB APIs and methods.
+Detailed documentation for all MondoDB APIs and methods. MondoDB provides a MongoDB-compatible API that runs on Cloudflare Workers with SQLite-backed Durable Objects.
+
+## Quick Start
+
+```typescript
+import { MongoClient, ObjectId } from 'mondodb'
+
+// Connect to MondoDB
+const client = new MongoClient(env)
+const db = client.db('myapp')
+const users = db.collection('users')
+
+// CRUD operations
+const { insertedId } = await users.insertOne({ name: 'Alice', email: 'alice@example.com' })
+const user = await users.findOne({ _id: insertedId })
+await users.updateOne({ _id: insertedId }, { $set: { verified: true } })
+await users.deleteOne({ _id: insertedId })
+```
+
+## Core Classes
+
+| Class | Description |
+|-------|-------------|
+| [MongoClient](/docs/api-reference/client) | Main entry point for database connections |
+| [Database](/docs/api-reference/database) | Database instance for collection management |
+| [Collection](/docs/api-reference/collection) | Collection instance for CRUD operations |
+| [Cursor](/docs/api-reference/cursor) | Lazy iteration over query results |
+| [Types](/docs/api-reference/types) | TypeScript interfaces and type definitions |
+
+## Class Hierarchy
+
+```
+MongoClient
+  |
+  +-- Database (via client.db())
+        |
+        +-- Collection (via db.collection())
+              |
+              +-- FindCursor (via collection.find())
+              +-- AggregationCursor (via collection.aggregate())
+              +-- ChangeStream (via collection.watch())
+```
+
+## Supported Operations
+
+### CRUD Operations
+
+- `insertOne()` / `insertMany()` - Create documents
+- `findOne()` / `find()` - Read documents
+- `updateOne()` / `updateMany()` / `replaceOne()` - Update documents
+- `deleteOne()` / `deleteMany()` - Delete documents
+
+### Atomic Operations
+
+- `findOneAndUpdate()` - Find and update atomically
+- `findOneAndDelete()` - Find and delete atomically
+- `findOneAndReplace()` - Find and replace atomically
+
+### Aggregation
+
+- `aggregate()` - Run aggregation pipelines
+- `distinct()` - Get distinct field values
+- `countDocuments()` - Count matching documents
+
+### Bulk Operations
+
+- `bulkWrite()` - Execute multiple write operations in a single batch
+
+### Indexes
+
+- `createIndex()` - Create an index
+- `dropIndex()` - Drop an index
+- `listIndexes()` - List all indexes
+
+### Change Streams
+
+- `watch()` - Watch for real-time changes
+
+### Transactions
+
+- `startSession()` - Start a client session
+- `withTransaction()` - Execute within a transaction
+
+## MongoDB Compatibility
+
+MondoDB aims for high compatibility with the MongoDB Node.js driver API. Key supported features:
+
+- Full CRUD operations
+- Aggregation pipeline with most stages
+- Query operators ($eq, $ne, $gt, $lt, $in, $or, $and, etc.)
+- Update operators ($set, $unset, $inc, $push, $pull, etc.)
+- Indexes (unique, compound, text, TTL)
+- Transactions
+- Change streams
+- Typed collections with TypeScript generics
+
+## TypeScript Support
+
+MondoDB is written in TypeScript and provides full type definitions:
+
+```typescript
+interface User {
+  _id?: ObjectId
+  name: string
+  email: string
+  age: number
+}
+
+const users = db.collection<User>('users')
+
+// TypeScript infers types from your schema
+const user = await users.findOne({ email: 'alice@example.com' })
+// user is User | null
+
+// Type-safe updates
+await users.updateOne(
+  { _id: user?._id },
+  { $inc: { age: 1 } } // TypeScript ensures age is a number field
+)
+```

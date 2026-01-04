@@ -146,7 +146,10 @@ describe('EditDocument', () => {
 
       render(<EditDocument {...defaultProps} />)
       const cancelButtons = screen.getAllByRole('button', { name: /cancel/i })
-      await user.click(cancelButtons[0])
+      const firstCancelButton = cancelButtons[0]
+      if (firstCancelButton) {
+        await user.click(firstCancelButton)
+      }
 
       expect(defaultProps.onClose).toHaveBeenCalled()
     })

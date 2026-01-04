@@ -1,4 +1,4 @@
 {
   "title": "API Reference",
-  "pages": ["client", "database", "collection", "cursor"]
+  "pages": ["client", "database", "collection", "cursor", "types"]
 }
