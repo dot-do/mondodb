@@ -60,13 +60,16 @@ export function CollectionPage() {
   const [limit, setLimit] = useState(20)
   const [skip, setSkip] = useState(0)
 
+  // Use empty string fallbacks for hooks (they'll be no-ops when undefined)
+  // This avoids non-null assertions while maintaining hook call order
   const { data: documents, isLoading, error, refetch } = useDocumentsQuery(
-    database!,
-    collection!,
+    database ?? '',
+    collection ?? '',
     { filter, sort, limit, skip }
   )
-  const { data: count } = useDocumentCountQuery(database!, collection!, filter)
+  const { data: count } = useDocumentCountQuery(database ?? '', collection ?? '', filter)
 
+  // Early return after hooks - TypeScript narrows types below
   if (!database || !collection) {
     return <Body>No collection selected</Body>
   }
