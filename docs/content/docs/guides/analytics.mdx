@@ -1,0 +1,751 @@
+---
+title: Analytics Layer
+description: Run analytical queries on your MondoDB data using ClickHouse with Apache Iceberg
+---
+
+# Analytics Layer
+
+MondoDB includes an integrated analytics layer that streams your operational data to ClickHouse via Change Data Capture (CDC), enabling real-time analytical queries on Apache Iceberg tables stored in R2.
+
+## Overview
+
+The analytics architecture separates operational (OLTP) and analytical (OLAP) workloads:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MondoDB (OLTP)                                 │
+│                         Durable Objects + SQLite                            │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                         CDC Events (insert/update/delete)
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Cloudflare Pipelines                                │
+│                    Batching, buffering, delivery                            │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────┴──────────────────────────────────────────┐
+│                                                                             │
+│   ┌─────────────────────┐              ┌─────────────────────────────────┐  │
+│   │   R2 Data Lake      │◀────────────▶│        ClickHouse               │  │
+│   │  (Iceberg Tables)   │              │   (Query Engine)                │  │
+│   │                     │              │                                 │  │
+│   │  • Parquet files    │              │  • JOINs, window functions      │  │
+│   │  • Partitioned      │              │  • Real-time aggregations       │  │
+│   │  • Time-travel      │              │  • Sub-second queries           │  │
+│   └─────────────────────┘              └─────────────────────────────────┘  │
+│                                                                             │
+│                             R2 Data Catalog                                 │
+│                    Schema registry, table metadata                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+
+- **Separation of concerns** — Operational queries don't compete with analytics
+- **Real-time analytics** — CDC streams changes within seconds
+- **Cost-effective** — R2 storage is cheap, ClickHouse scales independently
+- **Time travel** — Query historical snapshots via Iceberg
+- **SQL power** — Full analytical SQL with JOINs, window functions, CTEs
+
+---
+
+## The $analytics Stage
+
+The `$analytics` aggregation stage routes queries to the analytics layer for execution on ClickHouse.
+
+### Basic Syntax
+
+```typescript
+await collection.aggregate([
+  {
+    $analytics: {
+      // Required: The analytical query to execute
+      pipeline: [
+        { $match: { status: 'completed' } },
+        { $group: { _id: '$category', revenue: { $sum: '$amount' } } },
+        { $sort: { revenue: -1 } }
+      ],
+      // Optional: Query options
+      options: {
+        timeout: 30000,      // Query timeout in ms
+        maxRows: 10000,      // Maximum rows to return
+        cache: true,         // Use query cache
+        cacheTTL: 60000      // Cache TTL in ms
+      }
+    }
+  }
+]).toArray()
+```
+
+### Why Use $analytics?
+
+Use `$analytics` when you need:
+
+| Capability | Standard Aggregation | $analytics |
+|------------|---------------------|------------|
+| JOINs across large tables | Limited (`$lookup`) | Optimized |
+| Window functions | Not available | Full support |
+| Complex GROUP BY | Memory-constrained | Scalable |
+| Historical queries | Current data only | Time travel |
+| Sub-second on billions | Not feasible | Columnar storage |
+
+### Query Routing
+
+The `$analytics` stage is transparent — you write MongoDB-style pipelines, and MondoDB translates them to optimized ClickHouse SQL:
+
+```typescript
+// This MongoDB-style pipeline...
+await orders.aggregate([
+  {
+    $analytics: {
+      pipeline: [
+        { $match: { createdAt: { $gte: lastMonth } } },
+        {
+          $group: {
+            _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+            totalRevenue: { $sum: '$amount' },
+            orderCount: { $sum: 1 },
+            avgOrderValue: { $avg: '$amount' }
+          }
+        },
+        { $sort: { '_id.year': -1, '_id.month': -1 } }
+      ]
+    }
+  }
+]).toArray()
+
+// ...becomes this ClickHouse SQL:
+// SELECT
+//   toYear(createdAt) AS _id_year,
+//   toMonth(createdAt) AS _id_month,
+//   sum(amount) AS totalRevenue,
+//   count(*) AS orderCount,
+//   avg(amount) AS avgOrderValue
+// FROM orders
+// WHERE createdAt >= '2024-12-01'
+// GROUP BY _id_year, _id_month
+// ORDER BY _id_year DESC, _id_month DESC
+```
+
+---
+
+## Change Data Capture (CDC)
+
+CDC automatically streams document changes to the analytics layer.
+
+### How It Works
+
+1. **Capture** — Every insert, update, and delete in MondoDB generates a CDC event
+2. **Buffer** — Events are batched for efficiency (configurable batch size)
+3. **Deliver** — Cloudflare Pipelines reliably delivers events to ClickHouse
+4. **Ingest** — ClickHouse ingests events into Iceberg tables via S3Queue
+
+### Event Schema
+
+```typescript
+interface CDCEvent {
+  // Event metadata
+  eventId: string           // Unique event ID
+  timestamp: Date           // Event timestamp
+  operation: 'insert' | 'update' | 'delete'
+
+  // Source information
+  database: string          // Source database
+  collection: string        // Source collection
+
+  // Document data
+  documentKey: { _id: string }
+  before?: Record<string, unknown>  // Previous state (updates only)
+  after?: Record<string, unknown>   // New state (inserts and updates)
+}
+```
+
+### Configuring CDC
+
+Enable CDC in your collection options:
+
+```typescript
+// Enable CDC for a collection
+await db.createCollection('orders', {
+  cdc: {
+    enabled: true,
+    pipeline: env.CDC_PIPELINE,  // Cloudflare Pipeline binding
+    batchSize: 100,              // Batch events before sending
+    batchTimeoutMs: 1000         // Max time to wait for batch
+  }
+})
+
+// Or enable on existing collection
+await db.command({
+  collMod: 'orders',
+  cdc: { enabled: true, pipeline: env.CDC_PIPELINE }
+})
+```
+
+### Wrangler Configuration
+
+```jsonc
+{
+  "pipelines": [
+    {
+      "binding": "CDC_PIPELINE",
+      "pipeline": "mondodb-cdc"
+    }
+  ]
+}
+```
+
+### CDC Latency
+
+| Scenario | Typical Latency |
+|----------|-----------------|
+| Single document | < 100ms |
+| Batch (100 docs) | < 500ms |
+| Large batch (1000 docs) | < 2s |
+| End-to-end (query-ready) | 1-5s |
+
+---
+
+## Apache Iceberg Integration
+
+MondoDB stores analytical data in Apache Iceberg format on R2.
+
+### Why Iceberg?
+
+- **Time travel** — Query any historical snapshot
+- **Schema evolution** — Add/remove columns without rewriting data
+- **Partitioning** — Efficient partition pruning for date ranges
+- **ACID transactions** — Consistent writes across files
+- **Open format** — Query with any Iceberg-compatible engine
+
+### Table Structure
+
+```
+r2://my-bucket/iceberg/
+├── orders/
+│   ├── metadata/
+│   │   ├── v1.metadata.json
+│   │   ├── v2.metadata.json
+│   │   └── snap-123456789.avro
+│   └── data/
+│       ├── year=2024/month=01/
+│       │   ├── 00000-0-abc123.parquet
+│       │   └── 00001-0-def456.parquet
+│       └── year=2024/month=02/
+│           └── 00000-0-ghi789.parquet
+└── users/
+    ├── metadata/
+    └── data/
+```
+
+### Connecting to Iceberg
+
+```typescript
+import { createIcebergConnection } from 'mondodb/olap'
+
+const iceberg = await createIcebergConnection({
+  host: 'your-clickhouse-host.com',
+  port: 8443,
+  database: 'analytics',
+  username: 'default',
+  password: env.CLICKHOUSE_PASSWORD,
+  secure: true,
+  icebergCatalog: 'r2_catalog'
+})
+
+// Discover tables
+const tables = await discoverTables(iceberg)
+console.log(tables)
+// [
+//   { name: 'orders', namespace: 'default', format: 'iceberg', totalRecords: 1500000 },
+//   { name: 'users', namespace: 'default', format: 'iceberg', totalRecords: 50000 }
+// ]
+
+// Get table schema
+const schema = await getTableSchema(iceberg, 'orders')
+console.log(schema.columns)
+// [
+//   { name: '_id', type: 'String', nullable: false },
+//   { name: 'amount', type: 'Float64', nullable: true },
+//   { name: 'createdAt', type: 'DateTime64(3)', nullable: true }
+// ]
+```
+
+### Time Travel Queries
+
+Query historical data using Iceberg snapshots:
+
+```typescript
+await orders.aggregate([
+  {
+    $analytics: {
+      pipeline: [
+        { $match: { status: 'completed' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ],
+      options: {
+        // Query data as of a specific timestamp
+        asOf: new Date('2024-01-15T00:00:00Z'),
+        // Or use a specific snapshot ID
+        snapshotId: '123456789'
+      }
+    }
+  }
+]).toArray()
+```
+
+---
+
+## R2 Data Catalog
+
+The R2 Data Catalog provides schema management and table discovery.
+
+### Catalog Operations
+
+```typescript
+import { R2DataCatalog } from 'mondodb/olap'
+
+const catalog = new R2DataCatalog({
+  bucket: env.R2_BUCKET,
+  prefix: 'iceberg/',
+  clickhouse: icebergConnection
+})
+
+// List all tables
+const tables = await catalog.listTables()
+
+// Get table metadata
+const ordersMeta = await catalog.getTable('orders')
+console.log(ordersMeta)
+// {
+//   name: 'orders',
+//   location: 'r2://bucket/iceberg/orders',
+//   currentSnapshotId: '123456789',
+//   schema: [...],
+//   partitionSpec: [{ name: 'createdAt', transform: 'month' }],
+//   properties: { 'write.format.default': 'parquet' }
+// }
+
+// Get partition statistics
+const partitions = await catalog.getPartitionStats('orders')
+console.log(partitions)
+// [
+//   { partition: { year: 2024, month: 1 }, files: 12, records: 150000, sizeBytes: 45000000 },
+//   { partition: { year: 2024, month: 2 }, files: 8, records: 100000, sizeBytes: 30000000 }
+// ]
+```
+
+### Schema Evolution
+
+```typescript
+// Add a new column (backwards compatible)
+await catalog.evolveSchema('orders', {
+  addColumns: [
+    { name: 'discount', type: 'Float64', nullable: true }
+  ]
+})
+
+// Rename a column
+await catalog.evolveSchema('orders', {
+  renameColumns: [
+    { from: 'amount', to: 'orderAmount' }
+  ]
+})
+
+// Historical data remains queryable with old schema via time travel
+```
+
+---
+
+## ClickHouse Query Execution
+
+Execute analytical queries directly on ClickHouse.
+
+### Query Executor
+
+```typescript
+import { ClickHouseQueryExecutor } from 'mondodb/olap'
+
+const executor = new ClickHouseQueryExecutor(icebergConnection)
+
+// Execute a query
+const result = await executor.execute<{ category: string; revenue: number }>(`
+  SELECT
+    category,
+    sum(amount) as revenue
+  FROM orders
+  WHERE createdAt >= now() - INTERVAL 30 DAY
+  GROUP BY category
+  ORDER BY revenue DESC
+  LIMIT 10
+`)
+
+console.log(result.rows)
+// [
+//   { category: 'electronics', revenue: 150000 },
+//   { category: 'clothing', revenue: 85000 }
+// ]
+
+console.log(result.statistics)
+// { elapsed: 0.045, rowsRead: 1500000, bytesRead: 45000000 }
+```
+
+### Parameterized Queries
+
+```typescript
+const result = await executor.executeWithParams<{ userId: string; total: number }>(
+  `SELECT userId, sum(amount) as total
+   FROM orders
+   WHERE createdAt >= {startDate:DateTime}
+     AND createdAt < {endDate:DateTime}
+     AND status = {status:String}
+   GROUP BY userId
+   HAVING total > {minTotal:Float64}`,
+  {
+    startDate: new Date('2024-01-01'),
+    endDate: new Date('2024-02-01'),
+    status: 'completed',
+    minTotal: 1000
+  }
+)
+```
+
+### Query Builder
+
+```typescript
+import { createQueryBuilder } from 'mondodb/olap'
+
+const query = createQueryBuilder(icebergConnection)
+  .select(['userId', 'sum(amount) as totalSpent', 'count(*) as orderCount'])
+  .from('orders', 'o')
+  .leftJoin('users', 'u', 'o.userId = u._id')
+  .where('o.createdAt >= ?', [lastMonth])
+  .groupBy('userId')
+  .having('totalSpent > 1000')
+  .orderBy('totalSpent', 'DESC')
+  .limit(100)
+
+const result = await query.execute()
+```
+
+### Window Functions
+
+ClickHouse supports full window function syntax:
+
+```typescript
+const result = await executor.execute(`
+  SELECT
+    userId,
+    orderDate,
+    amount,
+    sum(amount) OVER (PARTITION BY userId ORDER BY orderDate) as runningTotal,
+    row_number() OVER (PARTITION BY userId ORDER BY amount DESC) as amountRank,
+    lag(amount) OVER (PARTITION BY userId ORDER BY orderDate) as previousAmount
+  FROM orders
+  WHERE orderDate >= now() - INTERVAL 90 DAY
+`)
+```
+
+### Query Cancellation
+
+```typescript
+const controller = new AbortController()
+
+// Start long-running query
+const queryPromise = executor.execute(
+  'SELECT * FROM orders WHERE complex_condition',
+  { signal: controller.signal, queryId: 'my-query-123' }
+)
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000)
+
+try {
+  await queryPromise
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Query cancelled')
+  }
+}
+
+// Or cancel by query ID
+await executor.cancel('my-query-123')
+```
+
+---
+
+## Configuration
+
+### Wrangler Configuration
+
+```jsonc
+{
+  "name": "mondodb-analytics",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Durable Objects for OLTP
+  "durable_objects": {
+    "bindings": [{ "name": "MONDO_DATABASE", "class_name": "MondoDatabase" }]
+  },
+
+  // R2 for Iceberg storage
+  "r2_buckets": [
+    { "binding": "R2_BUCKET", "bucket_name": "mondodb-iceberg" }
+  ],
+
+  // Pipeline for CDC
+  "pipelines": [
+    { "binding": "CDC_PIPELINE", "pipeline": "mondodb-cdc" }
+  ],
+
+  // Environment variables
+  "vars": {
+    "CLICKHOUSE_HOST": "your-clickhouse-host.com",
+    "CLICKHOUSE_DATABASE": "analytics",
+    "ICEBERG_CATALOG": "r2_catalog"
+  }
+}
+```
+
+### ClickHouse Setup
+
+Create the Iceberg catalog in ClickHouse:
+
+```sql
+-- Create R2 Iceberg catalog
+CREATE DATABASE IF NOT EXISTS r2_catalog
+ENGINE = Iceberg('https://your-account.r2.cloudflarestorage.com/mondodb-iceberg', 'access_key', 'secret_key')
+SETTINGS
+  catalog_type = 'rest',
+  storage_endpoint = 'https://your-account.r2.cloudflarestorage.com';
+
+-- Create S3Queue for CDC ingestion
+CREATE TABLE cdc_queue (
+  eventId String,
+  timestamp DateTime64(3),
+  operation String,
+  database String,
+  collection String,
+  documentKey String,
+  before String,
+  after String
+) ENGINE = S3Queue(
+  'https://your-account.r2.cloudflarestorage.com/mondodb-cdc/*',
+  'access_key', 'secret_key',
+  'JSONEachRow'
+)
+SETTINGS
+  mode = 'ordered',
+  keeper_path = '/clickhouse/s3queue/cdc';
+```
+
+---
+
+## Use Cases
+
+### Real-Time Dashboard
+
+```typescript
+// Revenue by category, updated in real-time
+app.get('/api/dashboard/revenue', async (c) => {
+  const result = await orders.aggregate([
+    {
+      $analytics: {
+        pipeline: [
+          { $match: { createdAt: { $gte: startOfMonth } } },
+          {
+            $group: {
+              _id: '$category',
+              revenue: { $sum: '$amount' },
+              orders: { $sum: 1 }
+            }
+          },
+          { $sort: { revenue: -1 } }
+        ],
+        options: { cache: true, cacheTTL: 10000 }
+      }
+    }
+  ]).toArray()
+
+  return c.json(result)
+})
+```
+
+### Cohort Analysis
+
+```typescript
+// User retention cohorts
+const cohorts = await users.aggregate([
+  {
+    $analytics: {
+      pipeline: [
+        {
+          $group: {
+            _id: {
+              signupMonth: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }
+            },
+            users: { $addToSet: '$_id' }
+          }
+        }
+      ]
+    }
+  },
+  // Join with orders to calculate retention
+  {
+    $lookup: {
+      from: 'orders',
+      let: { cohortUsers: '$users', cohortMonth: '$_id.signupMonth' },
+      pipeline: [
+        {
+          $analytics: {
+            pipeline: [
+              { $match: { $expr: { $in: ['$userId', '$$cohortUsers'] } } },
+              {
+                $group: {
+                  _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+                  activeUsers: { $addToSet: '$userId' }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      as: 'activity'
+    }
+  }
+]).toArray()
+```
+
+### Funnel Analysis
+
+```typescript
+// Conversion funnel
+const funnel = await events.aggregate([
+  {
+    $analytics: {
+      pipeline: [
+        { $match: { createdAt: { $gte: lastWeek } } },
+        {
+          $group: {
+            _id: '$sessionId',
+            events: { $push: '$eventType' }
+          }
+        },
+        {
+          $project: {
+            viewedProduct: { $in: ['product_view', '$events'] },
+            addedToCart: { $in: ['add_to_cart', '$events'] },
+            startedCheckout: { $in: ['checkout_start', '$events'] },
+            completed: { $in: ['purchase', '$events'] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalSessions: { $sum: 1 },
+            viewedProduct: { $sum: { $cond: ['$viewedProduct', 1, 0] } },
+            addedToCart: { $sum: { $cond: ['$addedToCart', 1, 0] } },
+            startedCheckout: { $sum: { $cond: ['$startedCheckout', 1, 0] } },
+            completed: { $sum: { $cond: ['$completed', 1, 0] } }
+          }
+        }
+      ]
+    }
+  }
+]).toArray()
+```
+
+---
+
+## Best Practices
+
+### 1. Partition Your Data
+
+Design partitions for common query patterns:
+
+```typescript
+// Partition orders by month for time-range queries
+await catalog.createTable('orders', {
+  schema: [...],
+  partitionSpec: [
+    { field: 'createdAt', transform: 'month' }
+  ]
+})
+```
+
+### 2. Use Query Caching
+
+Cache expensive queries that don't need real-time data:
+
+```typescript
+{
+  $analytics: {
+    pipeline: [...],
+    options: {
+      cache: true,
+      cacheTTL: 60000  // 1 minute
+    }
+  }
+}
+```
+
+### 3. Set Appropriate Timeouts
+
+Protect against runaway queries:
+
+```typescript
+{
+  $analytics: {
+    pipeline: [...],
+    options: {
+      timeout: 30000,  // 30 second max
+      maxRows: 10000   // Limit result size
+    }
+  }
+}
+```
+
+### 4. Monitor CDC Lag
+
+Track CDC latency to ensure analytics freshness:
+
+```typescript
+const lag = await catalog.getCDCLag('orders')
+console.log(`CDC lag: ${lag.seconds}s, pending events: ${lag.pending}`)
+```
+
+### 5. Use Time Travel for Consistency
+
+When joining across tables, use consistent snapshots:
+
+```typescript
+const snapshotTime = new Date()
+
+const orders = await orders.aggregate([
+  { $analytics: { pipeline: [...], options: { asOf: snapshotTime } } }
+]).toArray()
+
+const users = await users.aggregate([
+  { $analytics: { pipeline: [...], options: { asOf: snapshotTime } } }
+]).toArray()
+```
+
+---
+
+## Limitations
+
+- **CDC latency** — Analytics data is eventually consistent (1-5 seconds typical)
+- **Schema changes** — Major schema changes may require table recreation
+- **Query complexity** — Very complex queries may timeout (increase limits if needed)
+- **Cost** — ClickHouse and R2 usage incurs additional Cloudflare costs
+
+---
+
+## Related
+
+- [Aggregation Pipeline](/docs/guides/aggregation) — Standard aggregation stages
+- [Change Streams](/docs/guides/change-streams) — Real-time change notifications
+- [Cloudflare Workers](/docs/guides/cloudflare-workers) — Deployment configuration

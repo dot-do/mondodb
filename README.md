@@ -373,9 +373,40 @@ Comprehensive guides are available at [docs/](docs/):
 | [Change Streams](docs/content/docs/guides/change-streams.mdx) | Real-time change notifications |
 | [Geospatial](docs/content/docs/guides/geospatial.mdx) | Location-based queries |
 | [Indexing](docs/content/docs/guides/indexing.mdx) | Index types and optimization |
+| [Analytics Layer](docs/content/docs/guides/analytics.mdx) | ClickHouse, Iceberg, CDC streaming |
 | [Studio UI](docs/content/docs/guides/studio.mdx) | Web-based database browser |
 | [CLI Server](docs/content/docs/guides/cli.mdx) | Local development server |
 | [Cloudflare Workers](docs/content/docs/guides/cloudflare-workers.mdx) | Deployment guide |
+
+---
+
+## Analytics Layer
+
+MondoDB includes an integrated analytics layer for OLAP workloads:
+
+```typescript
+// Route analytical queries to ClickHouse via $analytics
+const revenue = await orders.aggregate([
+  {
+    $analytics: {
+      pipeline: [
+        { $match: { createdAt: { $gte: lastMonth } } },
+        { $group: { _id: '$category', total: { $sum: '$amount' } } },
+        { $sort: { total: -1 } }
+      ]
+    }
+  }
+]).toArray()
+```
+
+| Component | Description |
+|-----------|-------------|
+| **$analytics Stage** | Route queries to ClickHouse for analytical workloads |
+| **CDC Streaming** | Real-time change data capture via Cloudflare Pipelines |
+| **Apache Iceberg** | Open table format with time travel and schema evolution |
+| **R2 Data Catalog** | Schema registry and table metadata on R2 |
+
+See the [Analytics Layer Guide](docs/content/docs/guides/analytics.mdx) for details.
 
 ---
 
@@ -383,10 +414,8 @@ Comprehensive guides are available at [docs/](docs/):
 
 ### Coming Soon
 
-- **OLAP Analytics** — ClickHouse integration with Apache Iceberg and R2 Data Catalog
-- **$olap Stage** — Run analytics queries against columnar storage
-- **CDC Streaming** — Change data capture to ClickHouse for real-time analytics
 - **Multi-Region** — Cross-region replication with conflict resolution
+- **Sharding** — Horizontal partitioning for very large datasets
 
 ---
 
