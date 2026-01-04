@@ -1,146 +1,394 @@
-# mondodb
+# MondoDB
 
-A MongoDB-compatible database backed by Cloudflare Durable Objects and SQLite.
+**MongoDB on the Edge** — A MongoDB-compatible database that runs entirely on Cloudflare Workers, with native AI agent support, vector search, and real-time analytics.
 
-## Overview
+[![npm version](https://img.shields.io/npm/v/mondodb.svg)](https://www.npmjs.com/package/mondodb)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-mondodb provides a MongoDB-compatible API that runs entirely on Cloudflare Workers. It translates MongoDB queries to SQLite, leveraging Cloudflare Durable Objects for persistent storage. This allows you to use familiar MongoDB patterns while benefiting from Cloudflare's global edge network.
+---
+
+## Why MondoDB?
+
+Traditional databases require infrastructure management, connection pooling, and careful scaling. MondoDB eliminates all of that by running directly on Cloudflare's edge network:
+
+- **Zero Infrastructure** — No servers to manage, no connection limits, no cold starts
+- **Global by Default** — Data lives at the edge, close to your users
+- **MongoDB Compatible** — Drop-in replacement for most MongoDB operations
+- **AI-Native** — Built-in support for AI agents, vector search, and LLM tool calling
+- **Serverless Economics** — Pay only for what you use, scale to zero
+
+```typescript
+import { MongoClient } from 'mondodb'
+
+const client = new MongoClient('https://your-worker.workers.dev')
+const db = client.db('myapp')
+const users = db.collection('users')
+
+// It's just MongoDB
+await users.insertOne({ name: 'Alice', email: 'alice@example.com' })
+const user = await users.findOne({ email: 'alice@example.com' })
+```
+
+---
 
 ## Features
 
-- **MongoDB-compatible API** - Use familiar MongoDB operations like `find`, `insertOne`, `updateMany`, `aggregate`, and more
-- **Aggregation Pipeline** - Support for common aggregation stages including `$match`, `$group`, `$project`, `$lookup`, `$sort`, `$limit`, `$skip`, `$unwind`, `$facet`, and more
-- **Cloudflare Native** - Built on Durable Objects with SQLite storage for persistence
-- **TypeScript Support** - Full TypeScript definitions included
-- **Index Support** - Create and manage indexes for optimized queries
-- **Vector Search** - Support for vector similarity search with Cloudflare Vectorize integration
-- **Change Streams** - Real-time change notifications
-- **Transactions** - Support for multi-document transactions
+### Core Database
 
-## Installation
+| Feature | Description |
+|---------|-------------|
+| **CRUD Operations** | `insertOne`, `insertMany`, `find`, `findOne`, `updateOne`, `updateMany`, `deleteOne`, `deleteMany`, `replaceOne`, `bulkWrite` |
+| **Aggregation Pipeline** | 20+ stages including `$match`, `$group`, `$lookup`, `$unwind`, `$facet`, `$bucket`, `$graphLookup` |
+| **Indexing** | Single-field, compound, text, geospatial (2dsphere), TTL, and unique indexes |
+| **Transactions** | Multi-document ACID transactions with `startSession()` and `withTransaction()` |
+| **Change Streams** | Real-time notifications via `collection.watch()` |
+
+### AI & Agents
+
+| Feature | Description |
+|---------|-------------|
+| **Vector Search** | Semantic similarity search powered by Cloudflare Vectorize with automatic embeddings |
+| **Full-Text Search** | FTS5-powered `$search` stage with scoring, highlights, and fuzzy matching |
+| **AgentFS** | Virtual filesystem for AI agents with glob, grep, KV store, and immutable audit logs |
+| **MCP Protocol** | Model Context Protocol server with Anthropic and Vercel AI SDK adapters |
+| **$function Operator** | Execute sandboxed JavaScript in aggregation pipelines |
+
+### Connectivity
+
+| Feature | Description |
+|---------|-------------|
+| **Wire Protocol** | Connect with MongoDB Compass, mongosh, and native drivers via TCP |
+| **HTTP/RPC** | JSON-RPC over HTTP with batching and request deduplication |
+| **WebSocket** | Persistent connections for real-time applications |
+| **Service Bindings** | Zero-latency Worker-to-Worker communication |
+
+### Developer Experience
+
+| Feature | Description |
+|---------|-------------|
+| **Studio UI** | Web-based database browser with query editor and document management |
+| **CLI Server** | Local development with `npx mondodb serve --backend sqlite` |
+| **TypeScript** | Full type definitions with generics support |
+
+---
+
+## Quick Start
+
+### Install
 
 ```bash
 npm install mondodb
 ```
 
-## Quick Start
-
-### As a Cloudflare Worker
+### Deploy to Cloudflare Workers
 
 ```typescript
-import { MondoEntrypoint, MondoDatabase } from 'mondodb';
+// src/index.ts
+import { MondoEntrypoint, MondoDatabase } from 'mondodb'
 
-export { MondoDatabase };
-
-export default MondoEntrypoint;
+export { MondoDatabase }
+export default MondoEntrypoint
 ```
 
-Configure your `wrangler.toml`:
-
-```toml
-name = "my-mondodb-worker"
-main = "src/index.ts"
-
-[[durable_objects.bindings]]
-name = "MONDO_DATABASE"
-class_name = "MondoDatabase"
-
-[[migrations]]
-tag = "v1"
-new_classes = ["MondoDatabase"]
+```jsonc
+// wrangler.jsonc
+{
+  "name": "my-mondodb",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "MONDO_DATABASE", "class_name": "MondoDatabase" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MondoDatabase"] }]
+}
 ```
 
-### Client Usage
+```bash
+npx wrangler deploy
+```
+
+### Local Development
+
+```bash
+# Start a local server with SQLite backend
+npx mondodb serve --port 27017 --backend sqlite
+
+# Connect with mongosh
+mongosh mongodb://localhost:27017/mydb
+```
+
+---
+
+## Examples
+
+### Vector Search (Semantic Similarity)
 
 ```typescript
-import { MongoClient } from 'mondodb';
+// Create a vector index
+await collection.createIndex({ embedding: 'vector' }, {
+  vectorOptions: { dimensions: 1024, metric: 'cosine' }
+})
 
-// Connect to your mondodb instance
-const client = new MongoClient('http://localhost:8787');
-const db = client.db('myDatabase');
-const collection = db.collection('users');
-
-// Insert documents
-await collection.insertOne({ name: 'Alice', age: 30 });
-await collection.insertMany([
-  { name: 'Bob', age: 25 },
-  { name: 'Charlie', age: 35 }
-]);
-
-// Find documents
-const user = await collection.findOne({ name: 'Alice' });
-const adults = await collection.find({ age: { $gte: 18 } }).toArray();
-
-// Update documents
-await collection.updateOne(
-  { name: 'Alice' },
-  { $set: { age: 31 } }
-);
-
-// Aggregation pipeline
+// Search by similarity
 const results = await collection.aggregate([
-  { $match: { age: { $gte: 25 } } },
-  { $group: { _id: null, avgAge: { $avg: '$age' } } }
-]).toArray();
-
-// Delete documents
-await collection.deleteOne({ name: 'Charlie' });
+  {
+    $vectorSearch: {
+      queryVector: await getEmbedding('machine learning tutorials'),
+      path: 'embedding',
+      numCandidates: 100,
+      limit: 10
+    }
+  },
+  { $project: { title: 1, score: { $meta: 'vectorSearchScore' } } }
+]).toArray()
 ```
 
-## Supported Operations
+### Full-Text Search
 
-### CRUD Operations
+```typescript
+// Create a text index
+await collection.createIndex({ title: 'text', content: 'text' })
 
-- `insertOne`, `insertMany`
-- `findOne`, `find`
-- `updateOne`, `updateMany`
-- `deleteOne`, `deleteMany`
-- `replaceOne`
-- `countDocuments`, `estimatedDocumentCount`
-- `distinct`
+// Search with scoring
+const results = await collection.aggregate([
+  {
+    $search: {
+      text: { query: 'serverless database', path: ['title', 'content'] },
+      highlight: { path: 'content' }
+    }
+  }
+]).toArray()
+```
 
-### Aggregation Stages
+### AI Agent with MCP
 
-- `$match` - Filter documents
-- `$project` - Reshape documents
-- `$group` - Group documents and compute aggregates
-- `$sort` - Sort documents
-- `$limit` - Limit number of documents
-- `$skip` - Skip documents
-- `$unwind` - Deconstruct arrays
-- `$lookup` - Join with another collection
-- `$facet` - Multi-faceted aggregation
-- `$addFields` / `$set` - Add new fields
-- `$count` - Count documents
-- `$bucket` / `$bucketAuto` - Categorize documents
+```typescript
+import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+import Anthropic from '@anthropic-ai/sdk'
 
-### Index Operations
+const server = createMcpServer({ dbAccess })
+const adapter = createAnthropicAdapter({ server })
+await adapter.initialize()
 
-- `createIndex`
-- `createIndexes`
-- `dropIndex`
-- `dropIndexes`
-- `listIndexes`
+const client = new Anthropic()
+const response = await client.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  tools: await adapter.getTools(),
+  messages: [{ role: 'user', content: 'Find all orders over $1000' }]
+})
+```
+
+### AgentFS — Virtual Filesystem for AI
+
+```typescript
+import { MonDoAgent } from 'mondodb/agentfs'
+
+const agent = new MonDoAgent(db)
+
+// Glob pattern matching
+const files = await agent.glob('src/**/*.ts')
+
+// Content search
+const matches = await agent.grep('TODO', { path: 'src/', type: 'ts' })
+
+// Key-value store with TTL
+await agent.kv.set('session:123', { user: 'alice' }, { ttl: 3600 })
+
+// Immutable audit log
+await agent.auditLog.append({
+  action: 'file_read',
+  path: '/src/index.ts',
+  agent: 'claude'
+})
+```
+
+### Real-Time Change Streams
+
+```typescript
+const changeStream = collection.watch([
+  { $match: { operationType: { $in: ['insert', 'update'] } } }
+])
+
+for await (const change of changeStream) {
+  console.log('Change detected:', change.operationType, change.documentKey)
+  await notifySubscribers(change)
+}
+```
+
+### Transactions
+
+```typescript
+const session = client.startSession()
+
+await session.withTransaction(async () => {
+  await accounts.updateOne({ userId: 'alice' }, { $inc: { balance: -100 } }, { session })
+  await accounts.updateOne({ userId: 'bob' }, { $inc: { balance: 100 } }, { session })
+})
+```
+
+### Geospatial Queries
+
+```typescript
+// Create 2dsphere index
+await places.createIndex({ location: '2dsphere' })
+
+// Find nearby locations
+const nearby = await places.find({
+  location: {
+    $near: {
+      $geometry: { type: 'Point', coordinates: [-73.97, 40.77] },
+      $maxDistance: 5000 // 5km
+    }
+  }
+}).toArray()
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Client Applications                           │
+├─────────────────┬─────────────────┬─────────────────┬───────────────────┤
+│   MongoDB       │   HTTP/RPC      │   WebSocket     │  Service Binding  │
+│   Wire Protocol │   JSON-RPC      │   Real-time     │  Worker-to-Worker │
+├─────────────────┴─────────────────┴─────────────────┴───────────────────┤
+│                         MondoDB Worker (Edge)                           │
+├─────────────────────────────────────────────────────────────────────────┤
+│  Query Translator  │  Aggregation Engine  │  MCP Server  │  AgentFS     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                      Durable Objects (SQLite Storage)                   │
+├──────────────────────────┬──────────────────────────────────────────────┤
+│     Vectorize            │           R2 / OLAP (Coming Soon)            │
+│  (Vector Embeddings)     │    (ClickHouse, Iceberg, Data Catalog)       │
+└──────────────────────────┴──────────────────────────────────────────────┘
+```
+
+MondoDB translates MongoDB queries to SQLite at runtime:
+
+1. **Query Translation** — MongoDB operators → SQLite SQL with full expression support
+2. **Durable Object Storage** — Each database runs as an isolated Durable Object with SQLite
+3. **Edge Execution** — Queries execute at the edge, close to your users
+4. **Optional Integrations** — Vectorize for embeddings, R2 for large objects, ClickHouse for analytics
+
+---
+
+## Connectivity Options
+
+### Wire Protocol (MongoDB Compatible)
+
+Connect using MongoDB Compass, mongosh, or any MongoDB driver:
+
+```bash
+# Local development
+npx mondodb serve --port 27017
+
+# Connect with mongosh
+mongosh mongodb://localhost:27017/mydb
+
+# Connect with Compass
+# Use connection string: mongodb://localhost:27017
+```
+
+### HTTP RPC
+
+```typescript
+// Direct HTTP calls
+const response = await fetch('https://your-worker.workers.dev/rpc', {
+  method: 'POST',
+  body: JSON.stringify({
+    method: 'find',
+    params: ['mydb', 'users', { active: true }]
+  })
+})
+
+// Batch requests
+const batch = await fetch('https://your-worker.workers.dev/rpc/batch', {
+  method: 'POST',
+  body: JSON.stringify([
+    { id: '1', method: 'find', params: ['mydb', 'users', {}] },
+    { id: '2', method: 'count', params: ['mydb', 'orders', {}] }
+  ])
+})
+```
+
+### Service Bindings (Zero Latency)
+
+```typescript
+// In your consuming worker
+export default {
+  async fetch(request: Request, env: Env) {
+    const users = await env.MONDO.find('mydb', 'users', { active: true })
+    return Response.json(users)
+  }
+}
+```
+
+---
 
 ## Configuration
 
-### Environment Variables
+### With Vector Search
 
-Configure your mondodb worker with these environment bindings:
-
-```toml
-[vars]
-# Optional: Configure database settings
-MONDO_MAX_BATCH_SIZE = 1000
+```jsonc
+{
+  "vectorize": {
+    "bindings": [{ "binding": "VECTORIZE", "index_name": "embeddings" }]
+  },
+  "ai": { "binding": "AI" },
+  "vars": {
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "EMBEDDING_ENABLED": "true"
+  }
+}
 ```
 
-### Durable Object Bindings
+### With $function Operator
 
-```toml
-[[durable_objects.bindings]]
-name = "MONDO_DATABASE"
-class_name = "MondoDatabase"
+```jsonc
+{
+  "compatibility_flags": ["nodejs_compat", "enable_ctx_exports"],
+  "worker_loaders": [{ "binding": "LOADER" }]
+}
 ```
+
+---
+
+## Documentation
+
+Comprehensive guides are available at [docs/](docs/):
+
+| Guide | Description |
+|-------|-------------|
+| [CRUD Operations](docs/content/docs/guides/crud.mdx) | Insert, find, update, delete operations |
+| [Aggregation](docs/content/docs/guides/aggregation.mdx) | Pipeline stages and expressions |
+| [Vector Search](docs/content/docs/guides/vector-search.mdx) | Semantic similarity with Vectorize |
+| [Full-Text Search](docs/content/docs/guides/full-text-search.mdx) | FTS5-powered text search |
+| [AgentFS](docs/content/docs/guides/agentfs.mdx) | Virtual filesystem for AI agents |
+| [MCP Protocol](docs/content/docs/guides/mcp-protocol.mdx) | Model Context Protocol integration |
+| [Wire Protocol](docs/content/docs/guides/wire-protocol.mdx) | MongoDB-compatible TCP server |
+| [Transactions](docs/content/docs/guides/transactions.mdx) | Multi-document ACID transactions |
+| [Change Streams](docs/content/docs/guides/change-streams.mdx) | Real-time change notifications |
+| [Geospatial](docs/content/docs/guides/geospatial.mdx) | Location-based queries |
+| [Indexing](docs/content/docs/guides/indexing.mdx) | Index types and optimization |
+| [Studio UI](docs/content/docs/guides/studio.mdx) | Web-based database browser |
+| [CLI Server](docs/content/docs/guides/cli.mdx) | Local development server |
+| [Cloudflare Workers](docs/content/docs/guides/cloudflare-workers.mdx) | Deployment guide |
+
+---
+
+## Roadmap
+
+### Coming Soon
+
+- **OLAP Analytics** — ClickHouse integration with Apache Iceberg and R2 Data Catalog
+- **$olap Stage** — Run analytics queries against columnar storage
+- **CDC Streaming** — Change data capture to ClickHouse for real-time analytics
+- **Multi-Region** — Cross-region replication with conflict resolution
+
+---
 
 ## Development
 
@@ -154,26 +402,24 @@ npm test
 # Build
 npm run build
 
-# Start local development server
+# Local development
 npm run dev
 ```
 
-## Architecture
-
-mondodb translates MongoDB queries into SQLite queries at runtime:
-
-1. **Query Translation** - MongoDB queries are parsed and converted to equivalent SQLite statements
-2. **Durable Object Storage** - Each database is backed by a Cloudflare Durable Object with SQLite
-3. **RPC Communication** - Clients communicate with the worker via HTTP/WebSocket RPC
+---
 
 ## License
 
-MIT - see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE)
+
+---
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/nathanclevenger/mondodb).
+Contributions welcome! Please open an issue or submit a pull request.
 
-## Author
+---
 
-Nathan Clevenger
+<p align="center">
+  <strong>Built for the edge. Designed for AI.</strong>
+</p>
