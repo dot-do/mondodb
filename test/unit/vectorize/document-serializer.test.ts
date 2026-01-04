@@ -3,7 +3,7 @@ import {
   DocumentSerializer,
   type SerializerOptions,
   type SerializedDocument
-} from '../../../src/embedding/document-serializer'
+} from '../../../src/vectorize/document-serializer'
 
 describe('DocumentSerializer', () => {
   let serializer: DocumentSerializer

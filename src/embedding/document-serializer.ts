@@ -67,6 +67,11 @@ function shouldExcludeField(fieldName: string, additionalExcludes: string[] = []
 
 /**
  * Filter document fields based on inclusion/exclusion rules
+ *
+ * maxDepth controls how many levels deep we traverse:
+ * - maxDepth 0: only top-level primitives
+ * - maxDepth 1: top-level + one level of nesting
+ * - maxDepth 2: top-level + two levels of nesting
  */
 function filterDocument(
   doc: Record<string, unknown>,
@@ -88,26 +93,24 @@ function filterDocument(
 
     // Handle nested objects
     if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      if (currentDepth < maxDepth) {
+      // Only recurse if we haven't reached maxDepth
+      if (currentDepth + 1 < maxDepth) {
         const filtered = filterDocument(value as Record<string, unknown>, options, currentDepth + 1);
-        if (Object.keys(filtered).length > 0) {
-          result[key] = filtered;
-        } else {
-          // Include empty object as placeholder to show nesting exists
-          result[key] = '[nested]';
-        }
+        // Include the key even if filtered is empty (shows structure exists)
+        result[key] = Object.keys(filtered).length > 0 ? filtered : '...';
       } else {
-        // At maxDepth, include a placeholder to indicate truncation
-        result[key] = '[nested]';
+        // At maxDepth - don't recurse further, just indicate truncation
+        result[key] = '...';
       }
     } else if (Array.isArray(value)) {
       // Handle arrays - filter nested objects within arrays
       const filteredArray = value.map(item => {
         if (item !== null && typeof item === 'object' && !(item instanceof Date)) {
-          if (currentDepth < maxDepth) {
-            return filterDocument(item as Record<string, unknown>, options, currentDepth + 1);
+          if (currentDepth + 1 < maxDepth) {
+            const filtered = filterDocument(item as Record<string, unknown>, options, currentDepth + 1);
+            return Object.keys(filtered).length > 0 ? filtered : '...';
           }
-          return '[nested]'; // Placeholder for nested objects at max depth
+          return '...'; // Truncated at maxDepth
         }
         return item;
       });
@@ -119,6 +122,48 @@ function filterDocument(
       // Primitive values or dates
       result[key] = value;
     }
+  }
+
+  return result;
+}
+
+/**
+ * Extract only primitive values from an object (no nested objects)
+ */
+function extractPrimitives(
+  doc: Record<string, unknown>,
+  excludeFields: string[] = [],
+  includeFields?: string[]
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(doc)) {
+    // Check inclusion/exclusion
+    if (includeFields && includeFields.length > 0) {
+      if (!includeFields.includes(key)) {
+        continue;
+      }
+    } else if (shouldExcludeField(key, excludeFields)) {
+      continue;
+    }
+
+    // Only include primitives, arrays of primitives, and dates
+    if (value === null || value === undefined) {
+      continue;
+    } else if (typeof value !== 'object') {
+      result[key] = value;
+    } else if (value instanceof Date) {
+      result[key] = value;
+    } else if (Array.isArray(value)) {
+      // Only include array if it contains primitives
+      const primitiveItems = value.filter(item =>
+        item === null || typeof item !== 'object' || item instanceof Date
+      );
+      if (primitiveItems.length > 0) {
+        result[key] = primitiveItems;
+      }
+    }
+    // Skip nested objects
   }
 
   return result;

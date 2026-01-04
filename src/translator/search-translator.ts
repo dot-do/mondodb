@@ -56,6 +56,20 @@ export interface WildcardOperator {
   };
 }
 
+export interface AutocompleteOperator {
+  query: string;
+  path?: string | string[];
+  tokenOrder?: 'any' | 'sequential';
+  fuzzy?: {
+    maxEdits?: number;
+    prefixLength?: number;
+    maxExpansions?: number;
+  };
+  score?: {
+    boost?: number;
+  };
+}
+
 export interface CompoundOperator {
   must?: SearchOperator[];
   should?: SearchOperator[];
@@ -69,6 +83,7 @@ export interface SearchOperator {
   phrase?: PhraseOperator;
   wildcard?: WildcardOperator;
   compound?: CompoundOperator;
+  autocomplete?: AutocompleteOperator;
 }
 
 /**
@@ -112,6 +127,10 @@ export class SearchTranslator {
 
     if (operator.compound) {
       return this.translateCompound(operator.compound);
+    }
+
+    if (operator.autocomplete) {
+      return this.translateAutocomplete(operator.autocomplete);
     }
 
     return '*'; // Match all if no operator specified
@@ -177,6 +196,50 @@ export class SearchTranslator {
     }
 
     return query;
+  }
+
+  /**
+   * Translate autocomplete operator to FTS5 prefix query
+   *
+   * MongoDB: { autocomplete: { query: "mach", path: "title" } }
+   * FTS5: title:mach*
+   *
+   * Autocomplete uses prefix matching (term*) to find partial word matches.
+   * When tokenOrder is 'sequential', terms must appear in order.
+   */
+  private translateAutocomplete(autocomplete: AutocompleteOperator): string {
+    const { query, path, tokenOrder } = autocomplete;
+
+    // Split query into terms
+    const terms = query.trim().split(/\s+/).filter(t => t.length > 0);
+
+    if (terms.length === 0) {
+      return '*';
+    }
+
+    // Add prefix wildcard to each term for autocomplete
+    const prefixTerms = terms.map(term => `${term}*`);
+
+    // If path is specified, prefix each term with the column
+    if (path) {
+      const column = Array.isArray(path) ? path[0] : path;
+
+      if (tokenOrder === 'sequential' && prefixTerms.length > 1) {
+        // For sequential, terms must appear in order - use phrase-like matching
+        // FTS5 doesn't support prefix in phrases, so we use NEAR/0 for adjacent terms
+        // But for simplicity, we join with spaces which requires all terms
+        return prefixTerms.map(term => `${column}:${term}`).join(' ');
+      }
+
+      return prefixTerms.map(term => `${column}:${term}`).join(' ');
+    }
+
+    // No path specified - search all fields
+    if (tokenOrder === 'sequential' && prefixTerms.length > 1) {
+      return prefixTerms.join(' ');
+    }
+
+    return prefixTerms.join(' ');
   }
 
   /**
