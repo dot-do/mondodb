@@ -708,8 +708,36 @@ export class MondoDatabase {
         }
       }
 
+      // Database/collection listing endpoints (don't require collection parameter)
+      // Support both /listDatabases and /internal/listDatabases for compatibility
+      if (request.method === 'POST' && (path === '/listDatabases' || path === '/internal/listDatabases')) {
+        // In MondoDatabase, each Durable Object instance represents a database
+        // Return a single database entry - the actual database name is determined by the DO binding
+        return new Response(JSON.stringify([{ name: 'default', sizeOnDisk: 0, empty: false }]), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (request.method === 'POST' && (path === '/listCollections' || path === '/internal/listCollections')) {
+        // Get all collections from the collections table
+        const sql = this.state.storage.sql;
+        const result = sql.exec(`SELECT name FROM collections`).toArray() as { name: string }[];
+        const collections = result.map((row) => ({
+          name: row.name,
+          type: 'collection' as const,
+          options: {},
+        }));
+        return new Response(JSON.stringify(collections), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       // CRUD endpoints
+      // Support both /method and /internal/method for compatibility
       if (request.method === 'POST') {
+        // Normalize path by removing /internal/ prefix if present
+        const normalizedPath = path.replace(/^\/internal/, '');
+
         const body = await request.json() as Record<string, unknown>;
         const collection = body.collection as string;
 
@@ -720,35 +748,35 @@ export class MondoDatabase {
           });
         }
 
-        if (path === '/insertOne') {
+        if (normalizedPath === '/insertOne') {
           const result = await this.insertOne(collection, body.document as Document || {});
           return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/insertMany') {
+        if (normalizedPath === '/insertMany') {
           const result = await this.insertMany(collection, body.documents as Document[] || []);
           return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/findOne') {
+        if (normalizedPath === '/findOne') {
           const result = await this.findOne(collection, body.filter as Document || {});
-          return new Response(JSON.stringify({ document: result }), {
+          return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/find') {
+        if (normalizedPath === '/find') {
           const result = await this.find(collection, body.filter as Document || {});
-          return new Response(JSON.stringify({ documents: result }), {
+          return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/updateOne') {
+        if (normalizedPath === '/updateOne') {
           const result = await this.updateOne(
             collection,
             body.filter as Document || {},
@@ -759,30 +787,30 @@ export class MondoDatabase {
           });
         }
 
-        if (path === '/deleteOne') {
+        if (normalizedPath === '/deleteOne') {
           const result = await this.deleteOne(collection, body.filter as Document || {});
           return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/deleteMany') {
+        if (normalizedPath === '/deleteMany') {
           const result = await this.deleteMany(collection, body.filter as Document || {});
           return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/countDocuments') {
+        if (normalizedPath === '/countDocuments') {
           const result = await this.countDocuments(collection, body.filter as Document || {});
-          return new Response(JSON.stringify({ count: result }), {
+          return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
-        if (path === '/aggregate') {
+        if (normalizedPath === '/aggregate') {
           const result = await this.aggregate(collection, body.pipeline as PipelineStage[] || []);
-          return new Response(JSON.stringify({ documents: result }), {
+          return new Response(JSON.stringify(result), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
