@@ -171,8 +171,8 @@ describe('CLI Argument Parsing', () => {
       })
 
       it('parses --data=PATH format', () => {
-        const options = parseArgs(['--data=/var/mondodb'])
-        expect(options.dataDir).toBe('/var/mondodb')
+        const options = parseArgs(['--data=/var/mongo.do'])
+        expect(options.dataDir).toBe('/var/mongo.do')
       })
 
       it('parses --data PATH format with space', () => {
@@ -191,8 +191,8 @@ describe('CLI Argument Parsing', () => {
       })
 
       it('handles absolute paths', () => {
-        const options = parseArgs(['--data=/home/user/mondodb'])
-        expect(options.dataDir).toBe('/home/user/mondodb')
+        const options = parseArgs(['--data=/home/user/mongo.do'])
+        expect(options.dataDir).toBe('/home/user/mongo.do')
       })
     })
 
@@ -213,13 +213,13 @@ describe('CLI Argument Parsing', () => {
       })
 
       it('parses -r URL short form', () => {
-        const options = parseArgs(['-r', 'https://mondodb.workers.dev'])
-        expect(options.remote).toBe('https://mondodb.workers.dev')
+        const options = parseArgs(['-r', 'https://mongo.do.workers.dev'])
+        expect(options.remote).toBe('https://mongo.do.workers.dev')
       })
 
       it('accepts URLs with paths', () => {
-        const options = parseArgs(['--remote=https://api.example.com/mondodb'])
-        expect(options.remote).toBe('https://api.example.com/mondodb')
+        const options = parseArgs(['--remote=https://api.example.com/mongo.do'])
+        expect(options.remote).toBe('https://api.example.com/mongo.do')
       })
 
       it('accepts URLs with ports', () => {
@@ -284,12 +284,12 @@ describe('CLI Argument Parsing', () => {
         const options = parseArgs([
           '--port=27018',
           '--host=0.0.0.0',
-          '--data=/var/lib/mondodb',
+          '--data=/var/lib/mongo.do',
           '--verbose',
         ])
         expect(options.port).toBe(27018)
         expect(options.host).toBe('0.0.0.0')
-        expect(options.dataDir).toBe('/var/lib/mondodb')
+        expect(options.dataDir).toBe('/var/lib/mongo.do')
         expect(options.verbose).toBe(true)
         expect(options.remote).toBeUndefined()
         expect(options.help).toBe(false)
@@ -488,7 +488,7 @@ describe('CLI Option Validation', () => {
     describe('dataDir validation', () => {
       it('accepts valid paths', () => {
         expect(validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
-        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: '/var/lib/mondodb', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: '/var/lib/mongo.do', verbose: false, help: false }).valid).toBe(true)
       })
 
       it('returns error for empty dataDir', () => {
@@ -557,7 +557,7 @@ describe('Backend Selection', () => {
           dataDir: './data',
           verbose: false,
           help: false,
-          remote: 'https://custom-mondodb.workers.dev',
+          remote: 'https://custom-mongo.do.workers.dev',
         })
 
         expect(backend).toBeDefined()
@@ -967,7 +967,7 @@ describe('Error Handling', () => {
       const controller = await runServer({
         port: 27086,
         host: 'localhost',
-        dataDir: '/tmp/mondodb-test-' + Date.now(),
+        dataDir: '/tmp/mongo.do-test-' + Date.now(),
         verbose: false,
         help: false,
       })
@@ -1130,13 +1130,13 @@ describe('Output Messages', () => {
       printStartupMessage({
         port: 27017,
         host: 'localhost',
-        dataDir: '/var/lib/mondodb',
+        dataDir: '/var/lib/mongo.do',
         verbose: false,
         help: false,
       })
 
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n')
-      expect(output).toContain('/var/lib/mondodb')
+      expect(output).toContain('/var/lib/mongo.do')
     })
 
     it('includes remote URL for proxy mode', () => {

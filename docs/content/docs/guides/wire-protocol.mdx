@@ -5,7 +5,7 @@ description: MongoDB wire protocol support for Compass, mongosh, and native driv
 
 # Wire Protocol
 
-MondoDB includes a MongoDB-compatible wire protocol server that enables connections from standard MongoDB tools and drivers. This allows you to use MongoDB Compass, mongosh, and any MongoDB driver with MondoDB for local development, debugging, and testing.
+mongo.do includes a MongoDB-compatible wire protocol server that enables connections from standard MongoDB tools and drivers. This allows you to use MongoDB Compass, mongosh, and any MongoDB driver with mongo.do for local development, debugging, and testing.
 
 ## Overview
 
@@ -21,20 +21,20 @@ The wire protocol implementation provides:
 
 ### Starting the Server
 
-Use the MondoDB CLI to start a local wire protocol server:
+Use the mongo.do CLI to start a local wire protocol server:
 
 ```bash
 # Start with default settings (localhost:27017)
-npx mondodb serve
+npx mongo.do serve
 
 # Specify port and host
-npx mondodb serve --port 27018 --host 0.0.0.0
+npx mongo.do serve --port 27018 --host 0.0.0.0
 
 # With authentication
-npx mondodb serve --auth --username admin --password secret
+npx mongo.do serve --auth --username admin --password secret
 
 # With TLS
-npx mondodb serve --tls --cert ./server.crt --key ./server.key
+npx mongo.do serve --tls --cert ./server.crt --key ./server.key
 ```
 
 ### Connecting with MongoDB Compass
@@ -60,10 +60,10 @@ mongosh mongodb://admin:secret@localhost:27017/admin
 ### ServerOptions
 
 ```typescript
-import { WireProtocolServer, createServer } from 'mondodb/wire'
-import { LocalSQLiteBackend } from 'mondodb/wire'
+import { WireProtocolServer, createServer } from 'mongo.do/wire'
+import { LocalSQLiteBackend } from 'mongo.do/wire'
 
-const backend = new LocalSQLiteBackend('.mondodb')
+const backend = new LocalSQLiteBackend('.mongodo')
 
 const server = new WireProtocolServer(backend, {
   port: 27017,        // Port to listen on (default: 27017)
@@ -81,9 +81,9 @@ await server.start()
 For convenience, use the `createServer` function:
 
 ```typescript
-import { createServer, LocalSQLiteBackend } from 'mondodb/wire'
+import { createServer, LocalSQLiteBackend } from 'mongo.do/wire'
 
-const backend = new LocalSQLiteBackend('.mondodb')
+const backend = new LocalSQLiteBackend('.mongodo')
 const server = await createServer(backend, {
   port: 27017,
   host: 'localhost',
@@ -112,7 +112,7 @@ console.log(server.connectionString) // mongodb://localhost:27017
 Enable TLS for secure connections:
 
 ```typescript
-import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+import { WireProtocolServer, LocalSQLiteBackend } from 'mongo.do/wire'
 
 const server = new WireProtocolServer(backend, {
   port: 27017,
@@ -152,7 +152,7 @@ For local development, generate self-signed certificates:
 # Generate CA private key and certificate
 openssl genrsa -out ca.key 4096
 openssl req -new -x509 -days 365 -key ca.key -out ca.crt \
-  -subj "/CN=MondoDB CA"
+  -subj "/CN=mongo.do CA"
 
 # Generate server private key and CSR
 openssl genrsa -out server.key 2048
@@ -177,12 +177,12 @@ mongosh "mongodb://localhost:27017" --tls --tlsCAFile ./ca.crt
 
 ## Authentication
 
-MondoDB supports SCRAM-SHA-256 authentication, the same mechanism used by MongoDB.
+mongo.do supports SCRAM-SHA-256 authentication, the same mechanism used by MongoDB.
 
 ### Enabling Authentication
 
 ```typescript
-import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+import { WireProtocolServer, LocalSQLiteBackend } from 'mongo.do/wire'
 
 const server = new WireProtocolServer(backend, {
   port: 27017,
@@ -231,7 +231,7 @@ All other commands (CRUD, aggregation, admin) require authentication when enable
 
 ### SCRAM-SHA-256 Implementation
 
-MondoDB implements SCRAM-SHA-256 per RFC 5802 and RFC 7677:
+mongo.do implements SCRAM-SHA-256 per RFC 5802 and RFC 7677:
 
 1. **Client initiates** with username and random nonce
 2. **Server responds** with salt, iteration count, and combined nonce
@@ -239,7 +239,7 @@ MondoDB implements SCRAM-SHA-256 per RFC 5802 and RFC 7677:
 4. **Server verifies** and returns signature
 
 ```typescript
-import { createScramCredentials, InMemoryCredentialsProvider } from 'mondodb/wire'
+import { createScramCredentials, InMemoryCredentialsProvider } from 'mongo.do/wire'
 
 // Create credentials programmatically
 const credentials = await createScramCredentials(
@@ -312,14 +312,14 @@ interface MondoBackend {
 The built-in SQLite backend for local development:
 
 ```typescript
-import { LocalSQLiteBackend } from 'mondodb/wire'
+import { LocalSQLiteBackend } from 'mongo.do/wire'
 
 // Create backend with data directory
-const backend = new LocalSQLiteBackend('.mondodb')
+const backend = new LocalSQLiteBackend('.mongodo')
 
 // Each database is stored as a separate SQLite file
-// .mondodb/mydb.sqlite
-// .mondodb/analytics.sqlite
+// .mongodo/mydb.sqlite
+// .mongodo/analytics.sqlite
 ```
 
 ### Implementing Custom Backends
@@ -327,7 +327,7 @@ const backend = new LocalSQLiteBackend('.mondodb')
 Create custom backends for different storage systems:
 
 ```typescript
-import type { MondoBackend, DatabaseInfo, CollectionInfo } from 'mondodb/wire'
+import type { MondoBackend, DatabaseInfo, CollectionInfo } from 'mongo.do/wire'
 
 class MyCustomBackend implements MondoBackend {
   async listDatabases(): Promise<DatabaseInfo[]> {
@@ -405,7 +405,7 @@ const server = new WireProtocolServer(new MyCustomBackend(), {
 
 ## CLI Usage
 
-The MondoDB CLI provides convenient commands for the wire protocol server:
+The mongo.do CLI provides convenient commands for the wire protocol server:
 
 ### serve
 
@@ -413,13 +413,13 @@ Start the wire protocol server:
 
 ```bash
 # Basic usage
-npx mondodb serve
+npx mongo.do serve
 
 # All options
-npx mondodb serve \
+npx mongo.do serve \
   --port 27017 \
   --host localhost \
-  --data .mondodb \
+  --data .mongodo \
   --verbose \
   --auth \
   --username admin \
@@ -436,7 +436,7 @@ npx mondodb serve \
 |--------|---------|-------------|
 | `--port, -p` | `27017` | Port to listen on |
 | `--host, -h` | `localhost` | Host to bind to |
-| `--data, -d` | `.mondodb` | Data directory for SQLite files |
+| `--data, -d` | `.mongodo` | Data directory for SQLite files |
 | `--verbose, -v` | `false` | Enable verbose logging |
 | `--auth` | `false` | Enable authentication |
 | `--username, -u` | - | Authentication username |
@@ -451,7 +451,7 @@ npx mondodb serve \
 ### Server Setup
 
 ```typescript
-import { WireProtocolServer, LocalSQLiteBackend } from 'mondodb/wire'
+import { WireProtocolServer, LocalSQLiteBackend } from 'mongo.do/wire'
 
 const backend = new LocalSQLiteBackend('./data')
 

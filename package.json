@@ -1,16 +1,16 @@
 {
-  "name": "mondodb",
-  "version": "0.1.0",
+  "name": "mongo.do",
+  "version": "0.1.1",
   "description": "MongoDB-compatible database backed by Cloudflare Durable Objects SQLite",
   "author": "Nathan Clevenger",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nathanclevenger/mondodb.git"
+    "url": "git+https://github.com/nathanclevenger/mongo.do.git"
   },
   "bugs": {
-    "url": "https://github.com/nathanclevenger/mondodb/issues"
+    "url": "https://github.com/nathanclevenger/mongo.do/issues"
   },
-  "homepage": "https://github.com/nathanclevenger/mondodb#readme",
+  "homepage": "https://github.com/nathanclevenger/mongo.do#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "bin": {
-    "mondodb": "./dist/cli/index.js"
+    "mongo.do": "./dist/cli/index.js"
   },
   "exports": {
     ".": {
@@ -29,7 +29,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
     "dev": "wrangler dev",
     "start": "bun run src/cli/index.ts",
     "start:verbose": "bun run src/cli/index.ts --verbose",
@@ -64,6 +64,7 @@
     "jsdom": "^27.4.0",
     "mongodb": "^7.0.0",
     "mongodb-memory-server": "^11.0.1",
+    "tsup": "^8.5.1",
     "typescript": "^5.6.0",
     "vitest": "^3.2.4",
     "wrangler": "^4.54.0"

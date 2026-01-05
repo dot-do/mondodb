@@ -2,7 +2,7 @@
 
 **MongoDB on the Edge** — A MongoDB-compatible database that runs entirely on Cloudflare Workers, with native AI agent support, vector search, and real-time analytics.
 
-[![npm version](https://img.shields.io/npm/v/mondodb.svg)](https://www.npmjs.com/package/mondodb)
+[![npm version](https://img.shields.io/npm/v/mongo.do.svg)](https://www.npmjs.com/package/mongo.do)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -18,7 +18,7 @@ Traditional databases require infrastructure management, connection pooling, and
 - **Serverless Economics** — Pay only for what you use, scale to zero
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 const client = new MongoClient('https://your-worker.workers.dev')
 const db = client.db('myapp')
@@ -67,7 +67,7 @@ const user = await users.findOne({ email: 'alice@example.com' })
 | Feature | Description |
 |---------|-------------|
 | **Studio UI** | Web-based database browser with query editor and document management |
-| **CLI Server** | Local development with `npx mondodb serve --backend sqlite` |
+| **CLI Server** | Local development with `npx mongo.do serve --backend sqlite` |
 | **TypeScript** | Full type definitions with generics support |
 
 ---
@@ -77,14 +77,14 @@ const user = await users.findOne({ email: 'alice@example.com' })
 ### Install
 
 ```bash
-npm install mondodb
+npm install mongo.do
 ```
 
 ### Deploy to Cloudflare Workers
 
 ```typescript
 // src/index.ts
-import { MondoEntrypoint, MondoDatabase } from 'mondodb'
+import { MondoEntrypoint, MondoDatabase } from 'mongo.do'
 
 export { MondoDatabase }
 export default MondoEntrypoint
@@ -93,7 +93,7 @@ export default MondoEntrypoint
 ```jsonc
 // wrangler.jsonc
 {
-  "name": "my-mondodb",
+  "name": "my-mongo.do",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -112,7 +112,7 @@ npx wrangler deploy
 
 ```bash
 # Start a local server with SQLite backend
-npx mondodb serve --port 27017 --backend sqlite
+npx mongo.do serve --port 27017 --backend sqlite
 
 # Connect with mongosh
 mongosh mongodb://localhost:27017/mydb
@@ -164,7 +164,7 @@ const results = await collection.aggregate([
 ### AI Agent with MCP
 
 ```typescript
-import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+import { createMcpServer, createAnthropicAdapter } from 'mongo.do/mcp'
 import Anthropic from '@anthropic-ai/sdk'
 
 const server = createMcpServer({ dbAccess })
@@ -182,7 +182,7 @@ const response = await client.messages.create({
 ### AgentFS — Virtual Filesystem for AI
 
 ```typescript
-import { MonDoAgent } from 'mondodb/agentfs'
+import { MonDoAgent } from 'mongo.do/agentfs'
 
 const agent = new MonDoAgent(db)
 
@@ -283,7 +283,7 @@ Connect using MongoDB Compass, mongosh, or any MongoDB driver:
 
 ```bash
 # Local development
-npx mondodb serve --port 27017
+npx mongo.do serve --port 27017
 
 # Connect with mongosh
 mongosh mongodb://localhost:27017/mydb

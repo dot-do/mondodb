@@ -5,7 +5,7 @@
  * Covers type conversion, nested objects, arrays, and type preservation
  * for MongoDB-compatible data structures.
  *
- * Issue: mondodb-vyf4
+ * Issue: mongo.do-vyf4
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

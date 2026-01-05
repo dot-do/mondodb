@@ -1,8 +1,8 @@
 /**
- * Anthropic MCP Adapter for MondoDB AgentFS
+ * Anthropic MCP Adapter for mongo.do AgentFS
  *
  * Provides MCP tool definitions and handlers for AgentFS operations.
- * Enables Claude and other Anthropic models to use MondoDB tools via MCP.
+ * Enables Claude and other Anthropic models to use mongo.do tools via MCP.
  *
  * Features:
  * - Full MCP protocol compliance
@@ -14,7 +14,7 @@
  *
  * @example
  * ```typescript
- * import { createMonDoMcpServer } from '@mondodb/agentfs/adapters/anthropic'
+ * import { createMonDoMcpServer } from '@mongo.do/agentfs/adapters/anthropic'
  *
  * const server = createMonDoMcpServer({
  *   fs: new AgentFilesystem(db),
@@ -134,7 +134,7 @@ export interface StreamingConfig {
  * Options for creating the adapter
  */
 export interface AdapterOptions {
-  /** Server name (default: 'mondodb-agentfs') */
+  /** Server name (default: 'mongo.do-agentfs') */
   name?: string
   /** Server version (default: '1.0.0') */
   version?: string
@@ -324,7 +324,7 @@ export class AnthropicMCPAdapter {
   constructor(provider: AgentFSProvider, options: AdapterOptions = {}) {
     this.provider = provider
     this.options = {
-      name: options.name ?? 'mondodb-agentfs',
+      name: options.name ?? 'mongo.do-agentfs',
       version: options.version ?? '1.0.0',
       enableAudit: options.enableAudit ?? false,
       retry: { ...DEFAULT_RETRY_CONFIG, ...options.retry },

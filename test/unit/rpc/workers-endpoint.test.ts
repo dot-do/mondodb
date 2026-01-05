@@ -1,7 +1,7 @@
 /**
  * Workers RPC Endpoint Tests (RED Phase)
  *
- * Issue: mondodb-kn5n
+ * Issue: mongo.do-kn5n
  *
  * Tests for the Workers RPC endpoint that handles all MondoBackend method calls.
  * These tests verify:
@@ -175,7 +175,7 @@ import { createRpcHandler, type RpcHandler, type RpcEnv } from '../../../src/rpc
 // Test Suite: Workers RPC Endpoint
 // ============================================================================
 
-describe('Workers RPC Endpoint (mondodb-kn5n)', () => {
+describe('Workers RPC Endpoint (mongo.do-kn5n)', () => {
   let handler: RpcHandler
   let mockEnv: ReturnType<typeof createMockEnv>
   let mockCtx: ReturnType<typeof createMockContext>

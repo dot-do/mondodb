@@ -87,7 +87,7 @@ export function ConnectionPage() {
   } = useConnectionStore()
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
-  const [url, setUrl] = useState('mondodb://localhost')
+  const [url, setUrl] = useState('mongodo://localhost')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -113,7 +113,7 @@ export function ConnectionPage() {
     <div className={pageStyles}>
       <div className={headerStyles}>
         <H2>Connections</H2>
-        <Body>Connect to a mondodb instance to get started</Body>
+        <Body>Connect to a mongo.do instance to get started</Body>
       </div>
 
       {error && (
@@ -162,13 +162,13 @@ export function ConnectionPage() {
           <H3>New Connection</H3>
           <TextInput
             label="Connection Name"
-            placeholder="My mondodb Instance"
+            placeholder="My mongo.do Instance"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <TextInput
             label="Connection URL"
-            placeholder="mondodb://localhost"
+            placeholder="mongodo://localhost"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />

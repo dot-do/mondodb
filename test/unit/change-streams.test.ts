@@ -23,7 +23,7 @@ describe('ChangeStream', () => {
   let collection: MongoCollection<{ _id?: ObjectId; name: string; value?: number }>
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     db = client.db('testdb')
     collection = db.collection('changestream_test')

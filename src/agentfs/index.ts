@@ -1,7 +1,7 @@
 /**
  * AgentFS - Virtual Filesystem for AI Agents
  *
- * A MondoDB-backed virtual filesystem for storing and managing
+ * A mongo.do-backed virtual filesystem for storing and managing
  * files, key-value pairs, and tool call records for AI agents.
  */
 

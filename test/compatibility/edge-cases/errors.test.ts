@@ -1,14 +1,14 @@
 /**
  * Error Codes and Messages Compatibility Tests
  *
- * Verifies that mondodb returns similar error codes/messages as MongoDB for various error conditions.
+ * Verifies that mongo.do returns similar error codes/messages as MongoDB for various error conditions.
  * Tests duplicate key errors (11000), invalid queries, invalid update operators, and more.
  *
  * These tests document both:
- * 1. Cases where mondodb matches MongoDB error behavior (passing tests)
- * 2. Cases where mondodb differs from MongoDB (failing tests that need implementation)
+ * 1. Cases where mongo.do matches MongoDB error behavior (passing tests)
+ * 2. Cases where mongo.do differs from MongoDB (failing tests that need implementation)
  *
- * @see bead mondodb-4r9
+ * @see bead mongo.do-4r9
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -18,17 +18,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('Error Codes and Messages Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('Error Codes and Messages Compatibility', () => {
     const dbName = `test_errors_${testNum}`
     return {
       mongoCol: mongodb.database(dbName).collection('items'),
-      mondoCol: mondodb.database(dbName).collection('items'),
+      mondoCol: mongo.do.database(dbName).collection('items'),
     }
   }
 
@@ -74,7 +74,7 @@ describe('Error Codes and Messages Compatibility', () => {
     it('insertOne with duplicate _id throws error code 11000', async () => {
       const { mondoCol } = getCollections()
 
-      // Test mondodb duplicate key handling (MongoDB tested separately due to ObjectId type issues)
+      // Test mongo.do duplicate key handling (MongoDB tested separately due to ObjectId type issues)
       const id = new ObjectId()
       await mondoCol.insertOne({ _id: id, name: 'first' })
 
@@ -149,7 +149,7 @@ describe('Error Codes and Messages Compatibility', () => {
     it('MongoDB duplicate key error code matches (reference test)', async () => {
       // This test documents the expected MongoDB behavior
       // The error code 11000 is the MongoDB standard for duplicate key errors
-      // mondodb should match this behavior, which is verified in the tests above
+      // mongo.do should match this behavior, which is verified in the tests above
       const { mongoCol } = getCollections()
 
       // Insert a document with auto-generated _id
@@ -189,13 +189,13 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
       expect(mongoError.message.toLowerCase()).toMatch(/unknown|bad/i)
 
-      // Document current mondodb behavior
-      // TODO: mondodb should throw similar error for unknown operators
+      // Document current mongo.do behavior
+      // TODO: mongo.do should throw similar error for unknown operators
       if (mondoError) {
         expect(mondoError.message.toLowerCase()).toMatch(/unknown|invalid|operator/i)
       } else {
-        // Currently mondodb is permissive - document this gap
-        console.log('COMPAT GAP: mondodb does not throw for unknown query operators')
+        // Currently mongo.do is permissive - document this gap
+        console.log('COMPAT GAP: mongo.do does not throw for unknown query operators')
       }
     })
 
@@ -231,11 +231,11 @@ describe('Error Codes and Messages Compatibility', () => {
       // MongoDB throws for unknown update operators
       expect(mongoError).toBeDefined()
 
-      // Document current mondodb behavior
+      // Document current mongo.do behavior
       if (mondoError) {
         expect(mondoError).toBeDefined()
       } else {
-        console.log('COMPAT GAP: mondodb does not throw for unknown update operators')
+        console.log('COMPAT GAP: mongo.do does not throw for unknown update operators')
       }
     })
 
@@ -254,11 +254,11 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
       expect(mongoError.message.toLowerCase()).toMatch(/numeric|type|increment/i)
 
-      // Document current mondodb behavior
+      // Document current mongo.do behavior
       if (mondoError) {
         expect(mondoError.message.toLowerCase()).toMatch(/numeric|type|increment/i)
       } else {
-        console.log('COMPAT GAP: mondodb does not throw for $inc on non-numeric field')
+        console.log('COMPAT GAP: mongo.do does not throw for $inc on non-numeric field')
       }
     })
 
@@ -277,11 +277,11 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
       expect(mongoError.message.toLowerCase()).toMatch(/array|type|\$push/i)
 
-      // Document current mondodb behavior
+      // Document current mongo.do behavior
       if (mondoError) {
         expect(mondoError.message.toLowerCase()).toMatch(/array|type|\$push/i)
       } else {
-        console.log('COMPAT GAP: mondodb does not throw for $push on non-array field')
+        console.log('COMPAT GAP: mongo.do does not throw for $push on non-array field')
       }
     })
 
@@ -299,7 +299,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for $pop on non-array field')
+        console.log('COMPAT GAP: mongo.do does not throw for $pop on non-array field')
       }
     })
 
@@ -317,7 +317,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for $addToSet on non-array field')
+        console.log('COMPAT GAP: mongo.do does not throw for $addToSet on non-array field')
       }
     })
 
@@ -335,7 +335,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for $mul on non-numeric field')
+        console.log('COMPAT GAP: mongo.do does not throw for $mul on non-numeric field')
       }
     })
 
@@ -355,7 +355,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for mixed update operators and replacement')
+        console.log('COMPAT GAP: mongo.do does not throw for mixed update operators and replacement')
       }
     })
   })
@@ -376,11 +376,11 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
       expect(mongoError.message.toLowerCase()).toMatch(/unknown|unrecognized|stage/i)
 
-      // Document current mondodb behavior
+      // Document current mongo.do behavior
       if (mondoError) {
         expect(mondoError.message.toLowerCase()).toMatch(/unknown|stage/i)
       } else {
-        console.log('COMPAT GAP: mondodb does not throw for unknown aggregation stage')
+        console.log('COMPAT GAP: mongo.do does not throw for unknown aggregation stage')
       }
     })
 
@@ -451,9 +451,9 @@ describe('Error Codes and Messages Compatibility', () => {
 
       // Both should either reject or accept consistently
       if (mongoError) {
-        // MongoDB rejects - mondodb should too
+        // MongoDB rejects - mongo.do should too
         if (!mondoError) {
-          console.log('COMPAT GAP: mondodb allows field names starting with $')
+          console.log('COMPAT GAP: mongo.do allows field names starting with $')
         }
       }
     })
@@ -507,9 +507,9 @@ describe('Error Codes and Messages Compatibility', () => {
       // MongoDB throws for negative skip
       expect(mongoError).toBeDefined()
 
-      // Document current mondodb behavior
+      // Document current mongo.do behavior
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for negative skip')
+        console.log('COMPAT GAP: mongo.do does not throw for negative skip')
       }
     })
   })
@@ -531,7 +531,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError.message.toLowerCase()).toMatch(/replace|operator|\$|update/i)
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb allows update operators in replaceOne')
+        console.log('COMPAT GAP: mongo.do allows update operators in replaceOne')
       }
     })
 
@@ -550,7 +550,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb allows replacement documents in updateOne')
+        console.log('COMPAT GAP: mongo.do allows replacement documents in updateOne')
       }
     })
   })
@@ -560,7 +560,7 @@ describe('Error Codes and Messages Compatibility', () => {
       const { mondoCol } = getCollections()
       const id = new ObjectId()
 
-      // Test mondodb bulk write duplicate key handling
+      // Test mongo.do bulk write duplicate key handling
       let mondoError: any
       try {
         await mondoCol.bulkWrite([
@@ -613,7 +613,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb does not throw for unknown operators in findOneAndUpdate')
+        console.log('COMPAT GAP: mongo.do does not throw for unknown operators in findOneAndUpdate')
       }
     })
 
@@ -631,7 +631,7 @@ describe('Error Codes and Messages Compatibility', () => {
       expect(mongoError).toBeDefined()
 
       if (!mondoError) {
-        console.log('COMPAT GAP: mondodb allows update operators in findOneAndReplace')
+        console.log('COMPAT GAP: mongo.do allows update operators in findOneAndReplace')
       }
     })
   })

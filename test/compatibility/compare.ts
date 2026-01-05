@@ -1,6 +1,6 @@
 /**
  * Comparison utilities for compatibility testing
- * Deep compares MongoDB and mondodb results with special handling for ObjectIds
+ * Deep compares MongoDB and mongo.do results with special handling for ObjectIds
  */
 
 import { ObjectId } from '../../src/types/objectid'
@@ -27,7 +27,7 @@ export interface Difference {
   type: 'missing' | 'extra' | 'value_mismatch' | 'type_mismatch'
   /** Value from MongoDB (expected) */
   expected: unknown
-  /** Value from mondodb (actual) */
+  /** Value from mongo.do (actual) */
   actual: unknown
   /** Human-readable description */
   message: string
@@ -45,7 +45,7 @@ export interface ComparisonResult {
 // ============================================================================
 
 /**
- * Compare MongoDB result (expected) with mondodb result (actual)
+ * Compare MongoDB result (expected) with mongo.do result (actual)
  */
 export function compareResults<T>(
   mongoResult: T,

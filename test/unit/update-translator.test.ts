@@ -9,7 +9,7 @@ describe('UpdateTranslator', () => {
   });
 
   // ============================================================
-  // FIELD UPDATE OPERATORS (mondodb-fuq)
+  // FIELD UPDATE OPERATORS (mongo.do-fuq)
   // ============================================================
   describe('Field Update Operators', () => {
     describe('$set operator', () => {
@@ -336,7 +336,7 @@ describe('UpdateTranslator', () => {
   });
 
   // ============================================================
-  // ARRAY UPDATE OPERATORS (mondodb-iua)
+  // ARRAY UPDATE OPERATORS (mongo.do-iua)
   // ============================================================
   describe('Array Update Operators', () => {
     describe('$push operator', () => {

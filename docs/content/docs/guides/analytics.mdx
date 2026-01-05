@@ -1,11 +1,11 @@
 ---
 title: Analytics Layer
-description: Run analytical queries on your MondoDB data using ClickHouse with Apache Iceberg
+description: Run analytical queries on your mongo.do data using ClickHouse with Apache Iceberg
 ---
 
 # Analytics Layer
 
-MondoDB includes an integrated analytics layer that streams your operational data to ClickHouse via Change Data Capture (CDC), enabling real-time analytical queries on Apache Iceberg tables stored in R2.
+mongo.do includes an integrated analytics layer that streams your operational data to ClickHouse via Change Data Capture (CDC), enabling real-time analytical queries on Apache Iceberg tables stored in R2.
 
 ## Overview
 
@@ -13,7 +13,7 @@ The analytics architecture separates operational (OLTP) and analytical (OLAP) wo
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              MondoDB (OLTP)                                 │
+│                              mongo.do (OLTP)                                 │
 │                         Durable Objects + SQLite                            │
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │
@@ -94,7 +94,7 @@ Use `$analytics` when you need:
 
 ### Query Routing
 
-The `$analytics` stage is transparent — you write MongoDB-style pipelines, and MondoDB translates them to optimized ClickHouse SQL:
+The `$analytics` stage is transparent — you write MongoDB-style pipelines, and mongo.do translates them to optimized ClickHouse SQL:
 
 ```typescript
 // This MongoDB-style pipeline...
@@ -138,7 +138,7 @@ CDC automatically streams document changes to the analytics layer.
 
 ### How It Works
 
-1. **Capture** — Every insert, update, and delete in MondoDB generates a CDC event
+1. **Capture** — Every insert, update, and delete in mongo.do generates a CDC event
 2. **Buffer** — Events are batched for efficiency (configurable batch size)
 3. **Deliver** — Cloudflare Pipelines reliably delivers events to ClickHouse
 4. **Ingest** — ClickHouse ingests events into Iceberg tables via S3Queue
@@ -192,7 +192,7 @@ await db.command({
   "pipelines": [
     {
       "binding": "CDC_PIPELINE",
-      "pipeline": "mondodb-cdc"
+      "pipeline": "mongo.do-cdc"
     }
   ]
 }
@@ -211,7 +211,7 @@ await db.command({
 
 ## Apache Iceberg Integration
 
-MondoDB stores analytical data in Apache Iceberg format on R2.
+mongo.do stores analytical data in Apache Iceberg format on R2.
 
 ### Why Iceberg?
 
@@ -244,7 +244,7 @@ r2://my-bucket/iceberg/
 ### Connecting to Iceberg
 
 ```typescript
-import { createIcebergConnection } from 'mondodb/olap'
+import { createIcebergConnection } from 'mongo.do/olap'
 
 const iceberg = await createIcebergConnection({
   host: 'your-clickhouse-host.com',
@@ -306,7 +306,7 @@ The R2 Data Catalog provides schema management and table discovery.
 ### Catalog Operations
 
 ```typescript
-import { R2DataCatalog } from 'mondodb/olap'
+import { R2DataCatalog } from 'mongo.do/olap'
 
 const catalog = new R2DataCatalog({
   bucket: env.R2_BUCKET,
@@ -367,7 +367,7 @@ Execute analytical queries directly on ClickHouse.
 ### Query Executor
 
 ```typescript
-import { ClickHouseQueryExecutor } from 'mondodb/olap'
+import { ClickHouseQueryExecutor } from 'mongo.do/olap'
 
 const executor = new ClickHouseQueryExecutor(icebergConnection)
 
@@ -416,7 +416,7 @@ const result = await executor.executeWithParams<{ userId: string; total: number 
 ### Query Builder
 
 ```typescript
-import { createQueryBuilder } from 'mondodb/olap'
+import { createQueryBuilder } from 'mongo.do/olap'
 
 const query = createQueryBuilder(icebergConnection)
   .select(['userId', 'sum(amount) as totalSpent', 'count(*) as orderCount'])
@@ -483,7 +483,7 @@ await executor.cancel('my-query-123')
 
 ```jsonc
 {
-  "name": "mondodb-analytics",
+  "name": "mongo.do-analytics",
   "compatibility_flags": ["nodejs_compat"],
 
   // Durable Objects for OLTP
@@ -493,12 +493,12 @@ await executor.cancel('my-query-123')
 
   // R2 for Iceberg storage
   "r2_buckets": [
-    { "binding": "R2_BUCKET", "bucket_name": "mondodb-iceberg" }
+    { "binding": "R2_BUCKET", "bucket_name": "mongo.do-iceberg" }
   ],
 
   // Pipeline for CDC
   "pipelines": [
-    { "binding": "CDC_PIPELINE", "pipeline": "mondodb-cdc" }
+    { "binding": "CDC_PIPELINE", "pipeline": "mongo.do-cdc" }
   ],
 
   // Environment variables
@@ -517,7 +517,7 @@ Create the Iceberg catalog in ClickHouse:
 ```sql
 -- Create R2 Iceberg catalog
 CREATE DATABASE IF NOT EXISTS r2_catalog
-ENGINE = Iceberg('https://your-account.r2.cloudflarestorage.com/mondodb-iceberg', 'access_key', 'secret_key')
+ENGINE = Iceberg('https://your-account.r2.cloudflarestorage.com/mongo.do-iceberg', 'access_key', 'secret_key')
 SETTINGS
   catalog_type = 'rest',
   storage_endpoint = 'https://your-account.r2.cloudflarestorage.com';
@@ -533,7 +533,7 @@ CREATE TABLE cdc_queue (
   before String,
   after String
 ) ENGINE = S3Queue(
-  'https://your-account.r2.cloudflarestorage.com/mondodb-cdc/*',
+  'https://your-account.r2.cloudflarestorage.com/mongo.do-cdc/*',
   'access_key', 'secret_key',
   'JSONEachRow'
 )

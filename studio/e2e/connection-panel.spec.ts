@@ -18,8 +18,8 @@ test.describe('Connection Panel - Connect Flow', () => {
     // Clear localStorage to ensure clean state
     await page.goto('/')
     await page.evaluate(() => {
-      localStorage.removeItem('mondodb-connections')
-      localStorage.removeItem('mondodb-recent-connections')
+      localStorage.removeItem('mongo.do-connections')
+      localStorage.removeItem('mongo.do-recent-connections')
     })
     await page.reload()
   })
@@ -30,8 +30,8 @@ test.describe('Connection Panel - Connect Flow', () => {
     // Should show the main connection panel
     await expect(page.getByTestId('connection-panel')).toBeVisible()
 
-    // Should display the mondodb Studio title
-    await expect(page.getByText('mondodb Studio')).toBeVisible()
+    // Should display the mongo.do Studio title
+    await expect(page.getByText('mongo.do Studio')).toBeVisible()
 
     // Should show disconnected status
     await expect(page.getByText('Disconnected')).toBeVisible()
@@ -76,11 +76,11 @@ test.describe('Connection Panel - Connect Flow', () => {
     // Fill in connection URI
     const uriInput = page.getByTestId('connection-uri-input')
     await uriInput.clear()
-    await uriInput.fill('mondodb://localhost:27017')
+    await uriInput.fill('mongodo://localhost:27017')
 
     // Verify values were entered
     await expect(nameInput).toHaveValue('Local Development')
-    await expect(uriInput).toHaveValue('mondodb://localhost:27017')
+    await expect(uriInput).toHaveValue('mongodo://localhost:27017')
 
     // Click connect button
     await page.getByTestId('connect-button').click()
@@ -108,7 +108,7 @@ test.describe('Connection Panel - Connect Flow', () => {
 
     // Enter connection URI
     const quickInput = page.getByTestId('quick-connect-input')
-    await quickInput.fill('mondodb://localhost:27017/testdb')
+    await quickInput.fill('mongodo://localhost:27017/testdb')
 
     // Click connect
     await page.getByTestId('quick-connect-button').click()
@@ -128,7 +128,7 @@ test.describe('Connection Panel - Connect Flow', () => {
         {
           id: 'saved-conn-1',
           name: 'Saved Connection',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           database: 'testdb',
@@ -139,7 +139,7 @@ test.describe('Connection Panel - Connect Flow', () => {
           updatedAt: new Date().toISOString(),
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -164,7 +164,7 @@ test.describe('Connection Panel - Connect Flow', () => {
 
     // Quick connect to a database
     await page.getByTestId('tab-quick').click()
-    await page.getByTestId('quick-connect-input').fill('mondodb://localhost:27017/mydb')
+    await page.getByTestId('quick-connect-input').fill('mongodo://localhost:27017/mydb')
     await page.getByTestId('quick-connect-button').click()
 
     // Wait for connection
@@ -185,7 +185,7 @@ test.describe('Connection Panel - Connect Flow', () => {
 
     // Quick connect first
     await page.getByTestId('tab-quick').click()
-    await page.getByTestId('quick-connect-input').fill('mondodb://localhost:27017')
+    await page.getByTestId('quick-connect-input').fill('mongodo://localhost:27017')
     await page.getByTestId('quick-connect-button').click()
 
     // Wait for connection
@@ -206,7 +206,7 @@ test.describe('Connection Panel - Connect Flow', () => {
 
     // Quick connect
     await page.getByTestId('tab-quick').click()
-    await page.getByTestId('quick-connect-input').fill('mondodb://localhost:27017')
+    await page.getByTestId('quick-connect-input').fill('mongodo://localhost:27017')
     await page.getByTestId('quick-connect-button').click()
 
     // Wait for connection
@@ -224,7 +224,7 @@ test.describe('Connection Panel - Connect Flow', () => {
 
     // Quick connect
     await page.getByTestId('tab-quick').click()
-    await page.getByTestId('quick-connect-input').fill('mondodb://localhost:27017')
+    await page.getByTestId('quick-connect-input').fill('mongodo://localhost:27017')
     await page.getByTestId('quick-connect-button').click()
 
     // Wait for connection
@@ -241,8 +241,8 @@ test.describe('Connection Panel - Error Handling', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => {
-      localStorage.removeItem('mondodb-connections')
-      localStorage.removeItem('mondodb-recent-connections')
+      localStorage.removeItem('mongo.do-connections')
+      localStorage.removeItem('mongo.do-recent-connections')
     })
     await page.reload()
   })
@@ -275,7 +275,7 @@ test.describe('Connection Panel - Error Handling', () => {
     // Enter URI with unreachable host
     const uriInput = page.getByTestId('connection-uri-input')
     await uriInput.clear()
-    await uriInput.fill('mondodb://nonexistent-host.invalid:27017')
+    await uriInput.fill('mongodo://nonexistent-host.invalid:27017')
 
     // Try to connect
     await page.getByTestId('connect-button').click()
@@ -298,7 +298,7 @@ test.describe('Connection Panel - Error Handling', () => {
     await page.getByTestId('tab-quick').click()
 
     // Try to connect to a port that's not running MongoDB
-    await page.getByTestId('quick-connect-input').fill('mondodb://localhost:39999')
+    await page.getByTestId('quick-connect-input').fill('mongodo://localhost:39999')
     await page.getByTestId('quick-connect-button').click()
 
     // Should show error
@@ -340,7 +340,7 @@ test.describe('Connection Panel - Error Handling', () => {
     // Enter invalid URI
     const uriInput = page.getByTestId('connection-uri-input')
     await uriInput.clear()
-    await uriInput.fill('mondodb://nonexistent:99999')
+    await uriInput.fill('mongodo://nonexistent:99999')
 
     // Click test button
     await page.getByTestId('test-button').click()
@@ -359,7 +359,7 @@ test.describe('Connection Panel - Error Handling', () => {
     // Enter valid URI (assuming local server is running)
     const uriInput = page.getByTestId('connection-uri-input')
     await uriInput.clear()
-    await uriInput.fill('mondodb://localhost:27017')
+    await uriInput.fill('mongodo://localhost:27017')
 
     // Click test button
     await page.getByTestId('test-button').click()
@@ -417,7 +417,7 @@ test.describe('Connection Panel - Error Handling', () => {
 
     // Try to connect to invalid host
     await page.getByTestId('tab-quick').click()
-    await page.getByTestId('quick-connect-input').fill('mondodb://invalid-host:12345')
+    await page.getByTestId('quick-connect-input').fill('mongodo://invalid-host:12345')
     await page.getByTestId('quick-connect-button').click()
 
     // Should show error status in indicator
@@ -430,8 +430,8 @@ test.describe('Connection Panel - Persistence', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => {
-      localStorage.removeItem('mondodb-connections')
-      localStorage.removeItem('mondodb-recent-connections')
+      localStorage.removeItem('mongo.do-connections')
+      localStorage.removeItem('mongo.do-recent-connections')
     })
     await page.reload()
   })
@@ -444,7 +444,7 @@ test.describe('Connection Panel - Persistence', () => {
 
     // Fill in connection details
     await page.getByTestId('connection-name-input').fill('Persistent Connection')
-    await page.getByTestId('connection-uri-input').fill('mondodb://localhost:27017')
+    await page.getByTestId('connection-uri-input').fill('mongodo://localhost:27017')
 
     // Save the connection (not connect)
     await page.getByTestId('save-button').click()
@@ -469,19 +469,19 @@ test.describe('Connection Panel - Persistence', () => {
     // Save first connection
     await page.getByTestId('tab-new').click()
     await page.getByTestId('connection-name-input').fill('Connection One')
-    await page.getByTestId('connection-uri-input').fill('mondodb://localhost:27017')
+    await page.getByTestId('connection-uri-input').fill('mongodo://localhost:27017')
     await page.getByTestId('save-button').click()
 
     // Save second connection
     await page.getByTestId('tab-new').click()
     await page.getByTestId('connection-name-input').fill('Connection Two')
-    await page.getByTestId('connection-uri-input').fill('mondodb://localhost:27018')
+    await page.getByTestId('connection-uri-input').fill('mongodo://localhost:27018')
     await page.getByTestId('save-button').click()
 
     // Save third connection
     await page.getByTestId('tab-new').click()
     await page.getByTestId('connection-name-input').fill('Connection Three')
-    await page.getByTestId('connection-uri-input').fill('mondodb://localhost:27019')
+    await page.getByTestId('connection-uri-input').fill('mongodo://localhost:27019')
     await page.getByTestId('save-button').click()
 
     // Reload page
@@ -501,7 +501,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'recent-1',
           name: 'Recent DB 1',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -511,7 +511,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'recent-2',
           name: 'Recent DB 2',
-          uri: 'mondodb://localhost:27018',
+          uri: 'mongodo://localhost:27018',
           host: 'localhost',
           port: 27018,
           auth: { type: 'none' },
@@ -519,7 +519,7 @@ test.describe('Connection Panel - Persistence', () => {
           lastConnectedAt: new Date(Date.now() - 86400000).toISOString(),
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -539,7 +539,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'recent-fill',
           name: 'Recent Fill',
-          uri: 'mondodb://fillme:27017/testdb',
+          uri: 'mongodo://fillme:27017/testdb',
           host: 'fillme',
           port: 27017,
           auth: { type: 'none' },
@@ -547,7 +547,7 @@ test.describe('Connection Panel - Persistence', () => {
           lastConnectedAt: new Date().toISOString(),
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -558,7 +558,7 @@ test.describe('Connection Panel - Persistence', () => {
     await page.getByTestId('recent-recent-fill').click()
 
     // URI input should be filled
-    await expect(page.getByTestId('quick-connect-input')).toHaveValue('mondodb://fillme:27017/testdb')
+    await expect(page.getByTestId('quick-connect-input')).toHaveValue('mongodo://fillme:27017/testdb')
   })
 
   test('can edit saved connection', async ({ page }) => {
@@ -569,7 +569,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'edit-conn',
           name: 'Edit Me',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -578,7 +578,7 @@ test.describe('Connection Panel - Persistence', () => {
           updatedAt: new Date().toISOString(),
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -617,7 +617,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'delete-me',
           name: 'Delete Me',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -626,14 +626,14 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'keep-me',
           name: 'Keep Me',
-          uri: 'mondodb://localhost:27018',
+          uri: 'mongodo://localhost:27018',
           host: 'localhost',
           port: 27018,
           auth: { type: 'none' },
           tls: { enabled: false },
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -661,14 +661,14 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'dup-original',
           name: 'Original Connection',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
           tls: { enabled: false },
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -696,7 +696,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'fav-conn',
           name: 'Favorite Me',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -704,7 +704,7 @@ test.describe('Connection Panel - Persistence', () => {
           isFavorite: false,
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -730,7 +730,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'persisted-fav',
           name: 'Persisted Favorite',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -740,7 +740,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'not-fav',
           name: 'Not Favorite',
-          uri: 'mondodb://localhost:27018',
+          uri: 'mongodo://localhost:27018',
           host: 'localhost',
           port: 27018,
           auth: { type: 'none' },
@@ -748,7 +748,7 @@ test.describe('Connection Panel - Persistence', () => {
           isFavorite: false,
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -765,11 +765,11 @@ test.describe('Connection Panel - Persistence', () => {
     await page.goto('/')
     await page.evaluate(() => {
       const connections = [
-        { id: 'c1', name: 'Conn 1', uri: 'mondodb://localhost:27017', host: 'localhost', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
-        { id: 'c2', name: 'Conn 2', uri: 'mondodb://localhost:27018', host: 'localhost', port: 27018, auth: { type: 'none' }, tls: { enabled: false } },
-        { id: 'c3', name: 'Conn 3', uri: 'mondodb://localhost:27019', host: 'localhost', port: 27019, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'c1', name: 'Conn 1', uri: 'mongodo://localhost:27017', host: 'localhost', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'c2', name: 'Conn 2', uri: 'mongodo://localhost:27018', host: 'localhost', port: 27018, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'c3', name: 'Conn 3', uri: 'mongodo://localhost:27019', host: 'localhost', port: 27019, auth: { type: 'none' }, tls: { enabled: false } },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -782,11 +782,11 @@ test.describe('Connection Panel - Persistence', () => {
     await page.goto('/')
     await page.evaluate(() => {
       const connections = [
-        { id: 'prod', name: 'Production DB', uri: 'mondodb://prod:27017', host: 'prod', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
-        { id: 'stage', name: 'Staging DB', uri: 'mondodb://stage:27017', host: 'stage', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
-        { id: 'dev', name: 'Development DB', uri: 'mondodb://dev:27017', host: 'dev', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'prod', name: 'Production DB', uri: 'mongodo://prod:27017', host: 'prod', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'stage', name: 'Staging DB', uri: 'mongodo://stage:27017', host: 'stage', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
+        { id: 'dev', name: 'Development DB', uri: 'mongodo://dev:27017', host: 'dev', port: 27017, auth: { type: 'none' }, tls: { enabled: false } },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -808,11 +808,11 @@ test.describe('Connection Panel - Persistence', () => {
     await page.evaluate(() => {
       const now = Date.now()
       const connections = [
-        { id: 'old', name: 'Old Connection', uri: 'mondodb://old:27017', host: 'old', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now - 86400000).toISOString() },
-        { id: 'newest', name: 'Newest Connection', uri: 'mondodb://newest:27017', host: 'newest', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now).toISOString() },
-        { id: 'middle', name: 'Middle Connection', uri: 'mondodb://middle:27017', host: 'middle', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now - 3600000).toISOString() },
+        { id: 'old', name: 'Old Connection', uri: 'mongodo://old:27017', host: 'old', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now - 86400000).toISOString() },
+        { id: 'newest', name: 'Newest Connection', uri: 'mongodo://newest:27017', host: 'newest', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now).toISOString() },
+        { id: 'middle', name: 'Middle Connection', uri: 'mongodo://middle:27017', host: 'middle', port: 27017, auth: { type: 'none' }, tls: { enabled: false }, lastConnectedAt: new Date(now - 3600000).toISOString() },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -829,7 +829,7 @@ test.describe('Connection Panel - Persistence', () => {
   test('empty state shows when no saved connections', async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => {
-      localStorage.removeItem('mondodb-connections')
+      localStorage.removeItem('mongo.do-connections')
     })
     await page.reload()
 
@@ -845,7 +845,7 @@ test.describe('Connection Panel - Persistence', () => {
         {
           id: 'with-time',
           name: 'Timed Connection',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -853,7 +853,7 @@ test.describe('Connection Panel - Persistence', () => {
           lastConnectedAt: new Date().toISOString(),
         },
       ]
-      localStorage.setItem('mondodb-connections', JSON.stringify(connections))
+      localStorage.setItem('mongo.do-connections', JSON.stringify(connections))
     })
     await page.reload()
 
@@ -866,7 +866,7 @@ test.describe('Connection Panel - Advanced Form Fields', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.evaluate(() => {
-      localStorage.removeItem('mondodb-connections')
+      localStorage.removeItem('mongo.do-connections')
     })
     await page.reload()
   })

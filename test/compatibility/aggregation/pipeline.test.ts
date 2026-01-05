@@ -7,7 +7,7 @@
  * - $unwind, $lookup
  * - $addFields, $set
  *
- * Compares mondodb aggregation results against real MongoDB.
+ * Compares mongo.do aggregation results against real MongoDB.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -17,17 +17,17 @@ import { compareResults, assertResultsMatch } from '../compare'
 
 describe('Aggregation Pipeline Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -42,7 +42,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupMatchData = async () => {
       const dbName = `test_agg_match_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'Alice', age: 30, city: 'NYC', active: true },
@@ -161,7 +161,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupProjectData = async () => {
       const dbName = `test_agg_project_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'Alice', age: 30, city: 'NYC', salary: 75000 },
@@ -300,7 +300,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupGroupData = async () => {
       const dbName = `test_agg_group_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('sales')
-      const mondoCol = mondodb.database(dbName).collection('sales')
+      const mondoCol = mongo.do.database(dbName).collection('sales')
 
       const docs = [
         { item: 'apple', quantity: 5, price: 1.5, category: 'fruit' },
@@ -520,7 +520,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupSortData = async () => {
       const dbName = `test_agg_sort_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'Charlie', score: 85 },
@@ -594,7 +594,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupLimitSkipData = async () => {
       const dbName = `test_agg_limit_skip_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { index: 1 }, { index: 2 }, { index: 3 },
@@ -678,7 +678,7 @@ describe('Aggregation Pipeline Compatibility', () => {
         mongoCol.aggregate([{ $limit: 0 }]).toArray()
       ).rejects.toThrow()
 
-      // Note: mondodb currently returns empty array instead of throwing
+      // Note: mongo.do currently returns empty array instead of throwing
       // This is a known compatibility gap - ideally should throw like MongoDB
       const mondoResult = await mondoCol.aggregate([{ $limit: 0 }]).toArray()
       expect(mondoResult.length).toBe(0)
@@ -693,7 +693,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupUnwindData = async () => {
       const dbName = `test_agg_unwind_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'shirt', sizes: ['S', 'M', 'L'] },
@@ -782,9 +782,9 @@ describe('Aggregation Pipeline Compatibility', () => {
       const mongoIndices = mongoDocs.map(d => d.sizeIndex).sort((a, b) => a - b)
       expect(mongoIndices).toEqual([0, 1, 2])
 
-      // Note: mondodb's includeArrayIndex is not yet implemented
+      // Note: mongo.do's includeArrayIndex is not yet implemented
       // Verifying unwind still works, just without the index field
-      // TODO: Implement includeArrayIndex in mondodb $unwind
+      // TODO: Implement includeArrayIndex in mongo.do $unwind
       expect(mondoDocs.every(d => d.sizes !== undefined)).toBe(true)
     })
   })
@@ -797,7 +797,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupLookupData = async () => {
       const dbName = `test_agg_lookup_${testNum}`
       const mongoDb = mongodb.database(dbName)
-      const mondoDb = mondodb.database(dbName)
+      const mondoDb = mongo.do.database(dbName)
       const mongoOrders = mongoDb.collection('orders')
       const mondoOrders = mondoDb.collection('orders')
       const mongoProducts = mongoDb.collection('products')
@@ -894,7 +894,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     it('matches multiple documents from foreign collection', async () => {
       const dbName = `test_agg_lookup_multi_${testNum}`
       const mongoDb = mongodb.database(dbName)
-      const mondoDb = mondodb.database(dbName)
+      const mondoDb = mongo.do.database(dbName)
       const mongoCategories = mongoDb.collection('categories')
       const mondoCategories = mondoDb.collection('categories')
       const mongoItems = mongoDb.collection('items')
@@ -943,7 +943,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupAddFieldsData = async () => {
       const dbName = `test_agg_addfields_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'Widget', price: 100, quantity: 5 },
@@ -1059,7 +1059,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     const setupCombinedData = async () => {
       const dbName = `test_agg_combined_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('sales')
-      const mondoCol = mondodb.database(dbName).collection('sales')
+      const mondoCol = mongo.do.database(dbName).collection('sales')
 
       const docs = [
         { product: 'A', region: 'North', amount: 100 },
@@ -1157,7 +1157,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     it('empty pipeline returns all documents', async () => {
       const dbName = `test_agg_empty_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test' })
       await mondoCol.insertOne({ name: 'test' })
@@ -1172,7 +1172,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     it('aggregation on empty collection returns empty array', async () => {
       const dbName = `test_agg_empty_col_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('empty')
-      const mondoCol = mondodb.database(dbName).collection('empty')
+      const mondoCol = mongo.do.database(dbName).collection('empty')
 
       const mongoDocs = await mongoCol.aggregate([
         { $match: { any: 'filter' } }
@@ -1189,7 +1189,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     it('group on empty result returns empty', async () => {
       const dbName = `test_agg_group_empty_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test' })
       await mondoCol.insertOne({ name: 'test' })
@@ -1211,7 +1211,7 @@ describe('Aggregation Pipeline Compatibility', () => {
     it('handles null values in grouping', async () => {
       const dbName = `test_agg_null_group_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', category: 'cat1' })
       await mongoCol.insertOne({ name: 'B', category: null })
@@ -1238,10 +1238,10 @@ describe('Aggregation Pipeline Compatibility', () => {
       const mongoNullGroup = mongoDocs.find(d => d._id === null)
       expect(mongoNullGroup?.count).toBe(2) // B (null) + C (missing)
 
-      // Note: mondodb may handle null vs missing differently
+      // Note: mongo.do may handle null vs missing differently
       // This documents the current behavior for compatibility tracking
       // MongoDB groups both null and undefined under null _id
-      // Check that mondodb groups at least one under null
+      // Check that mongo.do groups at least one under null
       const mondoNullGroup = mondoDocs.find(d => d._id === null)
       expect(mondoNullGroup).toBeDefined()
       expect(mondoNullGroup?.count).toBeGreaterThanOrEqual(1)

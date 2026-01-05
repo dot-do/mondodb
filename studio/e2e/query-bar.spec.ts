@@ -294,7 +294,7 @@ test.describe('Query Bar - Query History', () => {
     await expect(page.getByTestId('query-bar')).toBeVisible()
 
     // Clear any existing history by clearing localStorage
-    await page.evaluate(() => localStorage.removeItem('mondodb-query-history'))
+    await page.evaluate(() => localStorage.removeItem('mongo.do-query-history'))
     await page.reload()
     await expect(page.getByTestId('query-bar')).toBeVisible()
   })

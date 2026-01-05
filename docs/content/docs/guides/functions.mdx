@@ -5,7 +5,7 @@ description: Execute custom JavaScript functions within aggregation pipelines us
 
 # User-Defined Functions
 
-MondoDB supports the `$function` aggregation operator, allowing you to execute custom JavaScript functions within your aggregation pipelines. This enables complex transformations and computations that cannot be expressed using standard aggregation operators.
+mongo.do supports the `$function` aggregation operator, allowing you to execute custom JavaScript functions within your aggregation pipelines. This enables complex transformations and computations that cannot be expressed using standard aggregation operators.
 
 ## Overview
 
@@ -250,7 +250,7 @@ await collection.aggregate([
 
 ## Batch Execution
 
-For pipelines processing many documents, MondoDB automatically optimizes function execution through batching. This reduces the overhead of creating isolated contexts for each document.
+For pipelines processing many documents, mongo.do automatically optimizes function execution through batching. This reduces the overhead of creating isolated contexts for each document.
 
 The batch mode:
 - Groups multiple document transformations into a single worker invocation

@@ -1,7 +1,7 @@
 /**
  * AgentFS Core Types
  *
- * Virtual filesystem stored in MondoDB collections for AI agent operations.
+ * Virtual filesystem stored in mongo.do collections for AI agent operations.
  */
 
 /**

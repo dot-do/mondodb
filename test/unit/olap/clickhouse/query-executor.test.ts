@@ -5,7 +5,7 @@
  * Covers query execution, result streaming, error handling, connection management,
  * and Worker compatibility.
  *
- * Issue: mondodb-q9le
+ * Issue: mongo.do-q9le
  *
  * These tests verify:
  * - Query execution (simple, parameterized, aggregation, timeout handling)

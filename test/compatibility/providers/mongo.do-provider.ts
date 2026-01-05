@@ -1,10 +1,10 @@
 /**
  * MondoDB Provider
- * Wraps the mondodb in-memory client for compatibility testing
+ * Wraps the mongo.do in-memory client for compatibility testing
  *
  * This provider uses the in-memory MongoDB-compatible implementation from
  * src/client/MongoClient.ts for testing purposes. It implements the TestProvider
- * interface to allow comparison testing between mondodb and real MongoDB.
+ * interface to allow comparison testing between mongo.do and real MongoDB.
  */
 
 import { MongoClient } from '../../../src/client/MongoClient'
@@ -42,7 +42,7 @@ import {
 import { ObjectId } from '../../../src/types/objectid'
 
 /**
- * Wraps mondodb FindCursor to match TestCursor interface
+ * Wraps mongo.do FindCursor to match TestCursor interface
  */
 class MondoDBFindCursor<T> implements TestCursor<T> {
   private cursor: FindCursor<ClientDocument>
@@ -95,12 +95,12 @@ class MondoDBFindCursor<T> implements TestCursor<T> {
   }
 
   async close(): Promise<void> {
-    // mondodb cursors don't need explicit closing
+    // mongo.do cursors don't need explicit closing
   }
 }
 
 /**
- * Wraps mondodb AggregationCursor to match TestCursor interface
+ * Wraps mongo.do AggregationCursor to match TestCursor interface
  */
 class MondoDBAggregationCursor<T> implements TestCursor<T> {
   private cursor: AggregationCursor<ClientDocument>
@@ -255,7 +255,7 @@ class MondoDBAggregationCursor<T> implements TestCursor<T> {
 }
 
 /**
- * Wraps mondodb Collection to match TestCollection interface
+ * Wraps mongo.do Collection to match TestCollection interface
  */
 class MondoDBCollection<T extends Document = Document> implements TestCollection<T> {
   private col: MongoCollection<ClientDocument>
@@ -333,13 +333,13 @@ class MondoDBCollection<T extends Document = Document> implements TestCollection
   }
 
   aggregate<R = Document>(pipeline: Document[]): TestCursor<R> {
-    // Use the mondodb aggregation cursor
+    // Use the mongo.do aggregation cursor
     const cursor = this.col.aggregate(pipeline as any)
     return new MondoDBAggregationCursor<R>(cursor)
   }
 
   async bulkWrite(operations: BulkWriteOperation<T>[], options?: BulkWriteOptions): Promise<BulkWriteResult> {
-    // Convert to mondodb's bulk write format
+    // Convert to mongo.do's bulk write format
     const mondoOps = operations.map(op => {
       if ('insertOne' in op) return op
       if ('updateOne' in op) return op
@@ -386,7 +386,7 @@ class MondoDBCollection<T extends Document = Document> implements TestCollection
 }
 
 /**
- * Wraps mondodb Database to match TestDatabase interface
+ * Wraps mongo.do Database to match TestDatabase interface
  */
 class MondoDBDatabase implements TestDatabase {
   private db: MongoDatabase
@@ -421,24 +421,24 @@ class MondoDBDatabase implements TestDatabase {
  * MondoDB Provider
  *
  * Uses the in-memory MongoDB-compatible client from src/client/MongoClient.ts
- * for compatibility testing. This allows comparing mondodb behavior against
+ * for compatibility testing. This allows comparing mongo.do behavior against
  * real MongoDB using the same test interface.
  */
 export class MondoDBProvider implements TestProvider {
-  readonly name = 'mondodb' as const
+  readonly name = 'mongo.do' as const
   private client: MongoClient | null = null
   private databases: Map<string, MondoDBDatabase> = new Map()
 
   /**
-   * Connect to the mondodb in-memory database
+   * Connect to the mongo.do in-memory database
    *
    * The connection string is used for configuration but actual connections
-   * are handled lazily since mondodb uses Durable Objects as backing store.
+   * are handled lazily since mongo.do uses Durable Objects as backing store.
    */
   async connect(): Promise<void> {
-    // Create a new MongoClient with a mondodb:// URI
+    // Create a new MongoClient with a mongodo:// URI
     // This initializes the in-memory database system
-    this.client = new MongoClient('mondodb://localhost:27017/test')
+    this.client = new MongoClient('mongodo://localhost:27017/test')
     await this.client.connect()
   }
 

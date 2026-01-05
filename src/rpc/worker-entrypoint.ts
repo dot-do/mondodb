@@ -140,7 +140,7 @@ export function validateEnv(env: unknown): boolean {
  * ```toml
  * [[services]]
  * binding = "MONDO"
- * service = "mondodb"
+ * service = "mongo.do"
  * entrypoint = "MondoEntrypoint"
  * ```
  *

@@ -1,7 +1,7 @@
 /**
  * Database Browser Components
  *
- * Components for browsing databases and collections in mondodb Studio.
+ * Components for browsing databases and collections in mongo.do Studio.
  */
 
 export { DatabaseBrowser } from './DatabaseBrowser'

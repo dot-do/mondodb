@@ -97,7 +97,7 @@ describe('MCP Server in Durable Object Context', () => {
   describe('server initialization', () => {
     it('should create server with DO-backed database access', () => {
       expect(server).toBeDefined()
-      expect(server.name).toBe('mondodb')
+      expect(server.name).toBe('mongo.do')
     })
 
     it('should register default tools', async () => {

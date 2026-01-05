@@ -2,7 +2,7 @@
  * MongoDB Compatibility Test Helper
  *
  * This module provides utilities for running compatibility tests between
- * real MongoDB (via MongoMemoryServer) and mondodb.
+ * real MongoDB (via MongoMemoryServer) and mongo.do.
  */
 
 import { MongoMemoryServer } from 'mongodb-memory-server'
@@ -34,7 +34,7 @@ export interface CompatTestContext {
 /**
  * Start the MongoDB compatibility test environment
  *
- * Creates both a real MongoDB instance (via MongoMemoryServer) and a mondodb
+ * Creates both a real MongoDB instance (via MongoMemoryServer) and a mongo.do
  * client, allowing side-by-side comparison of operation results.
  *
  * @param dbName - Database name to use (default: 'compat-test')
@@ -61,8 +61,8 @@ export async function startCompatEnvironment(dbName: string = 'compat-test'): Pr
   await mongoClient.connect()
   const mongoDb = mongoClient.db(dbName)
 
-  // Create mondodb client (uses in-memory storage for testing)
-  const mondoClient = new MondoClient(`mondodb://localhost/${dbName}`)
+  // Create mongo.do client (uses in-memory storage for testing)
+  const mondoClient = new MondoClient(`mongodo://localhost/${dbName}`)
   await mondoClient.connect()
   const mondoDb = mondoClient.db(dbName)
 
@@ -96,17 +96,17 @@ export interface ComparisonResult<T> {
   match: boolean
   /** Result from MongoDB */
   mongoResult: T
-  /** Result from mondodb */
+  /** Result from mongo.do */
   mondoResult: T
   /** Description of any differences */
   differences?: string[]
 }
 
 /**
- * Compare operation results between MongoDB and mondodb
+ * Compare operation results between MongoDB and mongo.do
  *
  * @param mongoResult - Result from real MongoDB
- * @param mondoResult - Result from mondodb
+ * @param mondoResult - Result from mongo.do
  * @param options - Comparison options
  * @returns ComparisonResult with match status and details
  */
@@ -274,7 +274,7 @@ function isObjectIdLike(value: unknown): boolean {
     return true
   }
 
-  // Check for mondodb ObjectId
+  // Check for mongo.do ObjectId
   if ('_hexString' in value) {
     return true
   }
@@ -293,7 +293,7 @@ function getObjectIdString(value: unknown): string {
     return (value as { toHexString: () => string }).toHexString()
   }
 
-  // mondodb ObjectId
+  // mongo.do ObjectId
   if (typeof (value as { toString?: () => string }).toString === 'function') {
     return (value as { toString: () => string }).toString()
   }
@@ -306,7 +306,7 @@ function getObjectIdString(value: unknown): string {
  *
  * @param description - Description of the test
  * @param mongoOp - Operation to run on MongoDB
- * @param mondoOp - Operation to run on mondodb
+ * @param mondoOp - Operation to run on mongo.do
  * @param options - Comparison options
  * @throws Error if results don't match
  */
@@ -330,7 +330,7 @@ export async function assertCompatible<T>(
       `Compatibility test failed: ${description}\n` +
         `Differences:\n  - ${diffStr}\n` +
         `MongoDB result: ${JSON.stringify(mongoResult, null, 2)}\n` +
-        `mondodb result: ${JSON.stringify(mondoResult, null, 2)}`
+        `mongo.do result: ${JSON.stringify(mondoResult, null, 2)}`
     )
   }
 }

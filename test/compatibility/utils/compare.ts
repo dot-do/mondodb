@@ -1,5 +1,5 @@
 /**
- * Comparison utilities for verifying mondodb results match MongoDB results
+ * Comparison utilities for verifying mongo.do results match MongoDB results
  *
  * Features:
  * - Compare documents ignoring _id differences (ObjectId formats may differ)
@@ -76,7 +76,7 @@ export interface Difference {
   type: DifferenceType
   /** Value from MongoDB (expected) */
   expected: unknown
-  /** Value from mondodb (actual) */
+  /** Value from mongo.do (actual) */
   actual: unknown
   /** Human-readable description */
   message: string
@@ -115,10 +115,10 @@ const DEFAULT_OPTIONS: Required<Omit<CompareOptions, 'ignoreFields'>> & { ignore
 // ============================================================================
 
 /**
- * Compare MongoDB result (expected) with mondodb result (actual)
+ * Compare MongoDB result (expected) with mongo.do result (actual)
  *
  * @param expected - The MongoDB result (ground truth)
- * @param actual - The mondodb result to verify
+ * @param actual - The mongo.do result to verify
  * @param options - Comparison options
  * @returns ComparisonResult with match status and differences
  *

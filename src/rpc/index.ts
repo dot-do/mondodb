@@ -1,5 +1,5 @@
 /**
- * RPC layer for mondodb
+ * RPC layer for mongo.do
  *
  * Uses capnweb for efficient serialization between client and Durable Object
  */

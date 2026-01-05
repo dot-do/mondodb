@@ -1,7 +1,7 @@
 /**
  * Database - MongoDB-compatible database interface
  *
- * Represents a database in mondodb and provides access to collections.
+ * Represents a database in mongo.do and provides access to collections.
  */
 
 import type { Env } from '../types/env'

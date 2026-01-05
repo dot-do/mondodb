@@ -179,13 +179,13 @@ describe('AnthropicAdapter tool name transformation', () => {
 
   it('should use custom transformer', async () => {
     const adapter = createTestAdapter({
-      transformToolName: (name) => `mondodb_${name}`,
+      transformToolName: (name) => `mongodo_${name}`,
     })
 
     const tools = await adapter.getTools()
 
     tools.forEach((tool) => {
-      expect(tool.name).toMatch(/^mondodb_/)
+      expect(tool.name).toMatch(/^mongodo_/)
     })
   })
 })

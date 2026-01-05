@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ============================================================================
-// Task mondodb-28p: RPC Server Tests (RED)
+// Task mongo.do-28p: RPC Server Tests (RED)
 // ============================================================================
 
 describe('RPC Server - MondoRpcTarget', () => {
@@ -197,7 +197,7 @@ describe('RPC Server - MondoRpcTarget', () => {
 });
 
 // ============================================================================
-// Task mondodb-0f6: RPC Server Refactoring Tests (Request Batching, Promise Pipelining)
+// Task mongo.do-0f6: RPC Server Refactoring Tests (Request Batching, Promise Pipelining)
 // ============================================================================
 
 describe('RPC Server - Batching and Pipelining', () => {
@@ -300,7 +300,7 @@ describe('RPC Server - Batching and Pipelining', () => {
 });
 
 // ============================================================================
-// Task mondodb-dzz: RPC Client Tests (RED)
+// Task mongo.do-dzz: RPC Client Tests (RED)
 // ============================================================================
 
 describe('RPC Client', () => {
@@ -397,7 +397,7 @@ describe('RPC Client', () => {
 });
 
 // ============================================================================
-// Task mondodb-1sw: RPC Client Refactoring Tests (Auto-reconnection, Deduplication)
+// Task mongo.do-1sw: RPC Client Refactoring Tests (Auto-reconnection, Deduplication)
 // ============================================================================
 
 describe('RPC Client - Auto-reconnection and Deduplication', () => {
@@ -524,7 +524,7 @@ describe('RPC Client - Auto-reconnection and Deduplication', () => {
 });
 
 // ============================================================================
-// Task mondodb-8m3: Workers Entrypoint Tests (RED)
+// Task mongo.do-8m3: Workers Entrypoint Tests (RED)
 // ============================================================================
 
 describe('Workers Entrypoint', () => {
@@ -643,7 +643,7 @@ describe('Workers Entrypoint', () => {
 });
 
 // ============================================================================
-// Task mondodb-i7a: Workers Entrypoint Refactoring Tests (TypeScript Declarations, Environment Safety)
+// Task mongo.do-i7a: Workers Entrypoint Refactoring Tests (TypeScript Declarations, Environment Safety)
 // ============================================================================
 
 describe('Workers Entrypoint - TypeScript and Environment Safety', () => {

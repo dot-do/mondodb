@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * MondoDB Wire Protocol Server
+ * mongo.do Wire Protocol Server
  *
  * Local server for MongoDB Compass and driver compatibility.
  *
@@ -10,7 +10,7 @@
  * Options:
  *   --port=PORT      Port to listen on (default: 27017)
  *   --host=HOST      Host to bind to (default: localhost)
- *   --data=DIR       Data directory (default: .mondodb)
+ *   --data=DIR       Data directory (default: .mongo.do)
  *   --verbose        Enable verbose logging
  *   --help           Show this help
  */
@@ -30,7 +30,7 @@ function parseArgs(): CLIOptions {
   const options: CLIOptions = {
     port: 27017,
     host: 'localhost',
-    dataDir: '.mondodb',
+    dataDir: '.mongo.do',
     verbose: false,
     help: false,
   }
@@ -54,7 +54,7 @@ function parseArgs(): CLIOptions {
 
 function printHelp(): void {
   console.log(`
-MondoDB Wire Protocol Server
+mongo.do Wire Protocol Server
 
 A MongoDB-compatible database backed by SQLite.
 
@@ -64,7 +64,7 @@ Usage:
 Options:
   --port=PORT      Port to listen on (default: 27017)
   --host=HOST      Host to bind to (default: localhost)
-  --data=DIR       Data directory (default: .mondodb)
+  --data=DIR       Data directory (default: .mongo.do)
   --verbose, -v    Enable verbose logging
   --help, -h       Show this help
 

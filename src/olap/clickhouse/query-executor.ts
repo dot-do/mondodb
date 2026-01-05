@@ -4,7 +4,7 @@
  * Worker-compatible query executor using fetch-based HTTP client.
  * Supports query execution, streaming, retry logic, and connection pooling.
  *
- * Issue: mondodb-r1pz
+ * Issue: mongo.do-r1pz
  */
 
 // =============================================================================

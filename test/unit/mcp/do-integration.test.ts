@@ -80,7 +80,7 @@ function createMcpRouteHandler(
   const mcpServer = createMcpServer({
     dbAccess,
     codeLoader: options.codeLoader,
-    name: 'mondodb-do',
+    name: 'mongo.do-do',
     version: '1.0.0',
   })
 
@@ -237,7 +237,7 @@ describe('MCP server lifecycle', () => {
 
     const body = (await initResponse.json()) as McpResponse
     const result = body.result as { serverInfo: { name: string; version: string } }
-    expect(result.serverInfo.name).toBe('mondodb-do')
+    expect(result.serverInfo.name).toBe('mongo.do-do')
     expect(result.serverInfo.version).toBe('1.0.0')
   })
 
@@ -959,7 +959,7 @@ describe('createMondoMcpHandler', () => {
     expect(data.jsonrpc).toBe('2.0')
     expect(data.id).toBe(1)
     expect(data.result).toBeDefined()
-    expect(data.result.serverInfo.name).toBe('mondodb')
+    expect(data.result.serverInfo.name).toBe('mongo.do')
   })
 
   it('should handle tools/list request', async () => {
@@ -1026,7 +1026,7 @@ describe('getMcpServer', () => {
     const server = getMcpServer(mockDb)
 
     expect(server).toBeDefined()
-    expect(server.name).toBe('mondodb')
+    expect(server.name).toBe('mongo.do')
     expect(server.version).toBe('1.0.0')
   })
 

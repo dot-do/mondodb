@@ -4,7 +4,7 @@
  * Comprehensive tests for QueryRouter that routes queries to OLTP/OLAP backends.
  * Tests verify routing logic for various query patterns.
  *
- * Issue: mondodb-aioe
+ * Issue: mongo.do-aioe
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

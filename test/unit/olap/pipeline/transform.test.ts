@@ -7,7 +7,7 @@
  * - SQL generation for ClickHouse ingestion
  * - Partitioning strategies for efficient storage
  *
- * Issue: mondodb-s6mp - Pipeline Integration Tests
+ * Issue: mongo.do-s6mp - Pipeline Integration Tests
  *
  * NOTE: All describe blocks are marked with .skip because the implementations
  * for PipelineTransform, DocumentPartitioner, and CDCTransformPipeline do not

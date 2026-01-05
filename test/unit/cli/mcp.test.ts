@@ -10,7 +10,7 @@
  * - Remote database access (HTTP client to Cloudflare Worker)
  * - Local database access (SQLite backend)
  *
- * Test ID: mondodb-01xs
+ * Test ID: mongo.do-01xs
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest'
@@ -121,7 +121,7 @@ describe('MCP Server Startup', () => {
   describe('startMcpServer()', () => {
     it('should start stdio server with connection string', async () => {
       const options: McpCommandOptions = {
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdin,
         stdout: mockStdout,
       }
@@ -171,7 +171,7 @@ describe('MCP Server Startup', () => {
 
       const options: McpCommandOptions = {
         // Use connection URL (no local SQLite required)
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdinWithCapture,
         stdout: captureStdout,
       }
@@ -216,7 +216,7 @@ describe('Remote Database Access', () => {
   describe('createMcpDatabaseAccess() with connection string', () => {
     it('should create HTTP client for remote database', async () => {
       const dbAccess = await createMcpDatabaseAccess({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
       })
 
       expect(dbAccess).toBeDefined()
@@ -237,7 +237,7 @@ describe('Remote Database Access', () => {
       global.fetch = mockFetch
 
       const dbAccess = await createMcpDatabaseAccess({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
       })
 
       // Make a request
@@ -246,7 +246,7 @@ describe('Remote Database Access', () => {
       // Verify fetch was called with correct URL
       expect(mockFetch).toHaveBeenCalled()
       const fetchCall = mockFetch.mock.calls[0]
-      expect(fetchCall[0]).toContain('my-mondodb.workers.dev')
+      expect(fetchCall[0]).toContain('my-mongo.do.workers.dev')
     })
   })
 })
@@ -260,7 +260,7 @@ describeIfBun('Local Database Access', () => {
   describe('createMcpDatabaseAccess() with local path', () => {
     it('should create SQLite database for local path', async () => {
       const dbAccess = await createMcpDatabaseAccess({
-        local: '/tmp/mondodb-test-mcp.db',
+        local: '/tmp/mongo.do-test-mcp.db',
       })
 
       expect(dbAccess).toBeDefined()
@@ -273,7 +273,7 @@ describeIfBun('Local Database Access', () => {
     })
 
     it('should persist data to local file', async () => {
-      const testDbPath = `/tmp/mondodb-mcp-test-${Date.now()}.db`
+      const testDbPath = `/tmp/mongo.do-mcp-test-${Date.now()}.db`
 
       const dbAccess = await createMcpDatabaseAccess({
         local: testDbPath,
@@ -383,7 +383,7 @@ describe('McpServerController', () => {
       } as unknown as NodeJS.WritableStream
 
       controller = await startMcpServer({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdin,
         stdout: mockStdout,
       })
@@ -405,7 +405,7 @@ describe('McpServerController', () => {
       } as unknown as NodeJS.WritableStream
 
       controller = await startMcpServer({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdin,
         stdout: mockStdout,
       })
@@ -431,7 +431,7 @@ describe('McpServerController', () => {
       } as unknown as NodeJS.WritableStream
 
       controller = await startMcpServer({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdin,
         stdout: mockStdout,
       })
@@ -476,7 +476,7 @@ describe('MCP Command Integration', () => {
 
       // Start the server (use connection URL to avoid Bun dependency)
       const controller = await startMcpServer({
-        connection: 'https://my-mondodb.workers.dev',
+        connection: 'https://my-mongo.do.workers.dev',
         stdin: mockStdin,
         stdout: mockStdout,
       })

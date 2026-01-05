@@ -5,7 +5,7 @@
  * S3Queue enables real-time ingestion from R2/S3 compatible storage
  * into ClickHouse for analytics workloads.
  *
- * Issue: mondodb-968r - ClickHouse S3Queue Real-time Tests
+ * Issue: mongo.do-968r - ClickHouse S3Queue Real-time Tests
  *
  * These tests verify:
  * - CREATE TABLE generation with S3Queue engine
@@ -295,7 +295,7 @@ class S3QueueClient {
 // S3Queue Configuration Builder Tests
 // =============================================================================
 
-describe.skip('S3QueueConfigBuilder', () => {
+describe('S3QueueConfigBuilder', () => {
   let builder: S3QueueConfigBuilder;
 
   beforeEach(() => {
@@ -306,7 +306,7 @@ describe.skip('S3QueueConfigBuilder', () => {
     it('should set R2 endpoint URL', () => {
       const config = builder
         .withEndpoint('https://account-id.r2.cloudflarestorage.com')
-        .withBucket('mondodb-cdc')
+        .withBucket('mongo.do-cdc')
         .withPath('cdc-events/*.parquet')
         .withCredentials('access-key', 'secret-key')
         .withFormat('Parquet')
@@ -608,7 +608,7 @@ describe.skip('S3QueueConfigBuilder', () => {
 // S3Queue Table Generator Tests
 // =============================================================================
 
-describe.skip('S3QueueTableGenerator', () => {
+describe('S3QueueTableGenerator', () => {
   let generator: S3QueueTableGenerator;
 
   beforeEach(() => {
@@ -618,7 +618,7 @@ describe.skip('S3QueueTableGenerator', () => {
   describe('CREATE TABLE generation', () => {
     it('should generate valid CREATE TABLE statement', () => {
       const definition: S3QueueTableDefinition = {
-        database: 'mondodb_analytics',
+        database: 'mongo.do_analytics',
         table: 'cdc_events',
         columns: [
           { name: '_id', type: 'String' },
@@ -629,7 +629,7 @@ describe.skip('S3QueueTableGenerator', () => {
         engine: 'S3Queue',
         settings: {
           endpoint: 'https://account.r2.cloudflarestorage.com',
-          bucket: 'mondodb-cdc',
+          bucket: 'mongo.do-cdc',
           path: 'events/*.parquet',
           accessKeyId: 'access-key',
           secretAccessKey: 'secret-key',
@@ -644,14 +644,14 @@ describe.skip('S3QueueTableGenerator', () => {
 
       const sql = generator.generateCreateTable(definition);
 
-      expect(sql).toContain('CREATE TABLE mondodb_analytics.cdc_events');
+      expect(sql).toContain('CREATE TABLE mongo.do_analytics.cdc_events');
       expect(sql).toContain('_id String');
       expect(sql).toContain('operation');
       expect(sql).toContain('timestamp DateTime64(3)');
       expect(sql).toContain('document String');
       expect(sql).toContain("ENGINE = S3Queue");
       expect(sql).toContain('https://account.r2.cloudflarestorage.com');
-      expect(sql).toContain('mondodb-cdc');
+      expect(sql).toContain('mongo.do-cdc');
       expect(sql).toContain('Parquet');
     });
 
@@ -817,9 +817,9 @@ describe.skip('S3QueueTableGenerator', () => {
 
   describe('DROP TABLE generation', () => {
     it('should generate DROP TABLE statement', () => {
-      const sql = generator.generateDropTable('mondodb_analytics', 'cdc_events');
+      const sql = generator.generateDropTable('mongo.do_analytics', 'cdc_events');
 
-      expect(sql).toBe('DROP TABLE IF EXISTS mondodb_analytics.cdc_events');
+      expect(sql).toBe('DROP TABLE IF EXISTS mongo.do_analytics.cdc_events');
     });
   });
 
@@ -857,7 +857,7 @@ describe.skip('S3QueueTableGenerator', () => {
 // S3Queue Client Tests
 // =============================================================================
 
-describe.skip('S3QueueClient', () => {
+describe('S3QueueClient', () => {
   let client: S3QueueClient;
   let mockConfig: S3QueueConfig;
 
@@ -924,13 +924,13 @@ describe.skip('S3QueueClient', () => {
 // S3Queue with R2 Integration Tests (Mocked)
 // =============================================================================
 
-describe.skip('S3Queue R2 Integration', () => {
+describe('S3Queue R2 Integration', () => {
   describe('R2 bucket configuration', () => {
     it('should handle R2 account ID in endpoint', () => {
       const builder = new S3QueueConfigBuilder();
       const config = builder
         .withEndpoint('https://abc123def456.r2.cloudflarestorage.com')
-        .withBucket('mondodb-cdc-events')
+        .withBucket('mongo.do-cdc-events')
         .withPath('v1/cdc/*.parquet')
         .withCredentials('R2_ACCESS_KEY', 'R2_SECRET_KEY')
         .withFormat('Parquet')

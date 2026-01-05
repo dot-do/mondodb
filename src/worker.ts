@@ -1,5 +1,5 @@
 /**
- * Cloudflare Workers entry point for mondodb
+ * Cloudflare Workers entry point for mongo.do
  *
  * This file exports only what's needed for the worker runtime:
  * - Default export: The main Worker handler with fetch method

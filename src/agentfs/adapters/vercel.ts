@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * import { createAgentFSVercelTools } from '@mondodb/agentfs/adapters/vercel'
+ * import { createAgentFSVercelTools } from '@mongo.do/agentfs/adapters/vercel'
  * import { generateText } from 'ai'
  *
  * const tools = createAgentFSVercelTools({

@@ -211,7 +211,7 @@ export class WireProtocolServer {
         socket: socketHandlers,
         tls: this.buildTlsConfig(tls),
       })
-      console.log(`MondoDB wire protocol server listening on TLS ${host}:${port}`)
+      console.log(`mongo.do wire protocol server listening on TLS ${host}:${port}`)
     } else {
       // Non-TLS mode (default for local development)
       this.server = Bun.listen<SocketData>({
@@ -219,7 +219,7 @@ export class WireProtocolServer {
         port,
         socket: socketHandlers,
       })
-      console.log(`MondoDB wire protocol server listening on TCP ${host}:${port}`)
+      console.log(`mongo.do wire protocol server listening on TCP ${host}:${port}`)
     }
   }
 

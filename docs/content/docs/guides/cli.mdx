@@ -1,11 +1,11 @@
 ---
 title: CLI Server
-description: Run MondoDB locally with the CLI server for development and testing
+description: Run mongo.do locally with the CLI server for development and testing
 ---
 
 # CLI Server
 
-The MondoDB CLI provides a command-line interface for running a MongoDB-compatible wire protocol server locally. It supports two modes of operation: local SQLite storage for development, and remote proxy mode for connecting to Cloudflare Workers deployments.
+The mongo.do CLI provides a command-line interface for running a MongoDB-compatible wire protocol server locally. It supports two modes of operation: local SQLite storage for development, and remote proxy mode for connecting to Cloudflare Workers deployments.
 
 ## Overview
 
@@ -15,18 +15,18 @@ The CLI server speaks the MongoDB wire protocol, allowing you to connect using s
 - **mongosh** - MongoDB Shell
 - **Any MongoDB driver** - Node.js, Python, Go, etc.
 
-This makes MondoDB ideal for local development while maintaining compatibility with your production Cloudflare Workers deployment.
+This makes mongo.do ideal for local development while maintaining compatibility with your production Cloudflare Workers deployment.
 
 ## Installation
 
-Install MondoDB globally or as a project dependency:
+Install mongo.do globally or as a project dependency:
 
 ```bash
 # Global installation
-npm install -g mondodb
+npm install -g mongo.do
 
 # Project dependency
-npm install mondodb
+npm install mongo.do
 ```
 
 ## Quick Start
@@ -34,7 +34,7 @@ npm install mondodb
 Start a local server with default settings:
 
 ```bash
-mondodb serve
+mongo.do serve
 ```
 
 This starts a server on `localhost:27017` using SQLite storage in the `./data` directory.
@@ -48,7 +48,7 @@ mongosh mongodb://localhost:27017
 ## Command-Line Options
 
 ```
-Usage: mondodb serve [options]
+Usage: mongo.do serve [options]
 
 Start a MongoDB wire protocol server backed by SQLite.
 
@@ -80,13 +80,13 @@ The default mode stores data in SQLite databases on your local filesystem. Each 
 
 ```bash
 # Start with default data directory
-mondodb serve
+mongo.do serve
 
 # Use custom data directory
-mondodb serve --data /var/lib/mondodb
+mongo.do serve --data /var/lib/mongo.do
 
 # Custom port and verbose logging
-mondodb serve --port 27018 --verbose
+mongo.do serve --port 27018 --verbose
 ```
 
 ### Data Directory Structure
@@ -120,15 +120,15 @@ Proxy mode forwards all operations to a remote Cloudflare Workers deployment via
 
 ```bash
 # Proxy to Cloudflare Workers
-mondodb serve --remote https://my-mondodb.workers.dev/rpc
+mongo.do serve --remote https://my-mongo.do.workers.dev/rpc
 
 # Proxy with local port customization
-mondodb serve --remote https://my-mondodb.workers.dev/rpc --port 27018 --verbose
+mongo.do serve --remote https://my-mongo.do.workers.dev/rpc --port 27018 --verbose
 ```
 
 ### RPC Endpoint
 
-Your Cloudflare Workers deployment must expose an RPC endpoint. MondoDB automatically handles:
+Your Cloudflare Workers deployment must expose an RPC endpoint. mongo.do automatically handles:
 
 - Request/response serialization
 - Error handling with MongoDB-compatible error codes
@@ -139,13 +139,13 @@ Your Cloudflare Workers deployment must expose an RPC endpoint. MondoDB automati
 
 ```bash
 # Development: Use local SQLite
-mondodb serve
+mongo.do serve
 
 # Staging: Proxy to staging worker
-mondodb serve --remote https://staging.my-mondodb.workers.dev/rpc
+mongo.do serve --remote https://staging.my-mongo.do.workers.dev/rpc
 
 # Production debugging: Proxy with verbose logging
-mondodb serve --remote https://my-mondodb.workers.dev/rpc --verbose
+mongo.do serve --remote https://my-mongo.do.workers.dev/rpc --verbose
 ```
 
 ## Binding to All Interfaces
@@ -154,10 +154,10 @@ By default, the server only accepts connections from localhost. To allow connect
 
 ```bash
 # Bind to all interfaces
-mondodb serve --host 0.0.0.0
+mongo.do serve --host 0.0.0.0
 
 # With custom port
-mondodb serve --host 0.0.0.0 --port 27017
+mongo.do serve --host 0.0.0.0 --port 27017
 ```
 
 **Security Note:** Only bind to `0.0.0.0` in trusted network environments. The CLI server does not enable authentication by default.
@@ -167,13 +167,13 @@ mondodb serve --host 0.0.0.0 --port 27017
 Enable verbose mode to see all commands being executed:
 
 ```bash
-mondodb serve --verbose
+mongo.do serve --verbose
 ```
 
 Output:
 
 ```
-MondoDB v1.0.0
+mongo.do v1.0.0
 MongoDB-compatible database backed by SQLite
 
 Mode: Local/SQLite
@@ -211,7 +211,7 @@ During shutdown:
 
 ```bash
 # Terminal 1: Start the server
-mondodb serve --verbose
+mongo.do serve --verbose
 
 # Terminal 2: Use mongosh
 mongosh mongodb://localhost:27017/myapp
@@ -221,7 +221,7 @@ mongosh mongodb://localhost:27017/myapp
 
 ```bash
 # Start server on test port with isolated data
-mondodb serve --port 27018 --data ./test-data
+mongo.do serve --port 27018 --data ./test-data
 
 # Run tests
 npm test
@@ -232,7 +232,7 @@ rm -rf ./test-data
 
 ### MongoDB Compass Connection
 
-1. Start the CLI server: `mondodb serve`
+1. Start the CLI server: `mongo.do serve`
 2. Open MongoDB Compass
 3. Connect using: `mongodb://localhost:27017`
 4. Browse databases, collections, and documents visually
@@ -251,8 +251,8 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Start MondoDB
-        run: bun run mondodb serve --port 27017 &
+      - name: Start mongo.do
+        run: bun run mongo.do serve --port 27017 &
 
       - name: Wait for server
         run: sleep 2
@@ -296,7 +296,7 @@ Hint: Could not connect to the remote worker.
 You can also use the CLI server programmatically in your Node.js/Bun applications:
 
 ```typescript
-import { parseArgs, runServer, validateOptions } from 'mondodb/cli/server'
+import { parseArgs, runServer, validateOptions } from 'mongo.do/cli/server'
 
 const options = parseArgs(['--port', '27018', '--verbose'])
 validateOptions(options)
@@ -350,4 +350,4 @@ The CLI server has some differences from a full MongoDB deployment:
 - **SQLite query translation** - Some complex queries may behave differently
 - **In-memory aggregation** - Large aggregations load all documents into memory
 
-For production workloads, deploy MondoDB to Cloudflare Workers with Durable Objects.
+For production workloads, deploy mongo.do to Cloudflare Workers with Durable Objects.

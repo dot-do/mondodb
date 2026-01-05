@@ -6,17 +6,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('insertOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -27,7 +27,7 @@ describe('insertOne Compatibility', () => {
     const dbName = `test_insert_${testNum}`
     return {
       mongoCol: mongodb.database(dbName).collection('items'),
-      mondoCol: mondodb.database(dbName).collection('items'),
+      mondoCol: mongo.do.database(dbName).collection('items'),
     }
   }
 
@@ -170,17 +170,17 @@ describe('insertOne Compatibility', () => {
 
 describe('insertMany Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -191,7 +191,7 @@ describe('insertMany Compatibility', () => {
     const dbName = `test_insert_many_${testNum}`
     return {
       mongoCol: mongodb.database(dbName).collection('items'),
-      mondoCol: mondodb.database(dbName).collection('items'),
+      mondoCol: mongo.do.database(dbName).collection('items'),
     }
   }
 

@@ -19,8 +19,8 @@ import {
 
 describe('Connection Types', () => {
   describe('parseConnectionURI', () => {
-    it('parses basic mondodb URI', () => {
-      const result = parseConnectionURI('mondodb://localhost:27017')
+    it('parses basic mongo.do URI', () => {
+      const result = parseConnectionURI('mongodo://localhost:27017')
       expect(result.host).toBe('localhost')
       expect(result.port).toBe(27017)
     })
@@ -32,31 +32,31 @@ describe('Connection Types', () => {
     })
 
     it('parses URI with database name', () => {
-      const result = parseConnectionURI('mondodb://localhost:27017/mydb')
+      const result = parseConnectionURI('mongodo://localhost:27017/mydb')
       expect(result.database).toBe('mydb')
     })
 
     it('parses URI with authentication', () => {
-      const result = parseConnectionURI('mondodb://user:pass@localhost:27017/mydb')
+      const result = parseConnectionURI('mongodo://user:pass@localhost:27017/mydb')
       expect(result.username).toBe('user')
       expect(result.password).toBe('pass')
       expect(result.authType).toBe('basic')
     })
 
     it('parses URI with encoded credentials', () => {
-      const result = parseConnectionURI('mondodb://user%40domain:pass%3Aword@localhost:27017')
+      const result = parseConnectionURI('mongodo://user%40domain:pass%3Aword@localhost:27017')
       expect(result.username).toBe('user@domain')
       expect(result.password).toBe('pass:word')
     })
 
     it('parses URI without port (uses default)', () => {
-      const result = parseConnectionURI('mondodb://myhost/mydb')
+      const result = parseConnectionURI('mongodo://myhost/mydb')
       expect(result.host).toBe('myhost')
       expect(result.port).toBeUndefined()
     })
 
     it('handles custom port', () => {
-      const result = parseConnectionURI('mondodb://localhost:12345')
+      const result = parseConnectionURI('mongodo://localhost:12345')
       expect(result.port).toBe(12345)
     })
 
@@ -66,7 +66,7 @@ describe('Connection Types', () => {
     })
 
     it('parses empty database as undefined', () => {
-      const result = parseConnectionURI('mondodb://localhost:27017/')
+      const result = parseConnectionURI('mongodo://localhost:27017/')
       expect(result.database).toBe('test')
     })
   })
@@ -80,7 +80,7 @@ describe('Connection Types', () => {
       }
       const uri = buildConnectionURI(values)
       // Default database 'test' is included
-      expect(uri).toBe('mondodb://localhost/test')
+      expect(uri).toBe('mongodo://localhost/test')
     })
 
     it('includes custom port with database', () => {
@@ -90,7 +90,7 @@ describe('Connection Types', () => {
         port: 12345,
       }
       const uri = buildConnectionURI(values)
-      expect(uri).toBe('mondodb://localhost:12345/test')
+      expect(uri).toBe('mongodo://localhost:12345/test')
     })
 
     it('includes database name', () => {
@@ -101,7 +101,7 @@ describe('Connection Types', () => {
         database: 'mydb',
       }
       const uri = buildConnectionURI(values)
-      expect(uri).toBe('mondodb://localhost/mydb')
+      expect(uri).toBe('mongodo://localhost/mydb')
     })
 
     it('includes authentication with database', () => {
@@ -115,7 +115,7 @@ describe('Connection Types', () => {
         authSource: '',
       }
       const uri = buildConnectionURI(values)
-      expect(uri).toBe('mondodb://user:pass@localhost/test')
+      expect(uri).toBe('mongodo://user:pass@localhost/test')
     })
 
     it('encodes special characters in credentials', () => {
@@ -217,7 +217,7 @@ describe('Connection Types', () => {
       const saved: SavedConnection = {
         id: 'test-id',
         name: 'Test Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         database: 'testdb',
@@ -243,7 +243,7 @@ describe('Connection Types', () => {
       const saved: SavedConnection = {
         id: 'test-id',
         name: 'Test',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },
@@ -262,7 +262,7 @@ describe('Connection Types', () => {
       const config: ConnectionConfig = {
         id: 'test-id',
         name: 'Test Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         database: 'testdb',
@@ -288,7 +288,7 @@ describe('Connection Types', () => {
       const config: ConnectionConfig = {
         id: 'test-id',
         name: 'Test',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },
@@ -306,7 +306,7 @@ describe('Connection Types', () => {
     it('has expected default values', () => {
       expect(DEFAULT_CONNECTION_FORM_VALUES.name).toBe('New Connection')
       expect(DEFAULT_CONNECTION_FORM_VALUES.connectionMethod).toBe('uri')
-      expect(DEFAULT_CONNECTION_FORM_VALUES.uri).toBe('mondodb://localhost:27017')
+      expect(DEFAULT_CONNECTION_FORM_VALUES.uri).toBe('mongodo://localhost:27017')
       expect(DEFAULT_CONNECTION_FORM_VALUES.host).toBe('localhost')
       expect(DEFAULT_CONNECTION_FORM_VALUES.port).toBe(27017)
       expect(DEFAULT_CONNECTION_FORM_VALUES.database).toBe('test')

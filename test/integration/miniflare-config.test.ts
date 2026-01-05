@@ -1,7 +1,7 @@
 /**
  * Integration tests for Miniflare configuration
  *
- * These tests verify that Miniflare is correctly configured for mondodb testing.
+ * These tests verify that Miniflare is correctly configured for mongo.do testing.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

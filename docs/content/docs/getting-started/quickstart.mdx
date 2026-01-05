@@ -1,20 +1,20 @@
 ---
 title: Quick Start
-description: Get up and running with MondoDB in minutes
+description: Get up and running with mongo.do in minutes
 ---
 
 # Quick Start
 
-This guide walks you through building a simple REST API with MondoDB in under 5 minutes.
+This guide walks you through building a simple REST API with mongo.do in under 5 minutes.
 
 ## Create a New Project
 
 Start by creating a new Cloudflare Workers project:
 
 ```bash
-npm create cloudflare@latest my-mondodb-app -- --type hello-world
-cd my-mondodb-app
-npm install mondodb
+npm create cloudflare@latest my-mongo.do-app -- --type hello-world
+cd my-mongo.do-app
+npm install mongo.do
 ```
 
 ## Configure Wrangler
@@ -22,7 +22,7 @@ npm install mondodb
 Update your `wrangler.toml` (or create `wrangler.jsonc`):
 
 ```toml
-name = "my-mondodb-app"
+name = "my-mongo.do-app"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -41,7 +41,7 @@ new_sqlite_classes = ["MondoDatabase"]
 Replace the contents of `src/index.ts` with this complete example:
 
 ```typescript
-import { MongoClient, MondoDatabase } from 'mondodb';
+import { MongoClient, MondoDatabase } from 'mongo.do';
 
 // Export the Durable Object class for Wrangler
 export { MondoDatabase };
@@ -249,7 +249,7 @@ await collection.deleteMany({});
 
 ## Using Aggregation Pipelines
 
-MondoDB supports MongoDB aggregation pipelines for complex queries:
+mongo.do supports MongoDB aggregation pipelines for complex queries:
 
 ```typescript
 // Group users by status and count
@@ -281,7 +281,7 @@ npm run deploy
 wrangler deploy
 ```
 
-Your MondoDB-powered API is now live on Cloudflare's global network!
+Your mongo.do-powered API is now live on Cloudflare's global network!
 
 ## Next Steps
 

@@ -5,7 +5,7 @@
  * Covers SELECT statements with JOINs, window functions, CTEs, JSON columns,
  * and query cancellation.
  *
- * Issue: mondodb-vyf4
+ * Issue: mongo.do-vyf4
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
@@ -70,7 +70,7 @@ function createMockConnectionResponse() {
 // Query Execution Tests
 // ============================================================================
 
-describe.skip('ClickHouse Query Execution', () => {
+describe('ClickHouse Query Execution', () => {
   let mockFetch: Mock;
   let connection: ClickHouseIcebergClient;
 

@@ -1,13 +1,13 @@
 /**
  * Cursor Behavior Compatibility Tests
  *
- * Tests cursor operations to ensure mondodb matches MongoDB behavior for:
+ * Tests cursor operations to ensure mongo.do matches MongoDB behavior for:
  * - Cursor iteration (next, hasNext, toArray)
  * - Modifiers (limit, skip, sort)
  * - batchSize behavior
  * - Cursor exhaustion and state
  *
- * Bead: mondodb-jqi
+ * Bead: mongo.do-jqi
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
@@ -16,17 +16,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Cursor Behavior Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('Cursor Behavior Compatibility', () => {
   const setupCollections = async (docCount: number = 10) => {
     const dbName = `test_cursor_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = Array.from({ length: docCount }, (_, i) => ({
       name: `Item ${i + 1}`,
@@ -164,7 +164,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('empty result cursor returns empty array', async () => {
       const dbName = `test_cursor_empty_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const mongoDocs = await mongoCol.find({ nonexistent: true }).toArray()
       const mondoDocs = await mondoCol.find({ nonexistent: true }).toArray()
@@ -176,7 +176,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('empty cursor hasNext() returns false', async () => {
       const dbName = `test_cursor_empty_has_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const mongoCursor = mongoCol.find({ nonexistent: true })
       const mondoCursor = mondoCol.find({ nonexistent: true })
@@ -191,7 +191,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('empty cursor next() returns null', async () => {
       const dbName = `test_cursor_empty_next_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const mongoCursor = mongoCol.find({ nonexistent: true })
       const mondoCursor = mondoCol.find({ nonexistent: true })
@@ -318,7 +318,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort by string field alphabetically', async () => {
       const dbName = `test_sort_str_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'Charlie' })
       await mongoCol.insertOne({ name: 'Alice' })
@@ -338,7 +338,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort with multiple fields', async () => {
       const dbName = `test_sort_multi_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { category: 'A', value: 2 },
@@ -373,7 +373,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort with mixed directions', async () => {
       const dbName = `test_sort_mixed_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { category: 'A', value: 2 },
@@ -586,7 +586,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('single document cursor exhausts after one next()', async () => {
       const dbName = `test_single_doc_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ value: 42 })
       await mondoCol.insertOne({ value: 42 })
@@ -634,7 +634,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort with null values', async () => {
       const dbName = `test_sort_null_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', value: 10 })
       await mongoCol.insertOne({ name: 'B', value: null })
@@ -655,7 +655,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort with missing field', async () => {
       const dbName = `test_sort_missing_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', value: 10 })
       await mongoCol.insertOne({ name: 'B' }) // missing value field
@@ -696,7 +696,7 @@ describe('Cursor Behavior Compatibility', () => {
     it('sort on nested field', async () => {
       const dbName = `test_sort_nested_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ user: { score: 30 } })
       await mongoCol.insertOne({ user: { score: 10 } })

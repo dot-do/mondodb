@@ -5,17 +5,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('findOneAndUpdate Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('findOneAndUpdate Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_find_update_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', score: 100 },
@@ -139,17 +139,17 @@ describe('findOneAndUpdate Compatibility', () => {
 
 describe('findOneAndDelete Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 100
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -159,7 +159,7 @@ describe('findOneAndDelete Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_find_delete_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', priority: 1 },
@@ -217,17 +217,17 @@ describe('findOneAndDelete Compatibility', () => {
 
 describe('findOneAndReplace Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 200
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -237,7 +237,7 @@ describe('findOneAndReplace Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_find_replace_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     await mongoCol.insertOne({ name: 'Original', old: true, extra: 'data' })
     await mondoCol.insertOne({ name: 'Original', old: true, extra: 'data' })

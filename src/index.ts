@@ -1,5 +1,5 @@
 /**
- * mondodb - MongoDB-compatible database backed by Cloudflare Durable Objects SQLite
+ * mongo.do - MongoDB-compatible database backed by Cloudflare Durable Objects SQLite
  *
  * Main entry point for the package.
  */

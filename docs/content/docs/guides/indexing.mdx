@@ -1,22 +1,22 @@
 ---
 title: Indexing
-description: Create and manage indexes for optimal query performance in MondoDB
+description: Create and manage indexes for optimal query performance in mongo.do
 ---
 
 # Indexing
 
-Indexes are essential for efficient query execution in MondoDB. This guide covers how to create, manage, and optimize indexes for your collections.
+Indexes are essential for efficient query execution in mongo.do. This guide covers how to create, manage, and optimize indexes for your collections.
 
 ## Overview
 
-MondoDB uses SQLite's indexing capabilities under the hood, with `json_extract` expressions to enable efficient querying on document fields. Every collection automatically has an index on the `_id` field, and you can create additional indexes to optimize your queries.
+mongo.do uses SQLite's indexing capabilities under the hood, with `json_extract` expressions to enable efficient querying on document fields. Every collection automatically has an index on the `_id` field, and you can create additional indexes to optimize your queries.
 
-### How MondoDB Indexes Work with SQLite
+### How mongo.do Indexes Work with SQLite
 
-When you create an index in MondoDB, it translates to a SQLite index on `json_extract` expressions:
+When you create an index in mongo.do, it translates to a SQLite index on `json_extract` expressions:
 
 ```sql
--- A MondoDB index like { email: 1 }
+-- A mongo.do index like { email: 1 }
 -- Becomes a SQLite index like:
 CREATE INDEX idx_users_email_1 ON documents (
   json_extract(data, '$.email') ASC
@@ -31,7 +31,7 @@ This architecture means:
 
 ## Index Types
 
-MondoDB supports several index types:
+mongo.do supports several index types:
 
 | Type | Description | Use Case |
 |------|-------------|----------|
@@ -49,9 +49,9 @@ MondoDB supports several index types:
 Use the `createIndex()` method to create an index on a collection.
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://your-worker.workers.dev')
+const client = new MongoClient('mongodo://your-worker.workers.dev')
 await client.connect()
 
 const db = client.db('mydb')
@@ -280,7 +280,7 @@ await collection.createIndex(
 
 ### How Text Indexes Work
 
-MondoDB creates an FTS5 virtual table for text indexing:
+mongo.do creates an FTS5 virtual table for text indexing:
 
 ```sql
 -- FTS5 virtual table for collection "posts"
@@ -349,7 +349,7 @@ await collection.createIndex(
 
 ### TTL Index Implementation Details
 
-MondoDB TTL indexes work as follows:
+mongo.do TTL indexes work as follows:
 
 1. **Index creation**: A standard index is created on the date field, with TTL metadata stored
 2. **Background cleanup**: Expired documents are periodically removed (default: every 60 seconds)
@@ -463,7 +463,7 @@ await collection.dropIndexes()
 
 ### Auto-generated Names
 
-If you don't specify a name, MondoDB generates one based on the collection name, fields, and directions:
+If you don't specify a name, mongo.do generates one based on the collection name, fields, and directions:
 
 ```typescript
 // Collection: users
@@ -492,7 +492,7 @@ await collection.createIndex(
 
 ### Index Selection
 
-MondoDB's query optimizer selects the best index for each query. To help it:
+mongo.do's query optimizer selects the best index for each query. To help it:
 
 1. **Create indexes for your query patterns:**
 
@@ -535,7 +535,7 @@ const statuses = await collection.find(
 
 ### Index Hints
 
-MondoDB provides an `getIndexHints()` method to suggest which indexes could be used for a query:
+mongo.do provides an `getIndexHints()` method to suggest which indexes could be used for a query:
 
 ```typescript
 const indexManager = new IndexManager(storage)
@@ -545,7 +545,7 @@ const hints = indexManager.getIndexHints('users', ['email', 'status'])
 
 ## Field Path Validation
 
-MondoDB validates field paths to prevent SQL injection and ensure data integrity:
+mongo.do validates field paths to prevent SQL injection and ensure data integrity:
 
 **Valid field names:**
 - Alphanumeric characters: `a-z`, `A-Z`, `0-9`
@@ -589,7 +589,7 @@ await collection.createIndex({ '..invalid': 1 })
 
 ### Index Size Considerations
 
-Since MondoDB stores indexes in SQLite:
+Since mongo.do stores indexes in SQLite:
 - Indexes consume additional storage in the SQLite database
 - Large text indexes (FTS5) can be significant
 - Consider partial indexes for large collections
@@ -597,10 +597,10 @@ Since MondoDB stores indexes in SQLite:
 ## Complete Example
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function setupIndexes() {
-  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  const client = new MongoClient('mongodo://your-worker.workers.dev')
   await client.connect()
 
   const db = client.db('myapp')

@@ -46,7 +46,7 @@ export class LocalSQLiteBackend implements MondoBackend {
   private nextCursorId = 1n
   private dataDir: string
 
-  constructor(dataDir: string = '.mondodb') {
+  constructor(dataDir: string = '.mongodo') {
     this.dataDir = dataDir
 
     // Ensure data directory exists

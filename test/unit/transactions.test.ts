@@ -21,7 +21,7 @@ describe('ClientSession', () => {
   let session: ClientSession
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     session = client.startSession()
   })
@@ -269,7 +269,7 @@ describe('Transactions with CRUD operations', () => {
   let session: ClientSession
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     db = client.db('testdb')
     collection = db.collection('txtest')
@@ -491,7 +491,7 @@ describe('Transaction Options', () => {
   let session: ClientSession
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     session = client.startSession()
   })
@@ -584,7 +584,7 @@ describe('Session ID and tracking', () => {
   let client: MongoClient
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
   })
 

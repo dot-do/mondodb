@@ -1,7 +1,7 @@
 /**
  * Client exports
  *
- * This module provides the main client API for mondodb:
+ * This module provides the main client API for mongo.do:
  * - MongoClient: Main entry point (supports both URI and Env modes)
  * - Database: Durable Objects database class
  * - Collection: Durable Objects collection class

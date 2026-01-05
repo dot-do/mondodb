@@ -1,11 +1,11 @@
 ---
 title: Installation
-description: How to install and set up MondoDB in your project
+description: How to install and set up mongo.do in your project
 ---
 
 # Installation
 
-This guide covers how to install MondoDB and set it up for use with Cloudflare Workers.
+This guide covers how to install mongo.do and set it up for use with Cloudflare Workers.
 
 ## Prerequisites
 
@@ -21,30 +21,30 @@ Install Wrangler globally if you haven't already:
 npm install -g wrangler
 ```
 
-## Install MondoDB
+## Install mongo.do
 
-Install MondoDB using your preferred package manager:
+Install mongo.do using your preferred package manager:
 
 ```bash
-npm install mondodb
+npm install mongo.do
 ```
 
 Or with other package managers:
 
 ```bash
 # Using pnpm
-pnpm add mondodb
+pnpm add mongo.do
 
 # Using yarn
-yarn add mondodb
+yarn add mongo.do
 
 # Using bun
-bun add mondodb
+bun add mongo.do
 ```
 
 ## Configure Wrangler
 
-MondoDB uses Cloudflare Durable Objects with SQLite storage. You can configure your project using either JSONC or TOML format.
+mongo.do uses Cloudflare Durable Objects with SQLite storage. You can configure your project using either JSONC or TOML format.
 
 ### Using wrangler.jsonc (Recommended)
 
@@ -53,7 +53,7 @@ Create or update your `wrangler.jsonc`:
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-mondodb-app",
+  "name": "my-mongo.do-app",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -83,7 +83,7 @@ Create or update your `wrangler.jsonc`:
 Alternatively, use TOML format:
 
 ```toml
-name = "my-mondodb-app"
+name = "my-mongo.do-app"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -99,11 +99,11 @@ new_sqlite_classes = ["MondoDatabase"]
 
 ## Set Up Your Worker Entry Point
 
-Create your worker entry point that exports the MondoDB Durable Object:
+Create your worker entry point that exports the mongo.do Durable Object:
 
 ```typescript
 // src/index.ts
-import { MondoEntrypoint, MondoDatabase } from 'mondodb';
+import { MondoEntrypoint, MondoDatabase } from 'mongo.do';
 
 // Export the Durable Object class
 export { MondoDatabase };
@@ -116,7 +116,7 @@ Or create a custom handler:
 
 ```typescript
 // src/index.ts
-import { MongoClient, MondoDatabase } from 'mondodb';
+import { MongoClient, MondoDatabase } from 'mongo.do';
 
 // Export the Durable Object class
 export { MondoDatabase };
@@ -182,10 +182,10 @@ Ready on http://localhost:8787
 
 ## Project Structure
 
-A typical MondoDB project structure looks like:
+A typical mongo.do project structure looks like:
 
 ```
-my-mondodb-app/
+my-mongo.do-app/
 ├── src/
 │   └── index.ts        # Worker entry point
 ├── package.json
@@ -195,7 +195,7 @@ my-mondodb-app/
 
 ## Next Steps
 
-Now that MondoDB is installed and configured:
+Now that mongo.do is installed and configured:
 
 1. **[Quick Start](/docs/getting-started/quickstart)** - Build your first application
 2. **[Configuration](/docs/getting-started/configuration)** - Learn about advanced configuration options

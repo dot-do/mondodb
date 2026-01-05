@@ -1,10 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mondodb",
+  "name": "mongo-do",
   "main": "src/worker.ts",
   "compatibility_date": "2025-06-01",
 
-  // Static assets configuration for mondodb Studio
+  // Static assets configuration for mongo.do Studio
   "assets": {
     "directory": "./studio/dist",
     "binding": "ASSETS",
@@ -67,19 +67,19 @@
   // Environment-specific configurations
   "env": {
     "dev": {
-      "name": "mondodb-dev",
+      "name": "mongo-do-dev",
       "vars": {
         "ENVIRONMENT": "development"
       }
     },
     "staging": {
-      "name": "mondodb-staging",
+      "name": "mongo-do-staging",
       "vars": {
         "ENVIRONMENT": "staging"
       }
     },
     "production": {
-      "name": "mondodb",
+      "name": "mongo-do",
       "vars": {
         "ENVIRONMENT": "production"
       }

@@ -1,5 +1,5 @@
 /**
- * Unit tests for VectorTranslator (mondodb-rn0)
+ * Unit tests for VectorTranslator (mongo.do-rn0)
  *
  * RED phase tests for vector search translation with Cloudflare Vectorize
  * and AI binding support for embedding generation.

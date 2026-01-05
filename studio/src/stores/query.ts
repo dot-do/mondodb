@@ -265,7 +265,7 @@ export const useQueryStore = create<QueryState>()(
       },
     }),
     {
-      name: 'mondodb-query-history',
+      name: 'mongo.do-query-history',
       partialize: (state) => ({
         history: state.history,
         maxHistorySize: state.maxHistorySize,

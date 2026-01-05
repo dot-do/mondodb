@@ -1,18 +1,18 @@
 ---
 title: API Reference
-description: Complete API documentation for MondoDB
+description: Complete API documentation for mongo.do
 ---
 
 # API Reference
 
-Detailed documentation for all MondoDB APIs and methods. MondoDB provides a MongoDB-compatible API that runs on Cloudflare Workers with SQLite-backed Durable Objects.
+Detailed documentation for all mongo.do APIs and methods. mongo.do provides a MongoDB-compatible API that runs on Cloudflare Workers with SQLite-backed Durable Objects.
 
 ## Quick Start
 
 ```typescript
-import { MongoClient, ObjectId } from 'mondodb'
+import { MongoClient, ObjectId } from 'mongo.do'
 
-// Connect to MondoDB
+// Connect to mongo.do
 const client = new MongoClient(env)
 const db = client.db('myapp')
 const users = db.collection('users')
@@ -90,7 +90,7 @@ MongoClient
 
 ## MongoDB Compatibility
 
-MondoDB aims for high compatibility with the MongoDB Node.js driver API. Key supported features:
+mongo.do aims for high compatibility with the MongoDB Node.js driver API. Key supported features:
 
 - Full CRUD operations
 - Aggregation pipeline with most stages
@@ -103,7 +103,7 @@ MondoDB aims for high compatibility with the MongoDB Node.js driver API. Key sup
 
 ## TypeScript Support
 
-MondoDB is written in TypeScript and provides full type definitions:
+mongo.do is written in TypeScript and provides full type definitions:
 
 ```typescript
 interface User {

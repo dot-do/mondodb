@@ -1,7 +1,7 @@
 /**
  * Basic CRUD Compatibility Tests
  *
- * Tests that mondodb produces the same results as real MongoDB
+ * Tests that mongo.do produces the same results as real MongoDB
  * for insertOne and findOne operations.
  */
 

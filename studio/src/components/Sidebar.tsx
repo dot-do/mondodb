@@ -73,7 +73,7 @@ export function Sidebar() {
     <div>
       <div className={sidebarHeaderStyles}>
         <div className={logoStyles}>M</div>
-        <H3>mondodb Studio</H3>
+        <H3>mongo.do Studio</H3>
       </div>
 
       <nav className={navStyles}>

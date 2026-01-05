@@ -4,17 +4,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Array Query Operators Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('Array Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_all_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', tags: ['red', 'blue', 'green'] },
@@ -120,7 +120,7 @@ describe('Array Query Operators Compatibility', () => {
       const setupCollections = async () => {
         const dbName = `test_elemmatch_obj_${testNum}`
         const mongoCol = mongodb.database(dbName).collection('items')
-        const mondoCol = mondodb.database(dbName).collection('items')
+        const mondoCol = mongo.do.database(dbName).collection('items')
 
         const docs = [
           { name: 'A', scores: [{ subject: 'math', score: 90 }, { subject: 'english', score: 85 }] },
@@ -199,7 +199,7 @@ describe('Array Query Operators Compatibility', () => {
       const setupCollections = async () => {
         const dbName = `test_elemmatch_diff_${testNum}`
         const mongoCol = mongodb.database(dbName).collection('items')
-        const mondoCol = mondodb.database(dbName).collection('items')
+        const mondoCol = mongo.do.database(dbName).collection('items')
 
         // This document has x:1 in one element, y:2 in another
         const docs = [
@@ -254,7 +254,7 @@ describe('Array Query Operators Compatibility', () => {
       const setupCollections = async () => {
         const dbName = `test_elemmatch_prim_${testNum}`
         const mongoCol = mongodb.database(dbName).collection('items')
-        const mondoCol = mondodb.database(dbName).collection('items')
+        const mondoCol = mongo.do.database(dbName).collection('items')
 
         const docs = [
           { name: 'A', values: [1, 5, 10, 15] },
@@ -313,7 +313,7 @@ describe('Array Query Operators Compatibility', () => {
       const setupCollections = async () => {
         const dbName = `test_elemmatch_nested_${testNum}`
         const mongoCol = mongodb.database(dbName).collection('items')
-        const mondoCol = mondodb.database(dbName).collection('items')
+        const mondoCol = mongo.do.database(dbName).collection('items')
 
         const docs = [
           {
@@ -364,7 +364,7 @@ describe('Array Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_size_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', tags: ['a', 'b', 'c'] },
@@ -457,7 +457,7 @@ describe('Array Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_array_combined_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', tags: ['red', 'blue'], values: [1, 2, 3] },
@@ -515,7 +515,7 @@ describe('Array Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_all_elemmatch_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         {
@@ -582,7 +582,7 @@ describe('Array Query Operators Compatibility', () => {
     it('querying arrays with $in', async () => {
       const dbName = `test_array_in_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ tags: ['a', 'b', 'c'] })
       await mongoCol.insertOne({ tags: ['d', 'e'] })
@@ -603,7 +603,7 @@ describe('Array Query Operators Compatibility', () => {
     it('querying arrays with direct value (implicit $eq)', async () => {
       const dbName = `test_array_eq_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ tags: ['a', 'b', 'c'] })
       await mongoCol.insertOne({ tags: ['d', 'e'] })
@@ -622,7 +622,7 @@ describe('Array Query Operators Compatibility', () => {
     it('$all with nested arrays', async () => {
       const dbName = `test_all_nested_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ matrix: [[1, 2], [3, 4]] })
       await mongoCol.insertOne({ matrix: [[1, 2], [5, 6]] })
@@ -640,7 +640,7 @@ describe('Array Query Operators Compatibility', () => {
     it('empty $elemMatch', async () => {
       const dbName = `test_empty_elemmatch_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ arr: [1, 2, 3] })
       await mongoCol.insertOne({ arr: [] })

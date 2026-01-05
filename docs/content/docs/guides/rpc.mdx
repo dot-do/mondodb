@@ -22,7 +22,7 @@ The `RpcClient` class provides the client-side interface for communicating with 
 ### Basic Usage
 
 ```typescript
-import { RpcClient } from 'mondodb/rpc'
+import { RpcClient } from 'mongo.do/rpc'
 
 // Create an HTTP client
 const client = new RpcClient('https://your-worker.workers.dev/rpc')
@@ -34,7 +34,7 @@ const result = await client.call('find', ['mydb', 'users', { active: true }])
 ### Configuration Options
 
 ```typescript
-import { RpcClient, RpcClientOptions } from 'mondodb/rpc'
+import { RpcClient, RpcClientOptions } from 'mongo.do/rpc'
 
 const options: RpcClientOptions = {
   // Enable automatic reconnection on failures
@@ -108,7 +108,7 @@ For real-time applications requiring persistent connections, use WebSocket trans
 ### Establishing a WebSocket Connection
 
 ```typescript
-import { RpcClient } from 'mondodb/rpc'
+import { RpcClient } from 'mongo.do/rpc'
 
 // Use ws:// or wss:// protocol for WebSocket transport
 const client = new RpcClient('wss://your-worker.workers.dev/ws')
@@ -138,7 +138,7 @@ The `WebSocketRpcTransport` class handles:
 - Message handler registration for streaming responses
 
 ```typescript
-import { WebSocketRpcTransport } from 'mondodb/rpc'
+import { WebSocketRpcTransport } from 'mongo.do/rpc'
 
 // Create transport from an existing WebSocket
 const ws = new WebSocket('wss://your-worker.workers.dev/ws')
@@ -182,7 +182,7 @@ const [result1, result2] = await Promise.all([promise1, promise2])
 ### Manual Deduplicator Usage
 
 ```typescript
-import { RequestDeduplicator } from 'mondodb/rpc'
+import { RequestDeduplicator } from 'mongo.do/rpc'
 
 const deduplicator = new RequestDeduplicator({ ttl: 2000 })
 
@@ -213,7 +213,7 @@ In your `wrangler.toml`:
 ```toml
 [[services]]
 binding = "MONDO"
-service = "mondodb"
+service = "mongo-do"
 entrypoint = "MondoEntrypoint"
 ```
 
@@ -309,7 +309,7 @@ The `RpcTarget` base class provides method registration and invocation on the se
 ### Defining an RPC Target
 
 ```typescript
-import { RpcTarget } from 'mondodb/rpc'
+import { RpcTarget } from 'mongo.do/rpc'
 
 class MyRpcTarget extends RpcTarget {
   // Define allowed methods (security allowlist)
@@ -343,7 +343,7 @@ Only methods in the allowlist can be called via RPC.
 The `BatchedRpcExecutor` automatically coalesces multiple requests for improved throughput.
 
 ```typescript
-import { BatchedRpcExecutor } from 'mondodb/rpc'
+import { BatchedRpcExecutor } from 'mongo.do/rpc'
 
 const executor = new BatchedRpcExecutor(durableObjectStub, {
   maxBatchSize: 100,    // Flush when batch reaches this size
@@ -366,7 +366,7 @@ await executor.flush()
 Pipeline operations to reduce round-trips when performing chained calls.
 
 ```typescript
-import { PipelinedRpcProxy } from 'mondodb/rpc'
+import { PipelinedRpcProxy } from 'mongo.do/rpc'
 
 const proxy = new PipelinedRpcProxy(rpcTarget)
 
@@ -435,7 +435,7 @@ import type {
   DatabaseRef,
   CollectionRef,
   MondoEnv,
-} from 'mondodb/rpc'
+} from 'mongo.do/rpc'
 ```
 
 ## Next Steps

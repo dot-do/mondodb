@@ -1,5 +1,5 @@
 /**
- * Miniflare test helpers for mondodb
+ * Miniflare test helpers for mongo.do
  *
  * This module provides utilities for testing Durable Objects with Miniflare.
  */

@@ -1,6 +1,6 @@
 ---
 title: Bulk Write Operations
-description: Execute multiple write operations efficiently in a single batch with MondoDB
+description: Execute multiple write operations efficiently in a single batch with mongo.do
 ---
 
 # Bulk Write Operations
@@ -239,7 +239,7 @@ const result = await collection.bulkWrite([
 When errors occur during bulk write operations, a `BulkWriteException` is thrown. This exception contains both the partial results and error details.
 
 ```typescript
-import { BulkWriteException } from 'mondodb'
+import { BulkWriteException } from 'mongo.do'
 
 try {
   await collection.bulkWrite([
@@ -529,7 +529,7 @@ if (result.insertedCount !== expectedInserts) {
 
 ## TypeScript Type Definitions
 
-MondoDB provides full TypeScript support for bulk write operations.
+mongo.do provides full TypeScript support for bulk write operations.
 
 ### Operation Types
 
@@ -542,7 +542,7 @@ import type {
   ReplaceOneModel,
   DeleteOneModel,
   DeleteManyModel
-} from 'mondodb'
+} from 'mongo.do'
 
 // InsertOneModel
 interface InsertOneModel<TDocument> {
@@ -648,7 +648,7 @@ interface BulkWriteError {
 
 ### Type Guards
 
-MondoDB exports type guard functions for checking operation types:
+mongo.do exports type guard functions for checking operation types:
 
 ```typescript
 import {
@@ -658,7 +658,7 @@ import {
   isReplaceOneModel,
   isDeleteOneModel,
   isDeleteManyModel
-} from 'mondodb'
+} from 'mongo.do'
 
 const operation: BulkWriteOperation<User> = getOperation()
 

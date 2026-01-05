@@ -18,18 +18,18 @@ describe('MongoClient', () => {
   })
 
   describe('constructor', () => {
-    it('creates instance with valid mondodb:// URI', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+    it('creates instance with valid mongodo:// URI', () => {
+      client = new MongoClient('mongodo://localhost:27017')
       expect(client).toBeInstanceOf(MongoClient)
     })
 
     it('creates instance with URI containing database name', () => {
-      client = new MongoClient('mondodb://localhost:27017/testdb')
+      client = new MongoClient('mongodo://localhost:27017/testdb')
       expect(client).toBeInstanceOf(MongoClient)
     })
 
     it('creates instance with options', () => {
-      client = new MongoClient('mondodb://localhost:27017', {
+      client = new MongoClient('mongodo://localhost:27017', {
         maxPoolSize: 10,
         minPoolSize: 2,
       })
@@ -45,13 +45,13 @@ describe('MongoClient', () => {
     })
 
     it('parses database name from URI', () => {
-      client = new MongoClient('mondodb://localhost:27017/mydb')
+      client = new MongoClient('mongodo://localhost:27017/mydb')
       const db = client.db()
       expect(db.databaseName).toBe('mydb')
     })
 
     it('uses default database when not in URI', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const db = client.db()
       expect(db.databaseName).toBe('test')
     })
@@ -59,20 +59,20 @@ describe('MongoClient', () => {
 
   describe('connect()', () => {
     it('establishes connection and returns client', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const result = await client.connect()
       expect(result).toBe(client)
     })
 
     it('resolves immediately if already connected', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       await client.connect()
       const result = await client.connect()
       expect(result).toBe(client)
     })
 
     it('sets connected state after connect', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       expect(client.isConnected).toBe(false)
       await client.connect()
       expect(client.isConnected).toBe(true)
@@ -81,14 +81,14 @@ describe('MongoClient', () => {
 
   describe('close()', () => {
     it('terminates connection', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       await client.connect()
       await client.close()
       expect(client.isConnected).toBe(false)
     })
 
     it('can be called multiple times safely', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       await client.connect()
       await client.close()
       await client.close()
@@ -96,7 +96,7 @@ describe('MongoClient', () => {
     })
 
     it('can close without connecting', async () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       await client.close()
       expect(client.isConnected).toBe(false)
     })
@@ -104,32 +104,32 @@ describe('MongoClient', () => {
 
   describe('db()', () => {
     it('returns MongoDatabase instance', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const db = client.db('testdb')
       expect(db).toBeInstanceOf(MongoDatabase)
     })
 
     it('returns database with specified name', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const db = client.db('myapp')
       expect(db.databaseName).toBe('myapp')
     })
 
     it('returns default database when no name provided', () => {
-      client = new MongoClient('mondodb://localhost:27017/defaultdb')
+      client = new MongoClient('mongodo://localhost:27017/defaultdb')
       const db = client.db()
       expect(db.databaseName).toBe('defaultdb')
     })
 
     it('returns same database instance for same name', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const db1 = client.db('test')
       const db2 = client.db('test')
       expect(db1).toBe(db2)
     })
 
     it('returns different database instances for different names', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       const db1 = client.db('test1')
       const db2 = client.db('test2')
       expect(db1).not.toBe(db2)
@@ -138,41 +138,41 @@ describe('MongoClient', () => {
 
   describe('URI parsing', () => {
     it('parses host and port', () => {
-      client = new MongoClient('mondodb://myhost:12345/db')
+      client = new MongoClient('mongodo://myhost:12345/db')
       expect(client.options.host).toBe('myhost')
       expect(client.options.port).toBe(12345)
     })
 
     it('uses default port when not specified', () => {
-      client = new MongoClient('mondodb://myhost/db')
+      client = new MongoClient('mongodo://myhost/db')
       expect(client.options.port).toBe(27017)
     })
 
     it('parses query parameters as options', () => {
-      client = new MongoClient('mondodb://localhost:27017/db?maxPoolSize=20&minPoolSize=5')
+      client = new MongoClient('mongodo://localhost:27017/db?maxPoolSize=20&minPoolSize=5')
       expect(client.options.maxPoolSize).toBe(20)
       expect(client.options.minPoolSize).toBe(5)
     })
 
     it('handles URI with authentication (placeholder)', () => {
-      client = new MongoClient('mondodb://user:pass@localhost:27017/db')
+      client = new MongoClient('mongodo://user:pass@localhost:27017/db')
       expect(client.options.host).toBe('localhost')
     })
   })
 
   describe('connection pooling', () => {
     it('respects maxPoolSize option', () => {
-      client = new MongoClient('mondodb://localhost:27017', { maxPoolSize: 50 })
+      client = new MongoClient('mongodo://localhost:27017', { maxPoolSize: 50 })
       expect(client.options.maxPoolSize).toBe(50)
     })
 
     it('respects minPoolSize option', () => {
-      client = new MongoClient('mondodb://localhost:27017', { minPoolSize: 5 })
+      client = new MongoClient('mongodo://localhost:27017', { minPoolSize: 5 })
       expect(client.options.minPoolSize).toBe(5)
     })
 
     it('uses default pool sizes', () => {
-      client = new MongoClient('mondodb://localhost:27017')
+      client = new MongoClient('mongodo://localhost:27017')
       expect(client.options.maxPoolSize).toBe(100)
       expect(client.options.minPoolSize).toBe(0)
     })
@@ -188,7 +188,7 @@ describe('MongoDatabase', () => {
   let db: MongoDatabase
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     db = client.db('testdb')
   })
@@ -322,7 +322,7 @@ describe('MongoCollection', () => {
   let collection: MongoCollection<{ _id?: ObjectId; name: string; value?: number; tags?: string[] }>
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     db = client.db('testdb')
     collection = db.collection('testcollection')

@@ -4,17 +4,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Edge Cases Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('Edge Cases Compatibility', () => {
     it('insert and query document with null field', async () => {
       const dbName = `test_null_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test', value: null })
       await mondoCol.insertOne({ name: 'test', value: null })
@@ -42,7 +42,7 @@ describe('Edge Cases Compatibility', () => {
     it('query for null matches null AND missing fields', async () => {
       const dbName = `test_null_missing_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'hasNull', value: null })
       await mongoCol.insertOne({ name: 'noField' })
@@ -59,7 +59,7 @@ describe('Edge Cases Compatibility', () => {
     it('$set to null vs $unset difference', async () => {
       const dbName = `test_set_null_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'a', value: 10 })
       await mongoCol.insertOne({ name: 'b', value: 20 })
@@ -95,7 +95,7 @@ describe('Edge Cases Compatibility', () => {
     it('empty string as field value', async () => {
       const dbName = `test_empty_str_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: '' })
       await mondoCol.insertOne({ name: '' })
@@ -110,7 +110,7 @@ describe('Edge Cases Compatibility', () => {
     it('empty object as field value', async () => {
       const dbName = `test_empty_obj_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ data: {} })
       await mondoCol.insertOne({ data: {} })
@@ -125,7 +125,7 @@ describe('Edge Cases Compatibility', () => {
     it('empty array as field value', async () => {
       const dbName = `test_empty_arr_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [] })
       await mondoCol.insertOne({ items: [] })
@@ -140,7 +140,7 @@ describe('Edge Cases Compatibility', () => {
     it('empty filter matches all', async () => {
       const dbName = `test_empty_filter_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ a: 1 })
       await mongoCol.insertOne({ b: 2 })
@@ -159,7 +159,7 @@ describe('Edge Cases Compatibility', () => {
     it('deeply nested document insert and query', async () => {
       const dbName = `test_nested_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const deep = { a: { b: { c: { d: { e: 'deep' } } } } }
       await mongoCol.insertOne(deep)
@@ -175,7 +175,7 @@ describe('Edge Cases Compatibility', () => {
     it('$set on nested path', async () => {
       const dbName = `test_nested_set_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ user: { name: 'Alice' } })
       await mondoCol.insertOne({ user: { name: 'Alice' } })
@@ -197,7 +197,7 @@ describe('Edge Cases Compatibility', () => {
     it('unicode in field values', async () => {
       const dbName = `test_unicode_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const doc = { name: '日本語', emoji: '🎉', mixed: 'Hello 世界' }
       await mongoCol.insertOne({ ...doc })
@@ -215,7 +215,7 @@ describe('Edge Cases Compatibility', () => {
     it('special characters in string values', async () => {
       const dbName = `test_special_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const doc = {
         tab: 'hello\tworld',
@@ -240,7 +240,7 @@ describe('Edge Cases Compatibility', () => {
     it('number string vs number', async () => {
       const dbName = `test_coerce_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ numStr: '123', num: 123 })
       await mondoCol.insertOne({ numStr: '123', num: 123 })

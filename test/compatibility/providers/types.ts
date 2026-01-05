@@ -1,6 +1,6 @@
 /**
  * Unified test provider interface for compatibility testing
- * Both MongoDB (via mongo-memory-server) and mondodb implement this interface
+ * Both MongoDB (via mongo-memory-server) and mongo.do implement this interface
  */
 
 import { ObjectId } from '../../../src/types/objectid'
@@ -219,7 +219,7 @@ export interface TestDatabase {
  * Implementations: MongoDBProvider, MondoDBProvider
  */
 export interface TestProvider {
-  readonly name: 'mondodb' | 'mongodb'
+  readonly name: 'mongo.do' | 'mongodb'
   connect(): Promise<void>
   disconnect(): Promise<void>
   database(name: string): TestDatabase

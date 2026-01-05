@@ -280,7 +280,7 @@ function QuickConnect({ onConnect, isLoading, recentConnections }: QuickConnectP
           type="text"
           value={uri}
           onChange={(e) => setUri(e.target.value)}
-          placeholder="mondodb://localhost:27017"
+          placeholder="mongodo://localhost:27017"
           style={quickConnectStyles.input}
           data-testid="quick-connect-input"
         />

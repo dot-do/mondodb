@@ -232,9 +232,9 @@ export class ServerStatusCommand implements CommandHandler {
 
     return {
       response: successResponse({
-        host: 'mondodb-server',
-        version: '6.0.0-mondodb',
-        process: 'mondodb-server',
+        host: 'mongo.do-server',
+        version: '6.0.0-mongo.do',
+        process: 'mongo.do-server',
         pid: process.pid || 1,
         uptime: uptimeSeconds,
         uptimeMillis: uptimeSeconds * 1000,

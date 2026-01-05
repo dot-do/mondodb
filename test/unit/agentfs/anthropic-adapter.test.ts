@@ -140,7 +140,7 @@ describe('AnthropicMCPAdapter', () => {
       const server = adapter.createServer()
 
       expect(server).toBeDefined()
-      expect(server.name).toBe('mondodb-agentfs')
+      expect(server.name).toBe('mongo.do-agentfs')
       expect(server.version).toBe('1.0.0')
     })
 
@@ -669,7 +669,7 @@ describe('createMonDoMcpServer', () => {
     const server = createMonDoMcpServer(mockProvider)
 
     expect(server).toBeDefined()
-    expect(server.name).toBe('mondodb-agentfs')
+    expect(server.name).toBe('mongo.do-agentfs')
     expect(server.version).toBe('1.0.0')
   })
 

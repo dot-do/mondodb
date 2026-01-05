@@ -1,5 +1,5 @@
 /**
- * mondodb Studio - UI components for database management
+ * mongo.do Studio - UI components for database management
  */
 
 // Connection components

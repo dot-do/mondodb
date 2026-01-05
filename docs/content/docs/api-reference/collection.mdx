@@ -10,7 +10,7 @@ The `Collection` class provides MongoDB-compatible CRUD operations on documents 
 ## Import
 
 ```typescript
-import { Collection, MongoCollection } from 'mondodb'
+import { Collection, MongoCollection } from 'mongo.do'
 ```
 
 ## Type Parameters
@@ -856,11 +856,11 @@ try {
 
 ## HttpFindCursor vs FindCursor
 
-MondoDB provides two cursor implementations:
+mongo.do provides two cursor implementations:
 
 | Cursor | Mode | Description |
 |--------|------|-------------|
-| `FindCursor` | URI/In-memory | Used with `new MongoClient('mondodb://...')` |
+| `FindCursor` | URI/In-memory | Used with `new MongoClient('mongodo://...')` |
 | `HttpFindCursor` | Durable Objects | Used with `new MongoClient(env)` |
 
 Both provide the same API, but `HttpFindCursor` communicates with Durable Objects via HTTP while `FindCursor` operates on in-memory data.

@@ -5,12 +5,12 @@ description: API reference for the Database and MongoDatabase classes
 
 # Database
 
-The `Database` and `MongoDatabase` classes represent a MondoDB database and provide methods for working with collections. `Database` is used with Cloudflare Durable Objects (production), while `MongoDatabase` is used with URI connections (testing/in-memory).
+The `Database` and `MongoDatabase` classes represent a mongo.do database and provide methods for working with collections. `Database` is used with Cloudflare Durable Objects (production), while `MongoDatabase` is used with URI connections (testing/in-memory).
 
 ## Import
 
 ```typescript
-import { Database, MongoDatabase } from 'mondodb'
+import { Database, MongoDatabase } from 'mongo.do'
 ```
 
 ## Database Class (Durable Objects Mode)
@@ -358,7 +358,7 @@ const userDb = client.db('users')    // DO with id from name "users"
 const orderDb = client.db('orders')  // Separate DO with id from name "orders"
 ```
 
-### URI Mode (`new MongoClient('mondodb://...')`)
+### URI Mode (`new MongoClient('mongodo://...')`)
 
 - Returns `MongoDatabase` class instances
 - Collections return `MongoCollection` class with `FindCursor`
@@ -366,7 +366,7 @@ const orderDb = client.db('orders')  // Separate DO with id from name "orders"
 - Default database extracted from URI path
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/myapp')
+const client = new MongoClient('mongodo://localhost:27017/myapp')
 const db = client.db() // Uses 'myapp' from URI
 const testDb = client.db('test') // Override with different name
 ```

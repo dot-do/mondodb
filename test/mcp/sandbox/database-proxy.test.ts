@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  * - Propagates errors correctly
  * - Uses props to identify the database instance
  *
- * @ticket mondodb-25lv
+ * @ticket mongo.do-25lv
  */
 
 // Mock the cloudflare:workers module

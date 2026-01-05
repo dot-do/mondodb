@@ -46,7 +46,7 @@ docker-compose -f test/integration/olap/docker-compose.yml down -v
 | `CLICKHOUSE_PORT` | `8123` | ClickHouse HTTP port |
 | `CLICKHOUSE_USER` | `default` | ClickHouse username |
 | `CLICKHOUSE_PASSWORD` | - | ClickHouse password |
-| `CLICKHOUSE_DATABASE` | `mondodb_test` | Test database name |
+| `CLICKHOUSE_DATABASE` | `mongo.do_test` | Test database name |
 
 ## Test Categories
 
@@ -155,5 +155,5 @@ curl "http://localhost:8123/?query=SELECT+*+FROM+system.metrics+LIMIT+10"
 
 ```bash
 # Drop test database
-curl "http://localhost:8123/?query=DROP+DATABASE+IF+EXISTS+mondodb_test"
+curl "http://localhost:8123/?query=DROP+DATABASE+IF+EXISTS+mongo.do_test"
 ```

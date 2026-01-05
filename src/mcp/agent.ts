@@ -122,7 +122,7 @@ export interface MonDoAgentConfig {
 }
 
 /**
- * MonDoAgent - AI Agent interface for MondoDB
+ * MonDoAgent - AI Agent interface for mongo.do
  */
 export interface MonDoAgent {
   /** Agent identifier */

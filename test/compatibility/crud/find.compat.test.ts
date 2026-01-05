@@ -6,17 +6,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('findOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -26,7 +26,7 @@ describe('findOne Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_find_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     // Seed with test data
     const docs = [
@@ -85,7 +85,7 @@ describe('findOne Compatibility', () => {
   it('finds by _id', async () => {
     const dbName = `test_find_by_id_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const id = new ObjectId()
     await mongoCol.insertOne({ _id: new ObjectId(id.toHexString()), name: 'Test' })
@@ -141,7 +141,7 @@ describe('findOne Compatibility', () => {
   it('handles nested field filter', async () => {
     const dbName = `test_find_nested_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     await mongoCol.insertOne({ user: { name: 'Nested', level: 5 } })
     await mondoCol.insertOne({ user: { name: 'Nested', level: 5 } })
@@ -156,17 +156,17 @@ describe('findOne Compatibility', () => {
 
 describe('find (cursor) Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 100
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -176,7 +176,7 @@ describe('find (cursor) Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_find_cursor_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', value: 1 },
@@ -207,7 +207,7 @@ describe('find (cursor) Compatibility', () => {
   it('empty result returns empty array', async () => {
     const dbName = `test_find_empty_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const mongoDocs = await mongoCol.find({ nonexistent: true }).toArray()
     const mondoDocs = await mondoCol.find({ nonexistent: true }).toArray()

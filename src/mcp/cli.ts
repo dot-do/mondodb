@@ -10,8 +10,8 @@
  *   bun src/mcp/cli.ts
  *
  * Environment Variables:
- *   MONDODB_DATA_DIR - Directory for SQLite database files (default: .mondodb)
- *   MONDODB_DEFAULT_DB - Default database name (default: test)
+ *   MONGODO_DATA_DIR - Directory for SQLite database files (default: .mongodo)
+ *   MONGODO_DEFAULT_DB - Default database name (default: test)
  */
 
 import { createMcpServer, type McpServer } from './server'
@@ -39,9 +39,9 @@ export interface CliConfig {
  */
 export function getCliConfig(): CliConfig {
   return {
-    dataDir: process.env.MONDODB_DATA_DIR || '.mondodb',
-    defaultDatabase: process.env.MONDODB_DEFAULT_DB || 'test',
-    serverName: 'mondodb-mcp',
+    dataDir: process.env.MONGODO_DATA_DIR || '.mongodo',
+    defaultDatabase: process.env.MONGODO_DEFAULT_DB || 'test',
+    serverName: 'mongo.do-mcp',
     serverVersion: '1.0.0',
   }
 }

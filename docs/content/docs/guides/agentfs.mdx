@@ -1,17 +1,17 @@
 ---
 title: AgentFS
-description: MondoDB-backed virtual filesystem for AI agents with glob, grep, KV store, and audit logging
+description: mongo.do-backed virtual filesystem for AI agents with glob, grep, KV store, and audit logging
 ---
 
 # AgentFS
 
-AgentFS is a MondoDB-backed virtual filesystem designed specifically for AI agents. It provides a complete file system abstraction with POSIX-like semantics, along with powerful search capabilities, key-value storage, and immutable audit logging for tool calls.
+AgentFS is a mongo.do-backed virtual filesystem designed specifically for AI agents. It provides a complete file system abstraction with POSIX-like semantics, along with powerful search capabilities, key-value storage, and immutable audit logging for tool calls.
 
 ## Overview
 
 AgentFS enables AI agents to:
 
-- **Store and manage files** in a virtual filesystem backed by MondoDB
+- **Store and manage files** in a virtual filesystem backed by mongo.do
 - **Search files** using glob patterns and regex-based content search
 - **Persist data** using a key-value store for session data, caches, and configuration
 - **Audit tool calls** with an append-only, tamper-evident audit trail
@@ -26,7 +26,7 @@ import {
   AgentGrep,
   AgentFSKVStore,
   ToolCallAuditLog,
-} from '@mondodb/agentfs'
+} from '@mongo.do/agentfs'
 ```
 
 ## Core Components
@@ -36,7 +36,7 @@ import {
 The `MonDoAgent` class is the main entry point for AI agent operations. It integrates the virtual filesystem, glob, grep, KV store, and audit logging with Cloudflare Agent infrastructure.
 
 ```typescript
-import { MonDoAgent } from '@mondodb/agentfs'
+import { MonDoAgent } from '@mongo.do/agentfs'
 
 // Create agent with Cloudflare Agent context
 const agent = new MonDoAgent(ctx, env)
@@ -62,10 +62,10 @@ const entries = await agent.audit.list({ limit: 10 })
 
 ### Virtual Filesystem (VFS)
 
-The `AgentFilesystem` class provides a virtual filesystem with POSIX-like semantics backed by MondoDB.
+The `AgentFilesystem` class provides a virtual filesystem with POSIX-like semantics backed by mongo.do.
 
 ```typescript
-import { AgentFilesystem } from '@mondodb/agentfs'
+import { AgentFilesystem } from '@mongo.do/agentfs'
 
 const fs = new AgentFilesystem(database)
 
@@ -123,7 +123,7 @@ const srcFiles = await agent.glob('/src/**/*')
 const configFiles = await agent.glob('*.{json,yaml,yml}')
 
 // Using glob utilities directly
-import { matchGlob, filterGlob, GlobMatcher, compileGlob } from '@mondodb/agentfs'
+import { matchGlob, filterGlob, GlobMatcher, compileGlob } from '@mongo.do/agentfs'
 
 // Test a single path
 const matches = matchGlob('**/*.ts', '/src/index.ts')
@@ -148,7 +148,7 @@ matcher.match('/src/index.test.ts') // false
 The `AgentGrep` class provides regex-based content search across files:
 
 ```typescript
-import { AgentGrep } from '@mondodb/agentfs'
+import { AgentGrep } from '@mongo.do/agentfs'
 
 const grep = new AgentGrep(fs)
 
@@ -193,10 +193,10 @@ await grep.grepStream('pattern', {}, async (match) => {
 
 ### Key-Value Store
 
-The `AgentFSKVStore` provides simple key-value storage backed by MondoDB:
+The `AgentFSKVStore` provides simple key-value storage backed by mongo.do:
 
 ```typescript
-import { AgentFSKVStore } from '@mondodb/agentfs'
+import { AgentFSKVStore } from '@mongo.do/agentfs'
 
 const kv = new AgentFSKVStore(backend)
 
@@ -229,7 +229,7 @@ const clearedCount = await kv.clear('cache:')
 The `ToolCallAuditLog` provides an append-only, immutable audit trail for AI agent tool calls:
 
 ```typescript
-import { ToolCallAuditLog, createInMemoryAuditBackend } from '@mondodb/agentfs'
+import { ToolCallAuditLog, createInMemoryAuditBackend } from '@mongo.do/agentfs'
 
 const audit = new ToolCallAuditLog(createInMemoryAuditBackend())
 
@@ -291,7 +291,7 @@ AgentFS provides adapters for popular AI SDKs, making it easy to give AI models 
 The MCP adapter creates an MCP-compatible server with AgentFS tools:
 
 ```typescript
-import { createMonDoMcpServer, AnthropicMCPAdapter } from '@mondodb/agentfs/adapters'
+import { createMonDoMcpServer, AnthropicMCPAdapter } from '@mongo.do/agentfs/adapters'
 
 const server = createMonDoMcpServer({
   fs: agentFilesystem,
@@ -341,7 +341,7 @@ const result = await server.callTool('read', { path: '/src/index.ts' })
 The Vercel adapter creates tool definitions compatible with the Vercel AI SDK:
 
 ```typescript
-import { createAgentFSVercelTools } from '@mondodb/agentfs/adapters'
+import { createAgentFSVercelTools } from '@mongo.do/agentfs/adapters'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 
@@ -381,8 +381,8 @@ const result = await generateText({
 Here is a complete example of setting up an AI agent with filesystem access:
 
 ```typescript
-import { MonDoAgent } from '@mondodb/agentfs'
-import { createAgentFSVercelTools } from '@mondodb/agentfs/adapters'
+import { MonDoAgent } from '@mongo.do/agentfs'
+import { createAgentFSVercelTools } from '@mongo.do/agentfs/adapters'
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 

@@ -1,15 +1,15 @@
 ---
 title: Cursor Operations
-description: Efficiently iterate through query results using cursors in MondoDB
+description: Efficiently iterate through query results using cursors in mongo.do
 ---
 
 # Cursor Operations
 
-MondoDB uses cursors to provide efficient, lazy evaluation of query results. Instead of loading all matching documents into memory at once, cursors allow you to iterate through results incrementally, which is essential for working with large datasets.
+mongo.do uses cursors to provide efficient, lazy evaluation of query results. Instead of loading all matching documents into memory at once, cursors allow you to iterate through results incrementally, which is essential for working with large datasets.
 
 ## Overview
 
-When you call `find()` or `aggregate()` on a collection, MondoDB returns a cursor object rather than the actual documents. The query is only executed when you consume the cursor using methods like `toArray()`, `forEach()`, or async iteration.
+When you call `find()` or `aggregate()` on a collection, mongo.do returns a cursor object rather than the actual documents. The query is only executed when you consume the cursor using methods like `toArray()`, `forEach()`, or async iteration.
 
 ```typescript
 // Returns a cursor, not documents
@@ -298,7 +298,7 @@ const results = await collection.find({ status: 'active' })
 
 ## Pagination Patterns
 
-There are two main approaches to pagination in MondoDB.
+There are two main approaches to pagination in mongo.do.
 
 ### Skip-Limit Pagination
 
@@ -534,7 +534,7 @@ console.log(cursor.bufferedCount)  // 99 (100 fetched, 1 consumed)
 
 ### Automatic Cursor Cleanup
 
-MondoDB automatically cleans up server-side cursors in the following scenarios:
+mongo.do automatically cleans up server-side cursors in the following scenarios:
 
 - When all documents have been consumed
 - When `toArray()` completes

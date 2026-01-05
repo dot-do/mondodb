@@ -1,15 +1,15 @@
 ---
 title: Full-Text Search
-description: Implement powerful full-text search in MondoDB using SQLite FTS5
+description: Implement powerful full-text search in mongo.do using SQLite FTS5
 ---
 
 # Full-Text Search
 
-MondoDB provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
+mongo.do provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
 
 ## Overview
 
-Full-text search in MondoDB enables:
+Full-text search in mongo.do enables:
 
 - **Natural language search** - Find documents matching search terms
 - **Phrase matching** - Search for exact phrases
@@ -26,9 +26,9 @@ Before you can search, create a text index on the fields you want to search.
 ### Single Field Index
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://your-worker.workers.dev')
+const client = new MongoClient('mongodo://your-worker.workers.dev')
 await client.connect()
 
 const db = client.db('mydb')
@@ -145,7 +145,7 @@ const results = await articles.aggregate([
 
 ## Search Operators
 
-MondoDB supports several search operators for different use cases.
+mongo.do supports several search operators for different use cases.
 
 ### text Operator
 
@@ -324,7 +324,7 @@ const results = await articles.aggregate([
 
 ## Scoring and Ranking
 
-MondoDB uses the BM25 algorithm for relevance scoring. Results are automatically sorted by relevance score (highest first).
+mongo.do uses the BM25 algorithm for relevance scoring. Results are automatically sorted by relevance score (highest first).
 
 ### Including Search Score
 
@@ -383,7 +383,7 @@ const results = await articles.aggregate([
 
 ## Highlights and Snippets
 
-MondoDB supports highlighting matched terms and extracting relevant snippets from search results.
+mongo.do supports highlighting matched terms and extracting relevant snippets from search results.
 
 ### Highlight Function
 
@@ -427,7 +427,7 @@ Snippet options:
 
 ## Hybrid Search
 
-Combine full-text search with vector similarity search for improved results. MondoDB supports two fusion algorithms:
+Combine full-text search with vector similarity search for improved results. mongo.do supports two fusion algorithms:
 
 ### Reciprocal Rank Fusion (RRF)
 
@@ -662,9 +662,9 @@ async function smartSearch(query: string) {
 
 ## FTS5 Query Syntax
 
-Under the hood, MondoDB translates search operators to SQLite FTS5 MATCH syntax:
+Under the hood, mongo.do translates search operators to SQLite FTS5 MATCH syntax:
 
-| MondoDB Operator | FTS5 Syntax | Example |
+| mongo.do Operator | FTS5 Syntax | Example |
 |-----------------|-------------|---------|
 | text (single term) | `term` | `mongodb` |
 | text (multiple terms) | `term1 term2` | `mongodb database` |

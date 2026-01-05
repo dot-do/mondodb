@@ -5,7 +5,7 @@
  * These tests verify the complete pipeline from MongoDB CDC events through
  * R2 storage to ClickHouse materialized views.
  *
- * Issue: mondodb-968r - ClickHouse S3Queue Real-time Tests
+ * Issue: mongo.do-968r - ClickHouse S3Queue Real-time Tests
  *
  * NOTE: These tests are marked with .skip for CI environments as they
  * require external ClickHouse and R2 infrastructure.
@@ -242,7 +242,7 @@ class RealtimePipeline {
 const TEST_CLICKHOUSE_CONFIG: ClickHouseConfig = {
   host: process.env.CLICKHOUSE_HOST || 'localhost',
   port: parseInt(process.env.CLICKHOUSE_PORT || '8443'),
-  database: 'mondodb_test',
+  database: 'mongo.do_test',
   username: process.env.CLICKHOUSE_USER || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || '',
   secure: true,
@@ -250,7 +250,7 @@ const TEST_CLICKHOUSE_CONFIG: ClickHouseConfig = {
 
 const TEST_R2_CONFIG: R2Config = {
   accountId: process.env.R2_ACCOUNT_ID || 'test-account',
-  bucketName: process.env.R2_BUCKET || 'mondodb-cdc-test',
+  bucketName: process.env.R2_BUCKET || 'mongo.do-cdc-test',
   accessKeyId: process.env.R2_ACCESS_KEY_ID || 'test-key',
   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || 'test-secret',
 };
@@ -330,7 +330,7 @@ describe.skip('Materialized Views - CDC to Columnar JSON', () => {
       const schemaQuery = `
         SELECT name, type
         FROM system.columns
-        WHERE database = 'mondodb_test' AND table = 'orders_columnar'
+        WHERE database = 'mongo.do_test' AND table = 'orders_columnar'
       `;
       const columns = await clickhouse.query<{ name: string; type: string }>(schemaQuery);
 
@@ -361,7 +361,7 @@ describe.skip('Materialized Views - CDC to Columnar JSON', () => {
       const partitionQuery = `
         SELECT partition
         FROM system.parts
-        WHERE database = 'mondodb_test' AND table = 'logs_partitioned'
+        WHERE database = 'mongo.do_test' AND table = 'logs_partitioned'
         GROUP BY partition
       `;
       const partitions = await clickhouse.query<{ partition: string }>(partitionQuery);
@@ -1023,7 +1023,7 @@ describe.skip('R2 to ClickHouse S3Queue Integration', () => {
           processing_files_num,
           failed_files_num
         FROM system.s3queue_log
-        WHERE database = 'mondodb_test'
+        WHERE database = 'mongo.do_test'
         ORDER BY event_time DESC
         LIMIT 10
       `;

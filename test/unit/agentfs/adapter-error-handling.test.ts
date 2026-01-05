@@ -419,7 +419,7 @@ describe('Adapter Configuration', () => {
       const adapter = new AnthropicMCPAdapter(mockProvider)
       const server = adapter.createServer()
 
-      expect(server.name).toBe('mondodb-agentfs')
+      expect(server.name).toBe('mongo.do-agentfs')
       expect(server.version).toBe('1.0.0')
     })
 

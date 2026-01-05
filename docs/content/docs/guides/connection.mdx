@@ -1,11 +1,11 @@
 ---
 title: MongoClient & Connection
-description: Connect to MondoDB and manage database connections
+description: Connect to mongo.do and manage database connections
 ---
 
 # MongoClient & Connection
 
-The `MongoClient` class is the main entry point for connecting to MondoDB. It provides a MongoDB-compatible API that works in two distinct modes:
+The `MongoClient` class is the main entry point for connecting to mongo.do. It provides a MongoDB-compatible API that works in two distinct modes:
 
 1. **URI Mode** - For testing and in-memory development
 2. **Env Mode** - For Cloudflare Workers with Durable Objects (production)
@@ -13,7 +13,7 @@ The `MongoClient` class is the main entry point for connecting to MondoDB. It pr
 ## Installation
 
 ```bash
-npm install mondodb
+npm install mongo.do
 ```
 
 ## Basic Usage
@@ -23,9 +23,9 @@ npm install mondodb
 Use a connection string for local development and testing:
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://localhost:27017/mydb')
+const client = new MongoClient('mongodo://localhost:27017/mydb')
 await client.connect()
 
 const db = client.db('mydb')
@@ -37,7 +37,7 @@ const users = db.collection('users')
 Pass your Cloudflare Workers environment bindings for production:
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -99,17 +99,17 @@ interface MongoClientOptions {
 
 ## Connection String Format
 
-MondoDB supports both `mondodb://` and `mongodb://` URI schemes:
+mongo.do supports both `mongodo://` and `mongodb://` URI schemes:
 
 ```
-mondodb://[username:password@]host[:port][/database][?options]
+mongodo://[username:password@]host[:port][/database][?options]
 ```
 
 ### URI Components
 
 | Component | Description | Default |
 |-----------|-------------|---------|
-| `scheme` | Protocol (`mondodb://` or `mongodb://`) | Required |
+| `scheme` | Protocol (`mongodo://` or `mongodb://`) | Required |
 | `username` | Optional authentication username | - |
 | `password` | Optional authentication password | - |
 | `host` | Server hostname | `localhost` |
@@ -121,19 +121,19 @@ mondodb://[username:password@]host[:port][/database][?options]
 
 ```typescript
 // Minimal connection
-const client = new MongoClient('mondodb://localhost')
+const client = new MongoClient('mongodo://localhost')
 
 // With port
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 
 // With database
-const client = new MongoClient('mondodb://localhost:27017/myapp')
+const client = new MongoClient('mongodo://localhost:27017/myapp')
 
 // With authentication
-const client = new MongoClient('mondodb://admin:secret@localhost:27017/myapp')
+const client = new MongoClient('mongodo://admin:secret@localhost:27017/myapp')
 
 // With options
-const client = new MongoClient('mondodb://localhost:27017/myapp?maxPoolSize=50&minPoolSize=5')
+const client = new MongoClient('mongodo://localhost:27017/myapp?maxPoolSize=50&minPoolSize=5')
 ```
 
 ### Query String Options
@@ -147,7 +147,7 @@ const client = new MongoClient('mondodb://localhost:27017/myapp?maxPoolSize=50&m
 
 ### connect()
 
-Establishes the connection to the database. In MondoDB, connections are handled lazily, so this primarily initializes the client state.
+Establishes the connection to the database. In mongo.do, connections are handled lazily, so this primarily initializes the client state.
 
 ```typescript
 async connect(): Promise<MongoClient>
@@ -158,7 +158,7 @@ async connect(): Promise<MongoClient>
 **Example:**
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 
 // Method chaining
 await client.connect()
@@ -178,7 +178,7 @@ async close(): Promise<void>
 **Example:**
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 await client.connect()
 
 // ... perform operations
@@ -197,7 +197,7 @@ get isConnected(): boolean
 **Example:**
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 
 console.log(client.isConnected) // false
 
@@ -229,7 +229,7 @@ db(dbName?: string): MongoDatabase | Database
 **Example:**
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/defaultdb')
+const client = new MongoClient('mongodo://localhost:27017/defaultdb')
 await client.connect()
 
 // Use default database from URI
@@ -252,10 +252,10 @@ get defaultDatabase(): string
 **Example:**
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/myapp')
+const client = new MongoClient('mongodo://localhost:27017/myapp')
 console.log(client.defaultDatabase) // 'myapp'
 
-const client2 = new MongoClient('mondodb://localhost:27017')
+const client2 = new MongoClient('mongodo://localhost:27017')
 console.log(client2.defaultDatabase) // 'test' (default)
 ```
 
@@ -264,7 +264,7 @@ console.log(client2.defaultDatabase) // 'test' (default)
 Access collections through the database instance:
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 await client.connect()
 
 const db = client.db('myapp')
@@ -331,7 +331,7 @@ const stats = await db.stats()
 
 ## Sessions and Transactions
 
-MondoDB supports MongoDB-compatible sessions for transaction management:
+mongo.do supports MongoDB-compatible sessions for transaction management:
 
 ```typescript
 const session = client.startSession()
@@ -447,7 +447,7 @@ interface Env {
 ## Complete Example
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 interface Product {
   _id?: string
@@ -492,7 +492,7 @@ export default {
 ## Error Handling
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 
 try {
   await client.connect()

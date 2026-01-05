@@ -432,7 +432,7 @@ export function ConnectionForm({
             value={values.uri}
             onChange={handleChange}
             style={formStyles.input}
-            placeholder="mondodb://localhost:27017"
+            placeholder="mongodo://localhost:27017"
             data-testid="connection-uri-input"
           />
         </div>

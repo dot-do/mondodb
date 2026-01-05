@@ -5,11 +5,11 @@ description: Automatically expire and delete documents after a specified time pe
 
 # TTL Indexes
 
-TTL (Time-To-Live) indexes enable automatic document expiration in MondoDB. Documents are automatically deleted after a specified number of seconds, making TTL indexes ideal for session management, cache entries, temporary data, and log rotation.
+TTL (Time-To-Live) indexes enable automatic document expiration in mongo.do. Documents are automatically deleted after a specified number of seconds, making TTL indexes ideal for session management, cache entries, temporary data, and log rotation.
 
 ## Overview
 
-A TTL index is a special single-field index that MondoDB uses to automatically remove documents from a collection after a specified amount of time. The index monitors a date field in each document and removes documents once the time has elapsed.
+A TTL index is a special single-field index that mongo.do uses to automatically remove documents from a collection after a specified amount of time. The index monitors a date field in each document and removes documents once the time has elapsed.
 
 Key characteristics:
 - TTL indexes work on a **single date field**
@@ -23,9 +23,9 @@ Key characteristics:
 Use `createIndex()` with the `expireAfterSeconds` option to create a TTL index:
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://your-worker.workers.dev')
+const client = new MongoClient('mongodo://your-worker.workers.dev')
 await client.connect()
 
 const db = client.db('mydb')
@@ -73,7 +73,7 @@ await cache.createIndex(
 
 ### Expiration Calculation
 
-MondoDB calculates the expiration time for each document as:
+mongo.do calculates the expiration time for each document as:
 
 ```
 expirationTime = documentDateFieldValue + expireAfterSeconds
@@ -87,7 +87,7 @@ currentTime > expirationTime
 
 ### Date Field Requirements
 
-The TTL field must contain a valid date value. MondoDB supports:
+The TTL field must contain a valid date value. mongo.do supports:
 
 - **Date objects**: `new Date()`
 - **ISO 8601 strings**: `"2024-01-15T10:30:00.000Z"`
@@ -141,7 +141,7 @@ await collection.insertOne({
 
 ### Background Cleanup Process
 
-MondoDB runs a background process that:
+mongo.do runs a background process that:
 
 1. Scans collections with TTL indexes
 2. Identifies documents past their expiration time
@@ -408,10 +408,10 @@ await collection.createIndex(
 ## Complete Example
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function setupTTLCollections() {
-  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  const client = new MongoClient('mongodo://your-worker.workers.dev')
   await client.connect()
 
   const db = client.db('myapp')

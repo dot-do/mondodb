@@ -43,7 +43,7 @@ describe('ConnectionForm Logic', () => {
     })
 
     it('parses URI and updates form fields', () => {
-      const uri = 'mondodb://admin:secret@myhost.com:27018/production'
+      const uri = 'mongodo://admin:secret@myhost.com:27018/production'
       const parsed = parseConnectionURI(uri)
 
       expect(parsed.host).toBe('myhost.com')
@@ -66,7 +66,7 @@ describe('ConnectionForm Logic', () => {
 
       const uri = buildConnectionURI(values)
 
-      expect(uri).toContain('mondodb://')
+      expect(uri).toContain('mongodo://')
       expect(uri).toContain('user:pass@')
       expect(uri).toContain('myhost.com')
       expect(uri).toContain('/mydb')
@@ -159,7 +159,7 @@ describe('ConnectionList Logic', () => {
     {
       id: 'conn-1',
       name: 'Alpha Connection',
-      uri: 'mondodb://localhost:27017',
+      uri: 'mongodo://localhost:27017',
       host: 'localhost',
       port: 27017,
       database: 'alpha',
@@ -173,7 +173,7 @@ describe('ConnectionList Logic', () => {
     {
       id: 'conn-2',
       name: 'Beta Connection',
-      uri: 'mondodb://localhost:27018',
+      uri: 'mongodo://localhost:27018',
       host: 'localhost',
       port: 27018,
       database: 'beta',
@@ -187,7 +187,7 @@ describe('ConnectionList Logic', () => {
     {
       id: 'conn-3',
       name: 'Gamma Connection',
-      uri: 'mondodb://localhost:27019',
+      uri: 'mongodo://localhost:27019',
       host: 'localhost',
       port: 27019,
       database: 'gamma',
@@ -429,7 +429,7 @@ describe('ConnectionPanel Logic', () => {
       const activeConnection: ConnectionConfig = {
         id: 'conn-1',
         name: 'Test Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },
@@ -452,15 +452,15 @@ describe('ConnectionPanel Logic', () => {
 
 describe('QuickConnect Logic', () => {
   describe('URI Input', () => {
-    it('accepts valid mondodb URI', () => {
-      const uri = 'mondodb://localhost:27017'
-      const isValid = uri.startsWith('mondodb://') || uri.startsWith('mongodb://')
+    it('accepts valid mongo.do URI', () => {
+      const uri = 'mongodo://localhost:27017'
+      const isValid = uri.startsWith('mongodo://') || uri.startsWith('mongodb://')
       expect(isValid).toBe(true)
     })
 
     it('accepts valid mongodb URI', () => {
       const uri = 'mongodb://localhost:27017'
-      const isValid = uri.startsWith('mondodb://') || uri.startsWith('mongodb://')
+      const isValid = uri.startsWith('mongodo://') || uri.startsWith('mongodb://')
       expect(isValid).toBe(true)
     })
 
@@ -483,7 +483,7 @@ describe('QuickConnect Logic', () => {
     })
 
     it('clicking recent fills URI input', () => {
-      const recentUri = 'mondodb://recent-host:27017'
+      const recentUri = 'mongodo://recent-host:27017'
       let uri = ''
 
       // Simulate click on recent connection

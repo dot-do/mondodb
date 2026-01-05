@@ -229,7 +229,7 @@ export function createDatabaseAccess(db: MondoDatabase): DatabaseAccess {
 export function createMondoMcpHandler(
   db: MondoDatabase,
   options?: {
-    /** Server name for MCP initialization (default: 'mondodb') */
+    /** Server name for MCP initialization (default: 'mongo.do') */
     name?: string
     /** Server version (default: '1.0.0') */
     version?: string
@@ -241,7 +241,7 @@ export function createMondoMcpHandler(
   // Create MCP server with database access
   const server = createMcpServer({
     dbAccess,
-    name: options?.name ?? 'mondodb',
+    name: options?.name ?? 'mongo.do',
     version: options?.version ?? '1.0.0',
   })
 
@@ -266,7 +266,7 @@ export function getMcpServer(
   const dbAccess = createDatabaseAccess(db)
   return createMcpServer({
     dbAccess,
-    name: options?.name ?? 'mondodb',
+    name: options?.name ?? 'mongo.do',
     version: options?.version ?? '1.0.0',
   })
 }

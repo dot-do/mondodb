@@ -1443,7 +1443,7 @@ describe('RPC Endpoint', () => {
 })
 
 // ============================================================================
-// JSON-RPC 2.0 Protocol Tests (RED Phase - mondodb-kn5n)
+// JSON-RPC 2.0 Protocol Tests (RED Phase - mongo.do-kn5n)
 // ============================================================================
 // These tests verify JSON-RPC 2.0 compliant request/response format.
 // The implementation should support both the current format AND JSON-RPC 2.0.

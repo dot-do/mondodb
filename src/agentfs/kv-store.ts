@@ -1,7 +1,7 @@
 /**
  * AgentFS Key-Value Store Implementation
  *
- * Provides simple key-value storage backed by MondoDB collections.
+ * Provides simple key-value storage backed by mongo.do collections.
  * Values can be any JSON-serializable type.
  */
 
@@ -44,7 +44,7 @@ export interface KVStorageDocument {
 /**
  * AgentFS Key-Value Store
  *
- * Implements the KeyValueStore interface using a MondoDB collection backend.
+ * Implements the KeyValueStore interface using a mongo.do collection backend.
  * Each entry is stored as a document with key, value, and timestamps.
  */
 export class AgentFSKVStore implements KeyValueStore {
@@ -53,7 +53,7 @@ export class AgentFSKVStore implements KeyValueStore {
   /**
    * Create a new AgentFSKVStore
    *
-   * @param backend - The storage backend (typically a MondoDB collection)
+   * @param backend - The storage backend (typically a mongo.do collection)
    */
   constructor(backend: KVStorageBackend) {
     this.backend = backend

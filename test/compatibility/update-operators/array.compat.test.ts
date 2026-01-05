@@ -4,17 +4,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Array Update Operators Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('Array Update Operators Compatibility', () => {
     it('pushes single element', async () => {
       const dbName = `test_push_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1, 2] })
       await mondoCol.insertOne({ items: [1, 2] })
@@ -43,7 +43,7 @@ describe('Array Update Operators Compatibility', () => {
     it('creates array if field does not exist', async () => {
       const dbName = `test_push_create_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test' })
       await mondoCol.insertOne({ name: 'test' })
@@ -61,7 +61,7 @@ describe('Array Update Operators Compatibility', () => {
     it('$push with $each for multiple elements', async () => {
       const dbName = `test_push_each_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1] })
       await mondoCol.insertOne({ items: [1] })
@@ -81,7 +81,7 @@ describe('Array Update Operators Compatibility', () => {
     it('removes matching value', async () => {
       const dbName = `test_pull_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1, 2, 3, 2, 4] })
       await mondoCol.insertOne({ items: [1, 2, 3, 2, 4] })
@@ -99,7 +99,7 @@ describe('Array Update Operators Compatibility', () => {
     it('removes nothing if value not present', async () => {
       const dbName = `test_pull_none_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1, 2, 3] })
       await mondoCol.insertOne({ items: [1, 2, 3] })
@@ -119,7 +119,7 @@ describe('Array Update Operators Compatibility', () => {
     it('$pop:1 removes last element', async () => {
       const dbName = `test_pop_last_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1, 2, 3] })
       await mondoCol.insertOne({ items: [1, 2, 3] })
@@ -137,7 +137,7 @@ describe('Array Update Operators Compatibility', () => {
     it('$pop:-1 removes first element', async () => {
       const dbName = `test_pop_first_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ items: [1, 2, 3] })
       await mondoCol.insertOne({ items: [1, 2, 3] })
@@ -157,7 +157,7 @@ describe('Array Update Operators Compatibility', () => {
     it('adds unique element', async () => {
       const dbName = `test_addtoset_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ tags: ['a', 'b'] })
       await mondoCol.insertOne({ tags: ['a', 'b'] })
@@ -177,7 +177,7 @@ describe('Array Update Operators Compatibility', () => {
     it('does not add duplicate', async () => {
       const dbName = `test_addtoset_dup_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ tags: ['a', 'b'] })
       await mondoCol.insertOne({ tags: ['a', 'b'] })
@@ -195,7 +195,7 @@ describe('Array Update Operators Compatibility', () => {
     it('$addToSet with $each', async () => {
       const dbName = `test_addtoset_each_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ tags: ['a'] })
       await mondoCol.insertOne({ tags: ['a'] })
@@ -218,7 +218,7 @@ describe('Array Update Operators Compatibility', () => {
     it('creates array if field does not exist', async () => {
       const dbName = `test_addtoset_create_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test' })
       await mondoCol.insertOne({ name: 'test' })

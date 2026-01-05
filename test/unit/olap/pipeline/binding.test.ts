@@ -8,7 +8,7 @@
  * Cloudflare Pipelines provide a managed event streaming service
  * for ingesting and processing data at scale.
  *
- * Issue: mondodb-s6mp - Pipeline Integration Tests
+ * Issue: mongo.do-s6mp - Pipeline Integration Tests
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
@@ -755,7 +755,7 @@ describe.skip('StreamConfigBuilder', () => {
     it('should create config from wrangler pipeline binding', () => {
       const wranglerConfig: PipelineBindingConfig = {
         name: 'CDC_PIPELINE',
-        pipeline: 'mondodb-cdc-pipeline',
+        pipeline: 'mongo.do-cdc-pipeline',
       };
 
       const configBuilder = StreamConfigBuilder.fromWrangler(wranglerConfig);

@@ -5,7 +5,7 @@
  * These tests define the expected behavior for Iceberg catalog discovery,
  * table schema introspection, and connection management.
  *
- * Issue: mondodb-vyf4
+ * Issue: mongo.do-vyf4
  */
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';

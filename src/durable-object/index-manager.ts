@@ -1,5 +1,5 @@
 /**
- * Index Manager for mondodb
+ * Index Manager for mongo.do
  *
  * Manages SQLite indexes for MongoDB-style collections backed by Durable Objects.
  * Indexes are created on json_extract expressions to enable efficient querying.

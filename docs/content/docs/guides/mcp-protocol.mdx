@@ -1,15 +1,15 @@
 ---
 title: MCP Protocol
-description: Integrate AI agents with MondoDB using the Model Context Protocol
+description: Integrate AI agents with mongo.do using the Model Context Protocol
 ---
 
 # MCP Protocol
 
-MondoDB provides native support for the Model Context Protocol (MCP), enabling AI agents to interact with your database through a standardized tool-calling interface. This guide covers how to create MCP servers, available database tools, and SDK adapters for popular AI frameworks.
+mongo.do provides native support for the Model Context Protocol (MCP), enabling AI agents to interact with your database through a standardized tool-calling interface. This guide covers how to create MCP servers, available database tools, and SDK adapters for popular AI frameworks.
 
 ## Overview
 
-The Model Context Protocol (MCP) is a standard for AI agents to discover and invoke tools. MondoDB's MCP implementation provides:
+The Model Context Protocol (MCP) is a standard for AI agents to discover and invoke tools. mongo.do's MCP implementation provides:
 
 - **Database Tools**: Search, fetch, and execute operations on your data
 - **SDK Adapters**: Ready-to-use integrations for Anthropic and Vercel AI SDK
@@ -21,7 +21,7 @@ The Model Context Protocol (MCP) is a standard for AI agents to discover and inv
 Use `createMcpServer()` to create an MCP server instance:
 
 ```typescript
-import { createMcpServer, type DatabaseAccess } from 'mondodb/mcp'
+import { createMcpServer, type DatabaseAccess } from 'mongo.do/mcp'
 
 // Implement the DatabaseAccess interface
 const dbAccess: DatabaseAccess = {
@@ -90,14 +90,14 @@ The `McpServerConfig` interface accepts the following options:
 |--------|------|-------------|
 | `dbAccess` | `DatabaseAccess` | Required. Database access interface for tool implementations |
 | `codeLoader` | `CodeLoader` | Optional. Enables the `do` tool for sandboxed code execution |
-| `name` | `string` | Server name (default: `'mondodb'`) |
+| `name` | `string` | Server name (default: `'mongo.do'`) |
 | `version` | `string` | Server version (default: `'1.0.0'`) |
 
 ---
 
 ## Available Database Tools
 
-MondoDB's MCP server provides three built-in tools for AI agents:
+mongo.do's MCP server provides three built-in tools for AI agents:
 
 ### search
 
@@ -201,7 +201,7 @@ Execute JavaScript code in a secure sandbox. Only available when a `codeLoader` 
 
 ## SDK Adapters
 
-MondoDB provides adapters for integrating MCP servers with popular AI SDKs.
+mongo.do provides adapters for integrating MCP servers with popular AI SDKs.
 
 ### Anthropic Adapter
 
@@ -209,7 +209,7 @@ Use with Claude models via Anthropic's SDK:
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk'
-import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+import { createMcpServer, createAnthropicAdapter } from 'mongo.do/mcp'
 
 // Create the MCP server
 const server = createMcpServer({ dbAccess })
@@ -277,7 +277,7 @@ Use with Vercel AI SDK for Next.js and other frameworks:
 ```typescript
 import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import { createMcpServer, createVercelAdapter } from 'mondodb/mcp'
+import { createMcpServer, createVercelAdapter } from 'mongo.do/mcp'
 
 // Create the MCP server
 const server = createMcpServer({ dbAccess })
@@ -334,7 +334,7 @@ The `do` tool executes code in a secure Worker sandbox with controlled database 
 ### Setting Up a Code Loader
 
 ```typescript
-import { createMcpServer, createWorkerEvaluator } from 'mondodb/mcp'
+import { createMcpServer, createWorkerEvaluator } from 'mongo.do/mcp'
 
 // Create a code loader for sandbox execution
 const codeLoader = createWorkerEvaluator({
@@ -399,7 +399,7 @@ The sandbox validates user code before execution, blocking dangerous patterns:
 Handle MCP requests over HTTP with Server-Sent Events (SSE) support:
 
 ```typescript
-import { createMcpServer, createHttpMcpHandler } from 'mondodb/mcp'
+import { createMcpServer, createHttpMcpHandler } from 'mongo.do/mcp'
 
 const server = createMcpServer({ dbAccess })
 
@@ -431,7 +431,7 @@ export default {
 For CLI and pipe-based communication:
 
 ```typescript
-import { createMcpServer, createStdioTransport } from 'mondodb/mcp'
+import { createMcpServer, createStdioTransport } from 'mongo.do/mcp'
 
 const server = createMcpServer({ dbAccess })
 
@@ -459,7 +459,7 @@ await transport.start()
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk'
-import { createMcpServer, createAnthropicAdapter } from 'mondodb/mcp'
+import { createMcpServer, createAnthropicAdapter } from 'mongo.do/mcp'
 
 async function runAgent(userQuery: string) {
   const server = createMcpServer({ dbAccess })
@@ -547,7 +547,7 @@ server.tool(
 
 ```typescript
 // app/api/mcp/route.ts
-import { createMcpServer, createHttpMcpHandler } from 'mondodb/mcp'
+import { createMcpServer, createHttpMcpHandler } from 'mongo.do/mcp'
 import { getDbAccess } from '@/lib/database'
 
 export async function POST(request: Request) {
@@ -585,7 +585,7 @@ MCP tools return structured error responses:
 The adapters provide error classification and retry logic:
 
 ```typescript
-import { McpError, McpErrorCode, isRetryableError } from 'mondodb/mcp'
+import { McpError, McpErrorCode, isRetryableError } from 'mongo.do/mcp'
 
 try {
   const result = await adapter.handleToolUse(toolUse)
@@ -620,35 +620,35 @@ try {
 
 ## CLI Integration
 
-MondoDB provides a CLI command for starting an MCP server that communicates via stdio, making it easy to integrate with AI assistants like Claude Desktop.
+mongo.do provides a CLI command for starting an MCP server that communicates via stdio, making it easy to integrate with AI assistants like Claude Desktop.
 
 ### Using the MCP CLI Command
 
 ```bash
-# Connect to a remote MondoDB Worker
-mondodb mcp --connection https://my-worker.workers.dev
+# Connect to a remote mongo.do Worker
+mongo.do mcp --connection https://my-worker.workers.dev
 
 # Use a local SQLite database (requires Bun runtime)
-mondodb mcp --local ./data/local.db
+mongo.do mcp --local ./data/local.db
 ```
 
 ### Command Options
 
 | Option | Description |
 |--------|-------------|
-| `-c, --connection <url>` | Remote MondoDB Worker URL |
+| `-c, --connection <url>` | Remote mongo.do Worker URL |
 | `-l, --local <path>` | Local SQLite database path |
 
 ### Claude Desktop Configuration
 
-Add MondoDB to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json`):
+Add mongo.do to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "mondodb": {
+    "mongo.do": {
       "command": "npx",
-      "args": ["mondodb", "mcp", "--connection", "https://my-worker.workers.dev"]
+      "args": ["mongo.do", "mcp", "--connection", "https://my-worker.workers.dev"]
     }
   }
 }
@@ -659,9 +659,9 @@ Or for local development:
 ```json
 {
   "mcpServers": {
-    "mondodb-local": {
+    "mongo.do-local": {
       "command": "npx",
-      "args": ["mondodb", "mcp", "--local", "./data/dev.db"]
+      "args": ["mongo.do", "mcp", "--local", "./data/dev.db"]
     }
   }
 }
@@ -672,7 +672,7 @@ Or for local development:
 You can also start the MCP server programmatically:
 
 ```typescript
-import { startMcpServer } from 'mondodb/cli/mcp'
+import { startMcpServer } from 'mongo.do/cli/mcp'
 
 // Start with remote connection
 const controller = await startMcpServer({
@@ -692,7 +692,7 @@ await controller.stop()
 
 ## Durable Object MCP Endpoint
 
-When running on Cloudflare Workers, each MondoDB Durable Object exposes an MCP endpoint at `/mcp`. This allows AI agents to interact directly with the database:
+When running on Cloudflare Workers, each mongo.do Durable Object exposes an MCP endpoint at `/mcp`. This allows AI agents to interact directly with the database:
 
 ```typescript
 // The MCP endpoint is automatically available
@@ -715,6 +715,6 @@ if (path.startsWith('/mcp')) {
 
 ## Related
 
-- [Cloudflare Workers Integration](/docs/guides/cloudflare-workers) - Deploy MondoDB on Workers
+- [Cloudflare Workers Integration](/docs/guides/cloudflare-workers) - Deploy mongo.do on Workers
 - [CLI Guide](/docs/guides/cli) - Command-line interface reference
 - [RPC Protocol](/docs/guides/rpc) - RPC communication details

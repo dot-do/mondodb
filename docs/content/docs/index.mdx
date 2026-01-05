@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: MondoDB - A MongoDB-compatible database for Cloudflare Workers
+description: mongo.do - A MongoDB-compatible database for Cloudflare Workers
 ---
 
-# Welcome to MondoDB
+# Welcome to mongo.do
 
-MondoDB is a MongoDB-compatible database built specifically for Cloudflare Workers. It provides a familiar MongoDB API while leveraging Cloudflare's global edge network for low-latency data access.
+mongo.do is a MongoDB-compatible database built specifically for Cloudflare Workers. It provides a familiar MongoDB API while leveraging Cloudflare's global edge network for low-latency data access.
 
 ## Key Features
 
@@ -17,13 +17,13 @@ MondoDB is a MongoDB-compatible database built specifically for Cloudflare Worke
 ## Quick Start
 
 ```bash
-npm install mondodb
+npm install mongo.do
 ```
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
-const client = new MongoClient('mondodb://your-worker.workers.dev');
+const client = new MongoClient('mongodo://your-worker.workers.dev');
 await client.connect();
 
 const db = client.db('mydb');
@@ -38,7 +38,7 @@ const users = await collection.find({ name: 'Alice' }).toArray();
 
 ## Next Steps
 
-- [Installation Guide](/docs/getting-started/installation) - Get MondoDB set up in your project
-- [Quick Start Tutorial](/docs/getting-started/quickstart) - Build your first app with MondoDB
+- [Installation Guide](/docs/getting-started/installation) - Get mongo.do set up in your project
+- [Quick Start Tutorial](/docs/getting-started/quickstart) - Build your first app with mongo.do
 - [API Reference](/docs/api-reference/client) - Detailed API documentation
 - [CRUD Operations](/docs/guides/crud) - Learn how to create, read, update, and delete documents

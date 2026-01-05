@@ -1,7 +1,7 @@
 /**
- * mondodb RPC Client
+ * mongo.do RPC Client
  *
- * Provides a type-safe interface for communicating with the mondodb Durable Object
+ * Provides a type-safe interface for communicating with the mongo.do Durable Object
  * via the RPC endpoint.
  */
 

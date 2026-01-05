@@ -1,8 +1,8 @@
 /**
  * AgentFS Virtual Filesystem Implementation
  *
- * Virtual filesystem stored in MondoDB collections.
- * Provides a file-system-like interface backed by MongoDB/MondoDB.
+ * Virtual filesystem stored in mongo.do collections.
+ * Provides a file-system-like interface backed by MongoDB/mongo.do.
  *
  * @module agentfs/vfs
  *
@@ -68,7 +68,7 @@ interface FileDocument {
 }
 
 /**
- * AgentFilesystem - Virtual filesystem backed by MondoDB
+ * AgentFilesystem - Virtual filesystem backed by mongo.do
  *
  * Implements the FileSystem interface using a MongoDB-compatible database.
  * Uses the file path as the document _id for O(1) lookups.

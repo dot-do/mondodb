@@ -297,7 +297,7 @@ describe('AnthropicMcpAdapter', () => {
       const result = await adapter.initialize()
 
       expect(result.protocolVersion).toBe('2024-11-05')
-      expect(result.serverInfo.name).toBe('mondodb')
+      expect(result.serverInfo.name).toBe('mongo.do')
       expect(result.capabilities).toBeDefined()
     })
 
@@ -628,14 +628,14 @@ describe('Server Info', () => {
     const dbAccess = createMockDatabaseAccess()
     const server = createMcpServer({
       dbAccess,
-      name: 'mondodb-custom',
+      name: 'mongo.do-custom',
       version: '2.0.0',
     })
     const adapter = new AnthropicMcpAdapter(server)
 
     const result = await adapter.initialize()
 
-    expect(result.serverInfo.name).toBe('mondodb-custom')
+    expect(result.serverInfo.name).toBe('mongo.do-custom')
     expect(result.serverInfo.version).toBe('2.0.0')
   })
 })

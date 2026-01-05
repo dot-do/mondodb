@@ -145,7 +145,7 @@ describe('useConnection Hook Utilities', () => {
       const connection: ConnectionConfig = {
         id: 'test-conn-1',
         name: 'Test Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },
@@ -160,10 +160,10 @@ describe('useConnection Hook Utilities', () => {
         updatedAt: connection.updatedAt.toISOString(),
       }])
 
-      localStorageMock.setItem('mondodb_studio_connections', saved)
+      localStorageMock.setItem('mongo.do_studio_connections', saved)
 
       expect(localStorageMock.setItem).toHaveBeenCalledWith(
-        'mondodb_studio_connections',
+        'mongo.do_studio_connections',
         expect.any(String)
       )
     })
@@ -172,7 +172,7 @@ describe('useConnection Hook Utilities', () => {
       const stored = JSON.stringify([{
         id: 'conn-1',
         name: 'Saved Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },
@@ -181,9 +181,9 @@ describe('useConnection Hook Utilities', () => {
         updatedAt: '2024-01-01T00:00:00.000Z',
       }])
 
-      localStorageMock.setItem('mondodb_studio_connections', stored)
+      localStorageMock.setItem('mongo.do_studio_connections', stored)
 
-      const result = localStorageMock.getItem('mondodb_studio_connections')
+      const result = localStorageMock.getItem('mongo.do_studio_connections')
       const parsed = JSON.parse(result!)
 
       expect(parsed).toHaveLength(1)
@@ -196,24 +196,24 @@ describe('useConnection Hook Utilities', () => {
     })
 
     it('handles invalid JSON in localStorage', () => {
-      localStorageMock.setItem('mondodb_studio_connections', 'invalid json')
+      localStorageMock.setItem('mongo.do_studio_connections', 'invalid json')
 
-      const result = localStorageMock.getItem('mondodb_studio_connections')
+      const result = localStorageMock.getItem('mongo.do_studio_connections')
       expect(() => JSON.parse(result!)).toThrow()
     })
   })
 
   describe('Connection Operations', () => {
     it('validates URI scheme', () => {
-      const validSchemes = ['mondodb://', 'mongodb://']
+      const validSchemes = ['mongodo://', 'mongodb://']
       const invalidSchemes = ['http://', 'https://', 'ftp://']
 
       validSchemes.forEach((scheme) => {
-        expect(scheme.startsWith('mondodb://') || scheme.startsWith('mongodb://')).toBe(true)
+        expect(scheme.startsWith('mongodo://') || scheme.startsWith('mongodb://')).toBe(true)
       })
 
       invalidSchemes.forEach((scheme) => {
-        expect(scheme.startsWith('mondodb://') || scheme.startsWith('mongodb://')).toBe(false)
+        expect(scheme.startsWith('mongodo://') || scheme.startsWith('mongodb://')).toBe(false)
       })
     })
 
@@ -221,7 +221,7 @@ describe('useConnection Hook Utilities', () => {
       const requiredFields = ['host', 'uri']
       const config = {
         host: 'localhost',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
       }
 
       requiredFields.forEach((field) => {
@@ -244,7 +244,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '1',
           name: 'Favorite 1',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -256,7 +256,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '2',
           name: 'Not Favorite',
-          uri: 'mondodb://localhost:27018',
+          uri: 'mongodo://localhost:27018',
           host: 'localhost',
           port: 27018,
           auth: { type: 'none' },
@@ -268,7 +268,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '3',
           name: 'Favorite 2',
-          uri: 'mondodb://localhost:27019',
+          uri: 'mongodo://localhost:27019',
           host: 'localhost',
           port: 27019,
           auth: { type: 'none' },
@@ -292,7 +292,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '1',
           name: 'Old Connection',
-          uri: 'mondodb://localhost:27017',
+          uri: 'mongodo://localhost:27017',
           host: 'localhost',
           port: 27017,
           auth: { type: 'none' },
@@ -304,7 +304,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '2',
           name: 'Recent Connection',
-          uri: 'mondodb://localhost:27018',
+          uri: 'mongodo://localhost:27018',
           host: 'localhost',
           port: 27018,
           auth: { type: 'none' },
@@ -316,7 +316,7 @@ describe('useConnection Hook Utilities', () => {
         {
           id: '3',
           name: 'Middle Connection',
-          uri: 'mondodb://localhost:27019',
+          uri: 'mongodo://localhost:27019',
           host: 'localhost',
           port: 27019,
           auth: { type: 'none' },
@@ -344,7 +344,7 @@ describe('useConnection Hook Utilities', () => {
       const connections: ConnectionConfig[] = Array.from({ length: 10 }, (_, i) => ({
         id: `${i}`,
         name: `Connection ${i}`,
-        uri: `mondodb://localhost:${27017 + i}`,
+        uri: `mongodo://localhost:${27017 + i}`,
         host: 'localhost',
         port: 27017 + i,
         auth: { type: 'none' as const },
@@ -364,7 +364,7 @@ describe('useConnection Hook Utilities', () => {
       const original: ConnectionConfig = {
         id: 'original-id',
         name: 'My Connection',
-        uri: 'mondodb://localhost:27017',
+        uri: 'mongodo://localhost:27017',
         host: 'localhost',
         port: 27017,
         auth: { type: 'none' },

@@ -9,8 +9,8 @@
  * - --local <path>: Use a local SQLite database
  *
  * Usage:
- *   mondodb mcp --connection https://my-worker.workers.dev
- *   mondodb mcp --local ./data/local.db
+ *   mongo.do mcp --connection https://my-worker.workers.dev
+ *   mongo.do mcp --local ./data/local.db
  *
  * The MCP server exposes tools for AI agents to interact with the database:
  * - search: Query documents
@@ -167,7 +167,7 @@ export async function startMcpServer(options: McpCommandOptions): Promise<McpSer
   // Create MCP server
   const mcpServer = createMcpServer({
     dbAccess,
-    name: 'mondodb',
+    name: 'mongo.do',
     version: '1.0.0',
   })
 

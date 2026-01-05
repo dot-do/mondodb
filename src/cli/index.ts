@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * MondoDB CLI Entry Point
  *
@@ -6,7 +6,7 @@
  * Provides a MongoDB-compatible database backed by SQLite or Cloudflare Workers.
  *
  * Usage:
- *   mondodb [options]
+ *   mongo.do [options]
  *   bun run src/cli/index.ts [options]
  *
  * @module cli
@@ -89,7 +89,7 @@ ${colorize('MongoDB-compatible database backed by SQLite', 'dim')}
  * Print version information
  */
 function printVersion(): void {
-  console.log(`mondodb version ${version}`)
+  console.log(`mongo.do version ${version}`)
 }
 
 /**
@@ -187,7 +187,7 @@ async function main(): Promise<void> {
         printError('Invalid options')
       }
       console.log('')
-      console.log(`Run ${colorize('mondodb --help', 'cyan')} for usage information.`)
+      console.log(`Run ${colorize('mongo.do --help', 'cyan')} for usage information.`)
       process.exit(1)
     }
 

@@ -5,7 +5,7 @@
  * routing analytical queries to OLAP engines (R2 SQL, ClickHouse) from
  * within MongoDB aggregation pipelines.
  *
- * Issue: mondodb-623n
+ * Issue: mongo.do-623n
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';

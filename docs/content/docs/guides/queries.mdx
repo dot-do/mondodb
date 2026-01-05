@@ -1,11 +1,11 @@
 ---
 title: Query & Filter Syntax
-description: Complete guide to MondoDB query operators and filter syntax
+description: Complete guide to mongo.do query operators and filter syntax
 ---
 
 # Query & Filter Syntax
 
-MondoDB supports MongoDB-compatible query syntax for filtering documents. This guide covers all supported query operators with examples.
+mongo.do supports MongoDB-compatible query syntax for filtering documents. This guide covers all supported query operators with examples.
 
 ## Quick Reference
 
@@ -571,7 +571,7 @@ await collection.find({
 
 ## Query Optimization
 
-MondoDB automatically optimizes queries:
+mongo.do automatically optimizes queries:
 
 - **Logical operator flattening:** Nested `$and`/`$or` of the same type are merged for efficiency
 - **CTE optimization:** Multiple array operations on the same field use Common Table Expressions
@@ -647,12 +647,12 @@ const results = await collection.find({
 
 ## TypeScript Support
 
-MondoDB provides full TypeScript support for type-safe queries.
+mongo.do provides full TypeScript support for type-safe queries.
 
 ### Typed Filters
 
 ```typescript
-import type { Filter } from 'mondodb'
+import type { Filter } from 'mongo.do'
 
 interface Product {
   _id: ObjectId
@@ -676,7 +676,7 @@ const products = await collection.find(filter).toArray()
 ### FilterOperators Type
 
 ```typescript
-import type { FilterOperators } from 'mondodb'
+import type { FilterOperators } from 'mongo.do'
 
 // FilterOperators provides type hints for all query operators
 interface FilterOperators<T> {
@@ -701,7 +701,7 @@ interface FilterOperators<T> {
 ### RootFilterOperators Type
 
 ```typescript
-import type { RootFilterOperators } from 'mondodb'
+import type { RootFilterOperators } from 'mongo.do'
 
 // Root-level operators available on the filter object
 interface RootFilterOperators<T> {

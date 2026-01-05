@@ -4,17 +4,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Evaluation Query Operators Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -28,7 +28,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_regex_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'Apple', description: 'A red fruit' },
@@ -154,7 +154,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$regex on non-string field returns no match', async () => {
       const dbName = `test_regex_nonstring_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test', value: 123 })
       await mondoCol.insertOne({ name: 'test', value: 123 })
@@ -187,7 +187,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$regex with special characters escaped', async () => {
       const dbName = `test_regex_special_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test.value', desc: 'with dot' })
       await mongoCol.insertOne({ name: 'testXvalue', desc: 'with X' })
@@ -233,7 +233,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$regex with unicode characters', async () => {
       const dbName = `test_regex_unicode_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'cafe', desc: 'no accent' })
       await mongoCol.insertOne({ name: 'cafe\u0301', desc: 'with combining accent' })
@@ -283,7 +283,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_expr_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', spent: 100, budget: 120 },
@@ -457,7 +457,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('access nested fields in $expr', async () => {
       const dbName = `test_expr_nested_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'X', stats: { high: 100, low: 50 } })
       await mongoCol.insertOne({ name: 'Y', stats: { high: 80, low: 90 } })
@@ -523,7 +523,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_mod_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', value: 10 },
@@ -638,7 +638,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$mod on non-numeric field returns no match', async () => {
       const dbName = `test_mod_nonnum_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'test', value: 'not a number' })
       await mondoCol.insertOne({ name: 'test', value: 'not a number' })
@@ -696,7 +696,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     const setupCollections = async () => {
       const dbName = `test_where_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       const docs = [
         { name: 'A', x: 10, y: 5 },
@@ -809,7 +809,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$regex and $expr combined in $and', async () => {
       const dbName = `test_combined_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'Apple', price: 100, cost: 50 })
       await mongoCol.insertOne({ name: 'Apricot', price: 80, cost: 90 })
@@ -844,7 +844,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$mod with missing field', async () => {
       const dbName = `test_mod_missing_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', value: 10 })
       await mongoCol.insertOne({ name: 'B' }) // no value field
@@ -863,7 +863,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$expr with missing field returns false', async () => {
       const dbName = `test_expr_missing_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', x: 10 })
       await mongoCol.insertOne({ name: 'B', x: 10, y: 5 })
@@ -888,7 +888,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$regex on nested field', async () => {
       const dbName = `test_regex_nested_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ user: { name: 'Alice' } })
       await mongoCol.insertOne({ user: { name: 'Bob' } })
@@ -913,7 +913,7 @@ describe('Evaluation Query Operators Compatibility', () => {
     it('$expr with $cond conditional', async () => {
       const dbName = `test_expr_cond_${testNum}`
       const mongoCol = mongodb.database(dbName).collection('items')
-      const mondoCol = mondodb.database(dbName).collection('items')
+      const mondoCol = mongo.do.database(dbName).collection('items')
 
       await mongoCol.insertOne({ name: 'A', qty: 100, discount: true })
       await mongoCol.insertOne({ name: 'B', qty: 50, discount: false })

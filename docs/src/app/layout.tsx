@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: {
-    default: 'MondoDB Documentation',
-    template: '%s | MondoDB Docs',
+    default: 'mongo.do Documentation',
+    template: '%s | mongo.do Docs',
   },
   description: 'MongoDB-compatible database for Cloudflare Workers',
 };

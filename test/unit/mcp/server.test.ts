@@ -42,7 +42,7 @@ describe('createMcpServer', () => {
     const server = createMcpServer({ dbAccess: mockDbAccess })
 
     expect(server).toBeDefined()
-    expect(server.name).toBe('mondodb')
+    expect(server.name).toBe('mongo.do')
     expect(server.version).toBe('1.0.0')
   })
 
@@ -181,7 +181,7 @@ describe('McpServer', () => {
       expect(response.result).toBeDefined()
       const result = response.result as { protocolVersion: string; serverInfo: { name: string } }
       expect(result.protocolVersion).toBe('2024-11-05')
-      expect(result.serverInfo.name).toBe('mondodb')
+      expect(result.serverInfo.name).toBe('mongo.do')
     })
 
     it('should handle tools/list request', async () => {

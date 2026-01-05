@@ -9,7 +9,7 @@
  *   docker-compose -f test/integration/olap/docker-compose.yml up -d
  *   CLICKHOUSE_URL=http://localhost:8123 npm run test:integration
  *
- * Issue: mondodb-zmyl - ClickHouse Integration Tests
+ * Issue: mongo.do-zmyl - ClickHouse Integration Tests
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -45,7 +45,7 @@ const CLICKHOUSE_HOST = process.env.CLICKHOUSE_HOST || 'localhost';
 const CLICKHOUSE_PORT = parseInt(process.env.CLICKHOUSE_PORT || '8123', 10);
 const CLICKHOUSE_USER = process.env.CLICKHOUSE_USER || 'default';
 const CLICKHOUSE_PASSWORD = process.env.CLICKHOUSE_PASSWORD || '';
-const CLICKHOUSE_DATABASE = process.env.CLICKHOUSE_DATABASE || 'mondodb_test';
+const CLICKHOUSE_DATABASE = process.env.CLICKHOUSE_DATABASE || 'mongo.do_test';
 
 /**
  * Skip tests if no ClickHouse instance available

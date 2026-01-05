@@ -5,7 +5,7 @@
  * Supports analytical queries including JOINs, window functions, CTEs,
  * JSON columns, and query cancellation.
  *
- * Issue: mondodb-vyf4
+ * Issue: mongo.do-vyf4
  */
 
 import { ClickHouseIcebergClient } from './iceberg';
@@ -110,8 +110,13 @@ function serializeParam(value: unknown): string {
 // Query Tracking for Cancellation
 // =============================================================================
 
+/** Extended AbortController with cancel marker */
+interface CancellableController extends AbortController {
+  _markCancelled?: () => void;
+}
+
 /** Map of active query controllers for cancellation */
-const activeQueries = new Map<string, AbortController>();
+const activeQueries = new Map<string, CancellableController>();
 
 // =============================================================================
 // Iceberg Query Executor (Legacy Stub)
@@ -394,7 +399,14 @@ export async function executeQuery<T = Record<string, unknown>>(
   }
 
   // Create abort controller for cancellation
-  const controller = new AbortController();
+  const controller: CancellableController = new AbortController();
+
+  // Track if this query was cancelled via cancelQuery()
+  let wasCancelled = false;
+  controller._markCancelled = () => {
+    wasCancelled = true;
+  };
+
   activeQueries.set(queryId, controller);
 
   // Chain with user-provided signal
@@ -416,11 +428,14 @@ export async function executeQuery<T = Record<string, unknown>>(
         })
       : null;
 
-    // Create abort promise that rejects when controller is aborted
+    // Create abort promise that rejects when controller is aborted via cancelQuery
     // This ensures cancellation works even if fetch doesn't respect the signal
     const abortPromise = new Promise<never>((_, reject) => {
       controller.signal.addEventListener('abort', () => {
-        reject(new Error('Query cancelled'));
+        // Only reject from this promise if explicitly cancelled via cancelQuery
+        if (wasCancelled) {
+          reject(new Error('Query cancelled'));
+        }
       });
     });
 
@@ -489,11 +504,7 @@ export async function executeQuery<T = Record<string, unknown>>(
 
     return result;
   } catch (error) {
-    // Handle abort errors - could be cancellation or timeout
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Query cancelled');
-    }
-
+    // Re-throw errors as-is
     throw error;
   } finally {
     activeQueries.delete(queryId);
@@ -550,7 +561,14 @@ export async function executeQueryWithParams<T = Record<string, unknown>>(
   }
 
   // Create abort controller for cancellation
-  const controller = new AbortController();
+  const controller: CancellableController = new AbortController();
+
+  // Track if this query was cancelled via cancelQuery()
+  let wasCancelled = false;
+  controller._markCancelled = () => {
+    wasCancelled = true;
+  };
+
   activeQueries.set(queryId, controller);
 
   // Chain with user-provided signal
@@ -572,11 +590,14 @@ export async function executeQueryWithParams<T = Record<string, unknown>>(
         })
       : null;
 
-    // Create abort promise that rejects when controller is aborted
+    // Create abort promise that rejects when controller is aborted via cancelQuery
     // This ensures cancellation works even if fetch doesn't respect the signal
     const abortPromise = new Promise<never>((_, reject) => {
       controller.signal.addEventListener('abort', () => {
-        reject(new Error('Query cancelled'));
+        // Only reject from this promise if explicitly cancelled via cancelQuery
+        if (wasCancelled) {
+          reject(new Error('Query cancelled'));
+        }
       });
     });
 
@@ -645,11 +666,7 @@ export async function executeQueryWithParams<T = Record<string, unknown>>(
 
     return result;
   } catch (error) {
-    // Handle abort errors - could be cancellation or timeout
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Query cancelled');
-    }
-
+    // Re-throw errors as-is
     throw error;
   } finally {
     activeQueries.delete(queryId);
@@ -669,6 +686,10 @@ export async function cancelQuery(
   // First, abort any local controller
   const controller = activeQueries.get(queryId);
   if (controller) {
+    // Mark as cancelled before aborting so the abort promise knows it was cancelled
+    if (controller._markCancelled) {
+      controller._markCancelled();
+    }
     controller.abort();
     activeQueries.delete(queryId);
   }

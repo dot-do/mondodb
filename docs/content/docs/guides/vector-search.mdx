@@ -5,7 +5,7 @@ description: Semantic similarity search with Cloudflare Vectorize and Workers AI
 
 # Vector Search
 
-MondoDB integrates with Cloudflare Vectorize and Workers AI to provide powerful vector search capabilities. This enables semantic similarity search, document recommendations, and retrieval-augmented generation (RAG) applications.
+mongo.do integrates with Cloudflare Vectorize and Workers AI to provide powerful vector search capabilities. This enables semantic similarity search, document recommendations, and retrieval-augmented generation (RAG) applications.
 
 ## Overview
 
@@ -55,12 +55,12 @@ Then bind the index and Workers AI in your `wrangler.jsonc`:
 }
 ```
 
-### MondoDB Configuration
+### mongo.do Configuration
 
-Configure MondoDB to use Vectorize for automatic embedding generation:
+Configure mongo.do to use Vectorize for automatic embedding generation:
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
 const client = new MongoClient({
   // ... other options
@@ -74,7 +74,7 @@ const client = new MongoClient({
 
 ## Embedding Models
 
-MondoDB uses Cloudflare Workers AI to generate embeddings. The default model is `@cf/baai/bge-m3`, which offers:
+mongo.do uses Cloudflare Workers AI to generate embeddings. The default model is `@cf/baai/bge-m3`, which offers:
 
 | Feature | Value |
 |---------|-------|
@@ -104,14 +104,14 @@ When choosing a model, consider:
 
 ## Automatic Embedding Generation
 
-MondoDB can automatically generate and store embeddings when documents are inserted or updated.
+mongo.do can automatically generate and store embeddings when documents are inserted or updated.
 
 ### EmbeddingManager
 
 The `EmbeddingManager` class handles the embedding pipeline:
 
 ```typescript
-import { EmbeddingManager } from 'mondodb/embedding';
+import { EmbeddingManager } from 'mongo.do/embedding';
 
 const embedder = new EmbeddingManager({
   vectorize: env.VECTORIZE,
@@ -177,7 +177,7 @@ await embedder.deleteDocuments(['doc-1', 'doc-2', 'doc-3']);
 
 ## Document Serialization
 
-Before generating embeddings, documents are serialized into text. MondoDB provides flexible serialization options.
+Before generating embeddings, documents are serialized into text. mongo.do provides flexible serialization options.
 
 ### Serialization Formats
 

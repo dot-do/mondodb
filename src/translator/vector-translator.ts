@@ -1,5 +1,5 @@
 /**
- * VectorTranslator - Translates MongoDB $vectorSearch stages (mondodb-rn0)
+ * VectorTranslator - Translates MongoDB $vectorSearch stages (mongo.do-rn0)
  *
  * Handles the translation of vector search operations for use with
  * Cloudflare Vectorize and AI bindings for embedding generation.

@@ -5,7 +5,7 @@
  * - SQLite (OLTP): Simple lookups, writes, small result sets
  * - ClickHouse (OLAP): Heavy aggregations, large scans, analytics
  *
- * Issue: mondodb-aioe
+ * Issue: mongo.do-aioe
  */
 
 import type { Document } from 'bson';

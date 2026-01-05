@@ -1,11 +1,11 @@
 /**
- * MongoClient - MongoDB-compatible client for mondodb
+ * MongoClient - MongoDB-compatible client for mongo.do
  *
  * Provides connection management and database access for
  * MongoDB-compatible operations. Supports two modes:
  *
  * 1. URI-based connection (for testing/in-memory):
- *    const client = new MongoClient('mondodb://localhost:27017/mydb')
+ *    const client = new MongoClient('mongodo://localhost:27017/mydb')
  *
  * 2. Env-based connection (for Cloudflare Durable Objects):
  *    const client = new MongoClient(env)
@@ -91,7 +91,7 @@ interface ParsedURI {
 }
 
 /**
- * Parse a mondodb:// or mongodb:// URI into its components
+ * Parse a mongodo:// or mongodb:// URI into its components
  */
 function parseURI(uri: string): ParsedURI {
   if (!uri || uri.trim() === '') {
@@ -105,8 +105,8 @@ function parseURI(uri: string): ParsedURI {
   }
 
   const scheme = schemeMatch[1]!.toLowerCase()
-  if (scheme !== 'mondodb' && scheme !== 'mongodb') {
-    throw new Error(`Invalid URI scheme: Expected "mondodb://" or "mongodb://", got "${scheme}://"`)
+  if (scheme !== 'mongodo' && scheme !== 'mongodb') {
+    throw new Error(`Invalid URI scheme: Expected "mongodo://" or "mongodb://", got "${scheme}://"`)
   }
 
   // Remove scheme from URI
@@ -197,7 +197,7 @@ function parseURI(uri: string): ParsedURI {
 type ConnectionMode = 'uri' | 'env'
 
 /**
- * MongoClient - The main entry point for interacting with mondodb
+ * MongoClient - The main entry point for interacting with mongo.do
  *
  * Provides a MongoDB-compatible API for database operations.
  * Supports both URI-based connections (for testing) and
@@ -205,7 +205,7 @@ type ConnectionMode = 'uri' | 'env'
  *
  * @example URI-based (testing/in-memory):
  * ```typescript
- * const client = new MongoClient('mondodb://localhost:27017/mydb')
+ * const client = new MongoClient('mongodo://localhost:27017/mydb')
  * await client.connect()
  * const db = client.db('mydb')
  * ```
@@ -296,7 +296,7 @@ export class MongoClient {
   /**
    * Connect to the database
    *
-   * In mondodb, this is mostly a no-op since connections are handled lazily.
+   * In mongo.do, this is mostly a no-op since connections are handled lazily.
    * For Durable Objects mode, connections are per-request.
    * For URI mode (in-memory), this initializes the connection state.
    *
@@ -307,7 +307,7 @@ export class MongoClient {
       return this
     }
 
-    // Connection is lazy in mondodb
+    // Connection is lazy in mongo.do
     this._isConnected = true
     return this
   }

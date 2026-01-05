@@ -10,7 +10,7 @@
  * - Type mapping: ClickHouse types -> BSON documents
  * - Cursor management: Handles batched results
  *
- * Issue: mondodb-yubk
+ * Issue: mongo.do-yubk
  */
 
 import type { Document } from 'bson';

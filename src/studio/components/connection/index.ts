@@ -1,5 +1,5 @@
 /**
- * Connection components for mondodb Studio
+ * Connection components for mongo.do Studio
  */
 
 export { ConnectionPanel, ConnectionStatusIndicator } from './ConnectionPanel'

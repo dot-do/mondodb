@@ -26,7 +26,7 @@ describe('BulkWrite', () => {
   }>
 
   beforeEach(async () => {
-    client = new MongoClient('mondodb://localhost:27017')
+    client = new MongoClient('mongodo://localhost:27017')
     await client.connect()
     db = client.db('testdb')
     collection = db.collection('bulktest')

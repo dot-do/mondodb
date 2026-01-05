@@ -1,26 +1,26 @@
 ---
 title: Geospatial Queries
-description: Query location-based data with MongoDB-compatible geospatial operators in MondoDB
+description: Query location-based data with MongoDB-compatible geospatial operators in mongo.do
 ---
 
 # Geospatial Queries
 
-MondoDB provides MongoDB-compatible geospatial query operators for working with location-based data. This guide covers how to store, index, and query geographic data using GeoJSON format and geospatial operators.
+mongo.do provides MongoDB-compatible geospatial query operators for working with location-based data. This guide covers how to store, index, and query geographic data using GeoJSON format and geospatial operators.
 
 ## Overview
 
-MondoDB supports geospatial queries that let you:
+mongo.do supports geospatial queries that let you:
 
 - Find documents near a specific location
 - Find documents within a geographic boundary
 - Find documents that intersect with a geometry
 - Sort results by distance from a point
 
-Under the hood, MondoDB translates geospatial queries to SQLite using the Haversine formula for accurate spherical distance calculations.
+Under the hood, mongo.do translates geospatial queries to SQLite using the Haversine formula for accurate spherical distance calculations.
 
 ## GeoJSON Data Format
 
-MondoDB uses the GeoJSON format for storing and querying geospatial data. GeoJSON is an open standard for representing geographic features.
+mongo.do uses the GeoJSON format for storing and querying geospatial data. GeoJSON is an open standard for representing geographic features.
 
 ### Point
 
@@ -217,7 +217,7 @@ const nearbyRestaurants = await collection.find({
 }).toArray()
 ```
 
-**Note:** In MondoDB, both `$near` and `$nearSphere` use the Haversine formula for spherical distance calculations on `2dsphere` indexes.
+**Note:** In mongo.do, both `$near` and `$nearSphere` use the Haversine formula for spherical distance calculations on `2dsphere` indexes.
 
 ### $geoWithin
 
@@ -322,7 +322,7 @@ const intersectingRoutes = await collection.find({
 
 ## Distance Calculations
 
-MondoDB uses the Haversine formula to calculate great-circle distances between points on Earth's surface. This accounts for Earth's curvature and provides accurate distance calculations.
+mongo.do uses the Haversine formula to calculate great-circle distances between points on Earth's surface. This accounts for Earth's curvature and provides accurate distance calculations.
 
 ### Distance Units
 
@@ -354,10 +354,10 @@ const radiusRadians = radiusKm / 6371  // Earth's radius in km
 Find stores near a user's location, sorted by distance:
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function findNearbyStores(userLng: number, userLat: number) {
-  const client = new MongoClient('mondodb://your-worker.workers.dev')
+  const client = new MongoClient('mongodo://your-worker.workers.dev')
   await client.connect()
 
   const db = client.db('retail')

@@ -277,7 +277,7 @@ export function createMockDbAccess(mockData: Record<string, unknown[]> = {}): {
 }
 
 // =============================================================================
-// Worker Loader Integration Types (RED Phase stubs - mondodb-0aao)
+// Worker Loader Integration Types (RED Phase stubs - mongo.do-0aao)
 // =============================================================================
 
 /**

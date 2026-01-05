@@ -12,17 +12,17 @@
 #   # Stop and cleanup
 #   docker-compose -f test/integration/olap/docker-compose.yml down -v
 #
-# Issue: mondodb-zmyl - ClickHouse Integration Tests
+# Issue: mongo.do-zmyl - ClickHouse Integration Tests
 
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: mondodb-clickhouse-test
+    container_name: mongo.do-clickhouse-test
     ports:
       - "8123:8123"  # HTTP interface
       - "9000:9000"  # Native protocol
     environment:
-      - CLICKHOUSE_DB=mondodb_test
+      - CLICKHOUSE_DB=mongo.do_test
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     volumes:

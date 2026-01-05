@@ -4,7 +4,7 @@
  * Tests for routing $olap queries to the appropriate OLAP engine based on
  * query complexity, features used, and availability of engines.
  *
- * Issue: mondodb-623n
+ * Issue: mongo.do-623n
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';

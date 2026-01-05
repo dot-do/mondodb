@@ -1,5 +1,5 @@
 /**
- * Common types for mondodb
+ * Common types for mongo.do
  */
 
 export { ObjectId, default as ObjectIdDefault } from './objectid'

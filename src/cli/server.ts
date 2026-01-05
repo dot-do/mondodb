@@ -334,7 +334,7 @@ export async function createBackend(options: CLIOptions): Promise<MondoBackend> 
  */
 export function printHelp(): void {
   console.log(`
-Usage: mondodb serve [options]
+Usage: mongo.do serve [options]
 
 Start a MongoDB wire protocol server backed by SQLite.
 
@@ -349,22 +349,22 @@ Options:
 
 Examples:
   # Start local server on default port
-  mondodb serve
+  mongo.do serve
 
   # Start on custom port with verbose logging
-  mondodb serve --port 27018 --verbose
+  mongo.do serve --port 27018 --verbose
 
   # Bind to all interfaces
-  mondodb serve --host 0.0.0.0
+  mongo.do serve --host 0.0.0.0
 
   # Use custom data directory
-  mondodb serve --data /var/lib/mondodb
+  mongo.do serve --data /var/lib/mongodo
 
   # Proxy to remote Cloudflare Workers
-  mondodb serve --remote https://my-mondodb.workers.dev
+  mongo.do serve --remote https://my-mongo-do.workers.dev
 
   # Combine options
-  mondodb serve --port 27018 --host 0.0.0.0 --verbose
+  mongo.do serve --port 27018 --host 0.0.0.0 --verbose
 `)
 }
 

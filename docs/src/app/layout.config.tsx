@@ -2,7 +2,7 @@ import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 
 export const baseOptions: BaseLayoutProps = {
   nav: {
-    title: 'MondoDB',
+    title: 'mongo.do',
   },
   links: [
     {
@@ -12,7 +12,7 @@ export const baseOptions: BaseLayoutProps = {
     },
     {
       text: 'GitHub',
-      url: 'https://github.com/nathanclevenger/mondodb',
+      url: 'https://github.com/nathanclevenger/mongo.do',
       external: true,
     },
   ],

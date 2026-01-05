@@ -5,12 +5,12 @@ description: API reference for the MongoClient class
 
 # MongoClient
 
-The `MongoClient` class is the main entry point for connecting to MondoDB. It provides a MongoDB-compatible API for database operations and supports both URI-based connections (for testing) and Cloudflare Workers environment bindings (for production).
+The `MongoClient` class is the main entry point for connecting to mongo.do. It provides a MongoDB-compatible API for database operations and supports both URI-based connections (for testing) and Cloudflare Workers environment bindings (for production).
 
 ## Import
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 // Also available: session types for transaction support
 import {
@@ -22,7 +22,7 @@ import {
   type ReadConcern,
   type WriteConcern,
   type TransactionState,
-} from 'mondodb'
+} from 'mongo.do'
 ```
 
 ## Constructor
@@ -40,19 +40,19 @@ new MongoClient(uriOrEnv: string | Env, options?: MongoClientOptions)
 
 ### Connection Modes
 
-MondoDB supports two connection modes:
+mongo.do supports two connection modes:
 
 #### URI Mode (Testing/In-Memory)
 
 ```typescript
 // Basic connection
-const client = new MongoClient('mondodb://localhost:27017/mydb')
+const client = new MongoClient('mongodo://localhost:27017/mydb')
 
 // With authentication
-const client = new MongoClient('mondodb://user:pass@localhost:27017/mydb')
+const client = new MongoClient('mongodo://user:pass@localhost:27017/mydb')
 
 // With options in query string
-const client = new MongoClient('mondodb://localhost:27017/mydb?maxPoolSize=50')
+const client = new MongoClient('mongodo://localhost:27017/mydb?maxPoolSize=50')
 
 // MongoDB-compatible URI scheme also supported
 const client = new MongoClient('mongodb://localhost:27017/mydb')
@@ -60,12 +60,12 @@ const client = new MongoClient('mongodb://localhost:27017/mydb')
 
 **URI Format:**
 ```
-mondodb://[username:password@]host[:port][/database][?options]
+mongodo://[username:password@]host[:port][/database][?options]
 ```
 
 | Component | Default | Description |
 |-----------|---------|-------------|
-| `scheme` | - | `mondodb://` or `mongodb://` |
+| `scheme` | - | `mongodo://` or `mongodb://` |
 | `username` | none | Optional authentication username |
 | `password` | none | Optional authentication password |
 | `host` | `localhost` | Server hostname |
@@ -89,7 +89,7 @@ export default {
 **Env Interface:**
 ```typescript
 interface Env {
-  // Durable Object binding for MondoDB
+  // Durable Object binding for mongo.do
   MONDO_DATABASE: DurableObjectNamespace
 
   // Optional: Worker loader for $function operator
@@ -131,7 +131,7 @@ Options can be specified in both the URI and the options object. The options obj
 ```typescript
 // URI has maxPoolSize=50, but options override it to 100
 const client = new MongoClient(
-  'mondodb://localhost:27017/mydb?maxPoolSize=50',
+  'mongodo://localhost:27017/mydb?maxPoolSize=50',
   { maxPoolSize: 100 }
 )
 ```
@@ -147,7 +147,7 @@ get options(): Readonly<MongoClientOptions>
 Returns the client configuration options (read-only).
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 console.log(client.options.maxPoolSize) // 100 (default)
 console.log(client.options.host)        // 'localhost'
 console.log(client.options.port)        // 27017
@@ -162,7 +162,7 @@ get isConnected(): boolean
 Returns `true` if the client is currently connected.
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 console.log(client.isConnected) // false
 
 await client.connect()
@@ -182,7 +182,7 @@ Returns the connection mode.
 
 ```typescript
 // URI mode
-const client1 = new MongoClient('mondodb://localhost:27017')
+const client1 = new MongoClient('mongodo://localhost:27017')
 console.log(client1.mode) // 'uri'
 
 // Environment mode
@@ -199,8 +199,8 @@ get uri(): string | undefined
 Returns the connection URI (URI mode only).
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/mydb')
-console.log(client.uri) // 'mondodb://localhost:27017/mydb'
+const client = new MongoClient('mongodo://localhost:27017/mydb')
+console.log(client.uri) // 'mongodo://localhost:27017/mydb'
 
 const client2 = new MongoClient(env)
 console.log(client2.uri) // undefined
@@ -215,10 +215,10 @@ get defaultDatabase(): string
 Returns the default database name from the connection URI.
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/myapp')
+const client = new MongoClient('mongodo://localhost:27017/myapp')
 console.log(client.defaultDatabase) // 'myapp'
 
-const client2 = new MongoClient('mondodb://localhost:27017')
+const client2 = new MongoClient('mongodo://localhost:27017')
 console.log(client2.defaultDatabase) // 'test' (default)
 ```
 
@@ -235,14 +235,14 @@ async connect(): Promise<MongoClient>
 **Returns:** The client instance for chaining.
 
 **Behavior:**
-- In MondoDB, connections are handled lazily, so this is mostly a no-op
+- In mongo.do, connections are handled lazily, so this is mostly a no-op
 - For Durable Objects mode, connections are per-request
 - For URI mode, this initializes the connection state
 - Safe to call multiple times (subsequent calls return immediately)
 
 **Example:**
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/mydb')
+const client = new MongoClient('mongodo://localhost:27017/mydb')
 
 // Connect and chain
 await client.connect()
@@ -266,7 +266,7 @@ async close(): Promise<void>
 
 **Example:**
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 await client.connect()
 
 // ... perform operations
@@ -299,7 +299,7 @@ db(dbName?: string): MongoDatabase | Database
 
 **Example:**
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/myapp')
+const client = new MongoClient('mongodo://localhost:27017/myapp')
 await client.connect()
 
 // Use default database
@@ -475,13 +475,13 @@ type TransactionState =
 
 ## URI Parsing
 
-MondoDB parses connection URIs according to MongoDB connection string format.
+mongo.do parses connection URIs according to MongoDB connection string format.
 
 ### Supported URI Components
 
 ```typescript
 interface ParsedURI {
-  scheme: string              // 'mondodb' or 'mongodb'
+  scheme: string              // 'mongo.do' or 'mongodb'
   host: string                // Server hostname
   port: number                // Server port
   database: string            // Default database
@@ -495,23 +495,23 @@ interface ParsedURI {
 
 ```typescript
 // Minimal
-'mondodb://localhost'
-// -> { scheme: 'mondodb', host: 'localhost', port: 27017, database: 'test' }
+'mongodo://localhost'
+// -> { scheme: 'mongo.do', host: 'localhost', port: 27017, database: 'test' }
 
 // With port and database
-'mondodb://localhost:27018/mydb'
-// -> { scheme: 'mondodb', host: 'localhost', port: 27018, database: 'mydb' }
+'mongodo://localhost:27018/mydb'
+// -> { scheme: 'mongo.do', host: 'localhost', port: 27018, database: 'mydb' }
 
 // With authentication
-'mondodb://admin:secret123@localhost:27017/mydb'
+'mongodo://admin:secret123@localhost:27017/mydb'
 // -> { username: 'admin', password: 'secret123', ... }
 
 // With URL-encoded password (special characters)
-'mondodb://admin:p%40ssw%2Frd@localhost:27017/mydb'
+'mongodo://admin:p%40ssw%2Frd@localhost:27017/mydb'
 // -> { password: 'p@ssw/rd', ... }
 
 // With options
-'mondodb://localhost:27017/mydb?maxPoolSize=50&minPoolSize=5'
+'mongodo://localhost:27017/mydb?maxPoolSize=50&minPoolSize=5'
 // -> { options: { maxPoolSize: '50', minPoolSize: '5' }, ... }
 ```
 
@@ -533,24 +533,24 @@ new MongoClient('localhost:27017')
 
 // Invalid scheme
 new MongoClient('postgres://localhost')
-// Error: Invalid URI scheme: Expected "mondodb://" or "mongodb://", got "postgres://"
+// Error: Invalid URI scheme: Expected "mongodo://" or "mongodb://", got "postgres://"
 
 // Empty URI
 new MongoClient('')
 // Error: Invalid URI: URI cannot be empty
 
 // Invalid port
-new MongoClient('mondodb://localhost:abc')
+new MongoClient('mongodo://localhost:abc')
 // Error: Invalid port: "abc"
 ```
 
 ## Wire Protocol Support
 
-MondoDB includes wire protocol support for compatibility with MongoDB tools and drivers.
+mongo.do includes wire protocol support for compatibility with MongoDB tools and drivers.
 
 ### Connecting with Wire Protocol
 
-When running the MondoDB server locally, standard MongoDB clients can connect:
+When running the mongo.do server locally, standard MongoDB clients can connect:
 
 ```typescript
 import { MongoClient } from 'mongodb' // Official MongoDB driver
@@ -569,11 +569,11 @@ const user = await collection.findOne({ name: 'Alice' })
 
 ### Server-Side Setup
 
-To enable wire protocol, run the MondoDB CLI server:
+To enable wire protocol, run the mongo.do CLI server:
 
 ```bash
-# Start the MondoDB server
-npx mondodb serve --port 27017 --data-dir .mondodb
+# Start the mongo.do server
+npx mongo.do serve --port 27017 --data-dir .mongo.do
 ```
 
 ### Supported Wire Protocol Operations
@@ -601,10 +601,10 @@ npx mondodb serve --port 27017 --data-dir .mondodb
 ### Basic CRUD Operations
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function main() {
-  const client = new MongoClient('mondodb://localhost:27017/myapp')
+  const client = new MongoClient('mongodo://localhost:27017/myapp')
 
   try {
     await client.connect()
@@ -644,7 +644,7 @@ async function main() {
 ### Cloudflare Worker Example
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 interface Env {
   MONDO_DATABASE: DurableObjectNamespace
@@ -684,7 +684,7 @@ export default {
 ### Transaction Example
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function transferFunds(
   client: MongoClient,
@@ -731,10 +731,10 @@ async function transferFunds(
 ### Multiple Databases
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
 async function main() {
-  const client = new MongoClient('mondodb://localhost:27017')
+  const client = new MongoClient('mongodo://localhost:27017')
   await client.connect()
 
   // Work with multiple databases
@@ -784,7 +784,7 @@ try {
 
 ```typescript
 try {
-  const client = new MongoClient('mondodb://invalid-host:27017')
+  const client = new MongoClient('mongodo://invalid-host:27017')
   await client.connect()
 } catch (error) {
   if (error.message.includes('Invalid URI')) {

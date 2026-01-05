@@ -93,7 +93,7 @@ describe('ProtectedRoute', () => {
   it('renders children when user is connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: true,
-      connections: [{ id: '1', name: 'Test', url: 'mondodb://localhost' }],
+      connections: [{ id: '1', name: 'Test', url: 'mongodo://localhost' }],
       activeConnectionId: '1',
       isConnecting: false,
       error: null,
@@ -165,7 +165,7 @@ describe('ProtectedRoute', () => {
   it('allows access to collection route when connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: true,
-      connections: [{ id: '1', name: 'Test', url: 'mondodb://localhost' }],
+      connections: [{ id: '1', name: 'Test', url: 'mongodo://localhost' }],
       activeConnectionId: '1',
       isConnecting: false,
       error: null,

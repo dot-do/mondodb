@@ -2,7 +2,7 @@
  * Document CRUD Components
  *
  * Provides React components for creating, reading, updating, and deleting
- * MongoDB documents in the mondodb Studio.
+ * MongoDB documents in the mongo.do Studio.
  */
 
 // Document List View Components

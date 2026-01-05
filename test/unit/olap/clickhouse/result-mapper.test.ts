@@ -4,7 +4,7 @@
  * Comprehensive tests for ClickHouseResultMapper type conversion.
  * Focuses on converting ClickHouse result types to BSON/MongoDB document types.
  *
- * Issue: mondodb-d129
+ * Issue: mongo.do-d129
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';

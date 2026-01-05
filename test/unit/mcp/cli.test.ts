@@ -22,9 +22,9 @@ interface CliConfig {
  */
 function getCliConfig(): CliConfig {
   return {
-    dataDir: process.env.MONDODB_DATA_DIR || '.mondodb',
-    defaultDatabase: process.env.MONDODB_DEFAULT_DB || 'test',
-    serverName: 'mondodb-mcp',
+    dataDir: process.env.MONGODO_DATA_DIR || '.mongo.do',
+    defaultDatabase: process.env.MONGODO_DEFAULT_DB || 'test',
+    serverName: 'mongo.do-mcp',
     serverVersion: '1.0.0',
   }
 }
@@ -311,20 +311,20 @@ describe('getCliConfig', () => {
   })
 
   it('should return default configuration', () => {
-    delete process.env.MONDODB_DATA_DIR
-    delete process.env.MONDODB_DEFAULT_DB
+    delete process.env.MONGODO_DATA_DIR
+    delete process.env.MONGODO_DEFAULT_DB
 
     const config = getCliConfig()
 
-    expect(config.dataDir).toBe('.mondodb')
+    expect(config.dataDir).toBe('.mongo.do')
     expect(config.defaultDatabase).toBe('test')
-    expect(config.serverName).toBe('mondodb-mcp')
+    expect(config.serverName).toBe('mongo.do-mcp')
     expect(config.serverVersion).toBe('1.0.0')
   })
 
   it('should use environment variables when set', () => {
-    process.env.MONDODB_DATA_DIR = '/custom/data/dir'
-    process.env.MONDODB_DEFAULT_DB = 'mydb'
+    process.env.MONGODO_DATA_DIR = '/custom/data/dir'
+    process.env.MONGODO_DEFAULT_DB = 'mydb'
 
     const config = getCliConfig()
 

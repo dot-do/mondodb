@@ -1,9 +1,9 @@
 /**
  * CLI Enhancement Tests (RED Phase - TDD)
  *
- * Test ID: mondodb-1o7g
+ * Test ID: mongo.do-1o7g
  *
- * These tests focus on the enhanced CLI features for the `mondodb serve` command:
+ * These tests focus on the enhanced CLI features for the `mongo.do serve` command:
  * - `--remote` flag parsing for proxy mode
  * - `--port` argument parsing and validation
  * - Help output formatting and completeness
@@ -40,8 +40,8 @@ describe('CLI Enhancement: --remote Flag Parsing', () => {
     })
 
     it('should parse --remote with space-separated format', () => {
-      const options = parseArgs(['--remote', 'https://api.mondodb.dev'])
-      expect(options.remote).toBe('https://api.mondodb.dev')
+      const options = parseArgs(['--remote', 'https://api.mongo.do.dev'])
+      expect(options.remote).toBe('https://api.mongo.do.dev')
     })
 
     it('should parse -r short form for remote', () => {
@@ -62,8 +62,8 @@ describe('CLI Enhancement: --remote Flag Parsing', () => {
     })
 
     it('should accept custom domain URL', () => {
-      const options = parseArgs(['--remote=https://api.mydomain.com/mondodb'])
-      expect(options.remote).toBe('https://api.mydomain.com/mondodb')
+      const options = parseArgs(['--remote=https://api.mydomain.com/mongo.do'])
+      expect(options.remote).toBe('https://api.mydomain.com/mongo.do')
     })
 
     it('should accept URL with port number', () => {
@@ -224,7 +224,7 @@ describe('CLI Enhancement: Help Output Formatting', () => {
       printHelp()
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n')
       expect(output).toMatch(/usage:/i)
-      expect(output).toMatch(/mondodb\s+serve/i)
+      expect(output).toMatch(/mongo.do\s+serve/i)
     })
 
     it('should display description of the serve command', () => {
@@ -332,7 +332,7 @@ describe('CLI Enhancement: Help Output Formatting', () => {
     it('should show local mode example', () => {
       printHelp()
       const output = consoleSpy.mock.calls.map(c => c[0]).join('\n')
-      expect(output).toMatch(/mondodb\s+serve/i)
+      expect(output).toMatch(/mongo.do\s+serve/i)
     })
 
     it('should show remote/proxy mode example', () => {

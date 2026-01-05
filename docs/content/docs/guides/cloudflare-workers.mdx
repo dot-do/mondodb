@@ -1,15 +1,15 @@
 ---
 title: Cloudflare Workers Integration
-description: Deploy MondoDB on Cloudflare Workers with Durable Objects for globally distributed document storage
+description: Deploy mongo.do on Cloudflare Workers with Durable Objects for globally distributed document storage
 ---
 
 # Cloudflare Workers Integration
 
-MondoDB is designed from the ground up to run natively on Cloudflare Workers, leveraging Durable Objects with SQLite storage for globally distributed, MongoDB-compatible document storage. This guide covers everything you need to deploy and configure MondoDB on Cloudflare's edge network.
+mongo.do is designed from the ground up to run natively on Cloudflare Workers, leveraging Durable Objects with SQLite storage for globally distributed, MongoDB-compatible document storage. This guide covers everything you need to deploy and configure mongo.do on Cloudflare's edge network.
 
 ## Overview
 
-MondoDB on Cloudflare Workers provides:
+mongo.do on Cloudflare Workers provides:
 
 - **Durable Objects with SQLite** - Each database instance runs as a Durable Object with persistent SQLite storage
 - **Global distribution** - Data automatically replicates to Cloudflare's global network
@@ -29,7 +29,7 @@ MondoDB on Cloudflare Workers provides:
               Service Binding / RPC
                              |
                     +--------v---------+
-                    |  MondoDB Worker  |
+                    |  mongo.do Worker  |
                     |  (Entrypoint)    |
                     +--------+---------+
                              |
@@ -51,7 +51,7 @@ Create a `wrangler.jsonc` (or `wrangler.toml`) configuration file:
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-mondodb-app",
+  "name": "my-mongo.do-app",
   "main": "src/worker.ts",
   "compatibility_date": "2025-06-01",
 
@@ -144,14 +144,14 @@ The `MondoDatabase` Durable Object is the core storage engine. It provides:
 - Automatic schema migrations
 
 ```typescript
-import { MondoDatabase } from 'mondodb/durable-object'
+import { MondoDatabase } from 'mongo.do/durable-object'
 
 export { MondoDatabase }
 ```
 
 ### Schema and Storage
 
-MondoDB uses a unified schema with two main tables:
+mongo.do uses a unified schema with two main tables:
 
 | Table | Description |
 |-------|-------------|
@@ -165,7 +165,7 @@ The schema is automatically initialized and migrated when the Durable Object sta
 ### Basic Worker Setup
 
 ```typescript
-import { MongoClient, MondoDatabase } from 'mondodb'
+import { MongoClient, MondoDatabase } from 'mongo.do'
 
 // Export the Durable Object class
 export { MondoDatabase }
@@ -199,7 +199,7 @@ export default {
 For service binding support, use the `MondoEntrypoint` class:
 
 ```typescript
-import { MondoEntrypoint, MondoDatabase } from 'mondodb'
+import { MondoEntrypoint, MondoDatabase } from 'mongo.do'
 
 export { MondoDatabase, MondoEntrypoint }
 
@@ -275,7 +275,7 @@ export default {
 
 ### Service Bindings
 
-Other Workers can communicate with MondoDB via service bindings:
+Other Workers can communicate with mongo.do via service bindings:
 
 ```jsonc
 // wrangler.jsonc in consuming worker
@@ -283,7 +283,7 @@ Other Workers can communicate with MondoDB via service bindings:
   "services": [
     {
       "binding": "MONDO",
-      "service": "mondodb",
+      "service": "mongo.do",
       "entrypoint": "MondoEntrypoint"
     }
   ]
@@ -342,7 +342,7 @@ interface MondoBindings {
 
 ### HTTP RPC Endpoint
 
-MondoDB also exposes an HTTP RPC endpoint at `/rpc`:
+mongo.do also exposes an HTTP RPC endpoint at `/rpc`:
 
 ```typescript
 // Single request
@@ -369,7 +369,7 @@ const batchResponse = await fetch('https://your-worker.workers.dev/rpc/batch', {
 
 ## Vectorize Integration
 
-MondoDB integrates with Cloudflare Vectorize for vector search capabilities.
+mongo.do integrates with Cloudflare Vectorize for vector search capabilities.
 
 ### Configuration
 
@@ -398,7 +398,7 @@ MondoDB integrates with Cloudflare Vectorize for vector search capabilities.
 The `EmbeddingManager` handles automatic embedding generation:
 
 ```typescript
-import { EmbeddingManager } from 'mondodb/embedding'
+import { EmbeddingManager } from 'mongo.do/embedding'
 
 const embeddingManager = new EmbeddingManager({
   vectorize: env.VECTORIZE,
@@ -490,7 +490,7 @@ npx wrangler dev --env dev
 
 ### Testing with Miniflare
 
-MondoDB is compatible with Miniflare for local testing:
+mongo.do is compatible with Miniflare for local testing:
 
 ```typescript
 import { Miniflare } from 'miniflare'
@@ -498,7 +498,7 @@ import { Miniflare } from 'miniflare'
 const mf = new Miniflare({
   modules: true,
   script: `
-    import { MondoDatabase } from 'mondodb'
+    import { MondoDatabase } from 'mongo.do'
     export { MondoDatabase }
     export default {
       async fetch(request, env) {
@@ -587,7 +587,7 @@ Enable observability in your wrangler configuration:
 
 ## MCP Protocol Integration
 
-MondoDB exposes an MCP (Model Context Protocol) endpoint at `/mcp` on each Durable Object, allowing AI agents to interact with your database:
+mongo.do exposes an MCP (Model Context Protocol) endpoint at `/mcp` on each Durable Object, allowing AI agents to interact with your database:
 
 ```typescript
 // MCP is automatically available on the Durable Object
@@ -608,7 +608,7 @@ See the [MCP Protocol Guide](/docs/guides/mcp-protocol) for detailed usage.
 
 ## Schema and Migrations
 
-MondoDB uses an automatic migration system for SQLite schema management:
+mongo.do uses an automatic migration system for SQLite schema management:
 
 ### Schema Structure
 

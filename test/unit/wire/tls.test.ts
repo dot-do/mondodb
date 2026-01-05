@@ -84,7 +84,7 @@ describe('TLS Configuration', () => {
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2',
         maxVersion: 'TLSv1.3',
-        serverName: 'mondodb.example.com',
+        serverName: 'mongo.do.example.com',
         ALPNProtocols: ['mongodb'],
       }
 

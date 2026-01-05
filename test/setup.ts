@@ -1,5 +1,5 @@
 /**
- * Test setup for mondodb with Miniflare
+ * Test setup for mongo.do with Miniflare
  *
  * This file is loaded before all tests and sets up the test environment.
  */

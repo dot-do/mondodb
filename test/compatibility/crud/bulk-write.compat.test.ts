@@ -5,7 +5,7 @@ import { compareResults, assertResultsMatch } from '../compare'
 import { ObjectId } from '../../../src/types/objectid'
 
 /**
- * Deep clone operations for independent use between MongoDB and mondodb
+ * Deep clone operations for independent use between MongoDB and mongo.do
  */
 function cloneOperations(ops: BulkWriteOperation<Document>[]): BulkWriteOperation<Document>[] {
   return JSON.parse(JSON.stringify(ops))
@@ -13,17 +13,17 @@ function cloneOperations(ops: BulkWriteOperation<Document>[]): BulkWriteOperatio
 
 describe('bulkWrite insertOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -34,7 +34,7 @@ describe('bulkWrite insertOne Compatibility', () => {
     const dbName = `test_bulk_insert_${testNum}`
     return {
       mongoCol: mongodb.database(dbName).collection('items'),
-      mondoCol: mondodb.database(dbName).collection('items'),
+      mondoCol: mongo.do.database(dbName).collection('items'),
     }
   }
 
@@ -149,17 +149,17 @@ describe('bulkWrite insertOne Compatibility', () => {
 
 describe('bulkWrite updateOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 100
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -169,7 +169,7 @@ describe('bulkWrite updateOne Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_update_one_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', age: 30, city: 'NYC' },
@@ -309,17 +309,17 @@ describe('bulkWrite updateOne Compatibility', () => {
 
 describe('bulkWrite updateMany Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 200
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -329,7 +329,7 @@ describe('bulkWrite updateMany Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_update_many_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', status: 'active', value: 10 },
@@ -435,17 +435,17 @@ describe('bulkWrite updateMany Compatibility', () => {
 
 describe('bulkWrite deleteOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 300
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -455,7 +455,7 @@ describe('bulkWrite deleteOne Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_delete_one_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', group: 'A' },
@@ -563,17 +563,17 @@ describe('bulkWrite deleteOne Compatibility', () => {
 
 describe('bulkWrite deleteMany Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 400
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -583,7 +583,7 @@ describe('bulkWrite deleteMany Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_delete_many_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', status: 'active' },
@@ -667,17 +667,17 @@ describe('bulkWrite deleteMany Compatibility', () => {
 
 describe('bulkWrite replaceOne Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 500
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -687,7 +687,7 @@ describe('bulkWrite replaceOne Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_replace_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', age: 30, city: 'NYC', extra: 'data' },
@@ -818,17 +818,17 @@ describe('bulkWrite replaceOne Compatibility', () => {
 
 describe('bulkWrite Mixed Operations Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 600
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -838,7 +838,7 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_bulk_mixed_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', age: 30 },
@@ -922,7 +922,7 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
   it('operations are executed in order', async () => {
     const dbName = `test_bulk_order_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const operations: BulkWriteOperation<Document>[] = [
       { insertOne: { document: { name: 'test', step: 1 } } },
@@ -944,7 +944,7 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
   it('insert then update same document', async () => {
     const dbName = `test_bulk_insert_update_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     const operations: BulkWriteOperation<Document>[] = [
       { insertOne: { document: { name: 'fresh', value: 100 } } },
@@ -1000,7 +1000,7 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
     const operations: BulkWriteOperation<Document>[] = []
 
     // MongoDB throws an error for empty bulk operations
-    // We check that if MongoDB throws, mondodb either throws or returns empty result
+    // We check that if MongoDB throws, mongo.do either throws or returns empty result
     let mongoError: any
     let mongoResult: any
     let mondoResult: any
@@ -1018,16 +1018,16 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
       mondoError = e
     }
 
-    // If MongoDB throws, we accept either mondodb throwing or returning empty result
+    // If MongoDB throws, we accept either mongo.do throwing or returning empty result
     if (mongoError) {
-      // mondodb either throws or returns zero counts
+      // mongo.do either throws or returns zero counts
       if (!mondoError && mondoResult) {
         expect(mondoResult.insertedCount).toBe(0)
         expect(mondoResult.matchedCount).toBe(0)
         expect(mondoResult.deletedCount).toBe(0)
       }
     } else {
-      // If MongoDB doesn't throw, mondodb shouldn't either
+      // If MongoDB doesn't throw, mongo.do shouldn't either
       expect(mondoError).toBeUndefined()
     }
   })
@@ -1035,7 +1035,7 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
   it('large batch of operations', async () => {
     const dbName = `test_bulk_large_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     // Create 50 insert operations
     const operations: BulkWriteOperation<Document>[] = []
@@ -1061,17 +1061,17 @@ describe('bulkWrite Mixed Operations Compatibility', () => {
 
 describe('bulkWrite Ordered Option Compatibility', () => {
   let mongodb: TestProvider
-  let mondodb: TestProvider
+  let mongo.do: TestProvider
   let testNum = 700
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mondodb = providers.mondodb
+    mongo.do = providers.mongo.do
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mondodb)
+    await cleanupProviders(mongodb, mongo.do)
   })
 
   beforeEach(() => {
@@ -1081,7 +1081,7 @@ describe('bulkWrite Ordered Option Compatibility', () => {
   it('ordered: true executes operations in sequence', async () => {
     const dbName = `test_bulk_ordered_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     // Test ordered execution by checking sequence
     const operations: BulkWriteOperation<Document>[] = [
@@ -1109,7 +1109,7 @@ describe('bulkWrite Ordered Option Compatibility', () => {
   it('ordered: false executes all operations', async () => {
     const dbName = `test_bulk_unordered_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     // Test unordered execution
     const operations: BulkWriteOperation<Document>[] = [
@@ -1135,7 +1135,7 @@ describe('bulkWrite Ordered Option Compatibility', () => {
   it('default ordered is true', async () => {
     const dbName = `test_bulk_default_ordered_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mondodb.database(dbName).collection('items')
+    const mondoCol = mongo.do.database(dbName).collection('items')
 
     // Insert then update - tests that operations are applied in order
     const operations: BulkWriteOperation<Document>[] = [

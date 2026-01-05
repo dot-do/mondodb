@@ -9,7 +9,7 @@ describe('QueryTranslator', () => {
   });
 
   // ============================================================
-  // COMPARISON OPERATORS (mondodb-67o)
+  // COMPARISON OPERATORS (mongo.do-67o)
   // ============================================================
   describe('Comparison Operators', () => {
     describe('$eq operator', () => {
@@ -335,7 +335,7 @@ describe('QueryTranslator', () => {
   });
 
   // ============================================================
-  // LOGICAL OPERATORS (mondodb-1g9)
+  // LOGICAL OPERATORS (mongo.do-1g9)
   // ============================================================
   describe('Logical Operators', () => {
     describe('$and operator', () => {
@@ -505,7 +505,7 @@ describe('QueryTranslator', () => {
   });
 
   // ============================================================
-  // ELEMENT OPERATORS (mondodb-b2f)
+  // ELEMENT OPERATORS (mongo.do-b2f)
   // ============================================================
   describe('Element Operators', () => {
     describe('$exists operator', () => {
@@ -590,7 +590,7 @@ describe('QueryTranslator', () => {
   });
 
   // ============================================================
-  // ARRAY OPERATORS (mondodb-b2f)
+  // ARRAY OPERATORS (mongo.do-b2f)
   // ============================================================
   describe('Array Operators', () => {
     describe('$all operator', () => {

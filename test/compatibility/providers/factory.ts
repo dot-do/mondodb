@@ -4,7 +4,7 @@
 
 import { TestProvider } from './types'
 
-export type ProviderName = 'mongodb' | 'mondodb'
+export type ProviderName = 'mongodb' | 'mongo.do'
 
 // Dynamic imports to avoid loading both when only one is needed
 export async function createProvider(name: ProviderName): Promise<TestProvider> {
@@ -14,7 +14,7 @@ export async function createProvider(name: ProviderName): Promise<TestProvider> 
     await provider.connect()
     return provider
   } else {
-    const { MondoDBProvider } = await import('./mondodb-provider')
+    const { MondoDBProvider } = await import('./mongo.do-provider')
     const provider = new MondoDBProvider()
     await provider.connect()
     return provider
@@ -23,13 +23,13 @@ export async function createProvider(name: ProviderName): Promise<TestProvider> 
 
 export async function createBothProviders(): Promise<{
   mongodb: TestProvider
-  mondodb: TestProvider
+  mongo.do: TestProvider
 }> {
-  const [mongodb, mondodb] = await Promise.all([
+  const [mongodb, mongo.do] = await Promise.all([
     createProvider('mongodb'),
-    createProvider('mondodb')
+    createProvider('mongo.do')
   ])
-  return { mongodb, mondodb }
+  return { mongodb, mongo.do }
 }
 
 // Cleanup helper

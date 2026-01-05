@@ -5,7 +5,7 @@
  * Covers Parquet file processing, event ordering, late-arriving files,
  * deduplication, and schema evolution.
  *
- * Issue: mondodb-968r - ClickHouse S3Queue Real-time Tests
+ * Issue: mongo.do-968r - ClickHouse S3Queue Real-time Tests
  *
  * These tests verify:
  * - Parquet file ingestion from R2
@@ -374,7 +374,7 @@ describe.skip('CDCIngestionManager', () => {
   beforeEach(() => {
     manager = new CDCIngestionManager({
       clickhouseUrl: 'https://clickhouse.example.com:8443',
-      database: 'mondodb_analytics',
+      database: 'mongo.do_analytics',
     });
   });
 
@@ -798,7 +798,7 @@ describe.skip('SchemaEvolutionManager', () => {
   let schemaManager: SchemaEvolutionManager;
 
   beforeEach(() => {
-    schemaManager = new SchemaEvolutionManager('mondodb_analytics', 'cdc_events');
+    schemaManager = new SchemaEvolutionManager('mongo.do_analytics', 'cdc_events');
   });
 
   describe('analyzeEvolution', () => {
@@ -916,7 +916,7 @@ describe.skip('SchemaEvolutionManager', () => {
         addedFields: ['new_field'],
         removedFields: [],
         typeChanges: [],
-        migrationSql: 'ALTER TABLE mondodb_analytics.cdc_events ADD COLUMN new_field String',
+        migrationSql: 'ALTER TABLE mongo.do_analytics.cdc_events ADD COLUMN new_field String',
       };
 
       await expect(schemaManager.applyEvolution(result)).resolves.toBeUndefined();

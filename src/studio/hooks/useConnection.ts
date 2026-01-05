@@ -1,7 +1,7 @@
 /**
  * useConnection Hook
  *
- * React hook for managing database connections in mondodb Studio.
+ * React hook for managing database connections in mongo.do Studio.
  * Handles connection state, persistence, and lifecycle.
  */
 
@@ -23,7 +23,7 @@ import {
   DEFAULT_CONNECTION_FORM_VALUES,
 } from '../types/connection'
 
-const STORAGE_KEY = 'mondodb_studio_connections'
+const STORAGE_KEY = 'mongodo_studio_connections'
 
 /**
  * Initial connection state
@@ -369,8 +369,8 @@ export function useConnection(options: UseConnectionOptions = {}): UseConnection
         }
 
         // Check for valid URI scheme
-        if (!config.uri.startsWith('mondodb://') && !config.uri.startsWith('mongodb://')) {
-          return { success: false, error: 'Invalid URI scheme. Expected mondodb:// or mongodb://', latencyMs: 0 }
+        if (!config.uri.startsWith('mongodo://') && !config.uri.startsWith('mongodb://')) {
+          return { success: false, error: 'Invalid URI scheme. Expected mongodo:// or mongodb://', latencyMs: 0 }
         }
 
         const latencyMs = Math.round(performance.now() - startTime)
@@ -398,7 +398,7 @@ export function useConnection(options: UseConnectionOptions = {}): UseConnection
 
     return {
       version: '1.0.0',
-      serverType: 'mondodb',
+      serverType: 'mongodo',
       isReplicaSet: false,
       databases: ['admin', 'config', 'local', 'test'],
       uptimeSeconds: 3600,

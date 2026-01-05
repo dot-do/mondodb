@@ -1,8 +1,8 @@
 /**
- * Connection types for mondodb Studio
+ * Connection types for mongo.do Studio
  *
  * Types and interfaces for managing database connections
- * in the mondodb Studio UI.
+ * in the mongo.do Studio UI.
  */
 
 import { randomUUID } from 'crypto'
@@ -58,7 +58,7 @@ export interface ConnectionConfig {
   name: string
 
   /**
-   * Connection URI (mondodb:// or mongodb://)
+   * Connection URI (mongodo:// or mongodb://)
    */
   uri: string
 
@@ -197,9 +197,9 @@ export interface ServerInfo {
   version: string
 
   /**
-   * Server type (mondodb, mongodb, etc.)
+   * Server type (mongodo, mongodb, etc.)
    */
-  serverType: 'mondodb' | 'mongodb' | 'unknown'
+  serverType: 'mongodo' | 'mongodb' | 'unknown'
 
   /**
    * Whether the server is a replica set
@@ -248,7 +248,7 @@ export interface ConnectionFormValues {
 export const DEFAULT_CONNECTION_FORM_VALUES: ConnectionFormValues = {
   name: 'New Connection',
   connectionMethod: 'uri',
-  uri: 'mondodb://localhost:27017',
+  uri: 'mongodo://localhost:27017',
   host: 'localhost',
   port: 27017,
   database: 'test',
@@ -286,7 +286,7 @@ export function parseConnectionURI(uri: string): Partial<ConnectionFormValues> {
     const result: Partial<ConnectionFormValues> = { uri }
 
     // Match scheme
-    const schemeMatch = uri.match(/^(mondodb|mongodb):\/\//)
+    const schemeMatch = uri.match(/^(mongodo|mongodb):\/\//)
     if (!schemeMatch) {
       return result
     }
@@ -347,7 +347,7 @@ export function parseConnectionURI(uri: string): Partial<ConnectionFormValues> {
  * Build a connection URI from form values
  */
 export function buildConnectionURI(values: ConnectionFormValues): string {
-  let uri = 'mondodb://'
+  let uri = 'mongodo://'
 
   // Add authentication if present
   if (values.authType === 'basic' && values.username) {

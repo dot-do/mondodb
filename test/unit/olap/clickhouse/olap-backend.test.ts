@@ -7,7 +7,7 @@
  * The OLAP backend is READ-ONLY - no insert/update/delete operations.
  * It translates MongoDB queries to ClickHouse SQL using AggregationTranslator.
  *
- * Issue: mondodb-yubk
+ * Issue: mongo.do-yubk
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';

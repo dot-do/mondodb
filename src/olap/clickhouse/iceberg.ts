@@ -5,7 +5,7 @@
  * This module enables querying Iceberg tables stored in object storage
  * (S3, GCS, Azure Blob) through ClickHouse's native Iceberg support.
  *
- * Issue: mondodb-vyf4
+ * Issue: mongo.do-vyf4
  */
 
 // =============================================================================

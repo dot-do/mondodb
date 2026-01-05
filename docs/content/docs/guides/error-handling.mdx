@@ -1,22 +1,22 @@
 ---
 title: Error Handling
-description: Handle errors gracefully and implement retry logic in MondoDB
+description: Handle errors gracefully and implement retry logic in mongo.do
 ---
 
 # Error Handling
 
-MondoDB provides MongoDB-compatible error handling with specialized error classes, error codes, and built-in retry mechanisms. This guide covers error types, handling patterns, and strategies for building robust applications.
+mongo.do provides MongoDB-compatible error handling with specialized error classes, error codes, and built-in retry mechanisms. This guide covers error types, handling patterns, and strategies for building robust applications.
 
 ## Error Types
 
-MondoDB includes several error classes for different failure scenarios:
+mongo.do includes several error classes for different failure scenarios:
 
 ### BulkWriteException
 
 Thrown when bulk write operations fail. Contains partial results and error details:
 
 ```typescript
-import { BulkWriteException, BulkWriteError } from 'mondodb/client'
+import { BulkWriteException, BulkWriteError } from 'mongo.do/client'
 
 try {
   await collection.bulkWrite([
@@ -47,7 +47,7 @@ try {
 Thrown when aggregation pipeline execution fails:
 
 ```typescript
-import { AggregationError } from 'mondodb/client'
+import { AggregationError } from 'mongo.do/client'
 
 try {
   const results = await collection.aggregate([
@@ -70,7 +70,7 @@ try {
 Thrown when attempting to modify immutable audit log entries (used with AgentFS):
 
 ```typescript
-import { ImmutableEntryError } from 'mondodb/agentfs'
+import { ImmutableEntryError } from 'mongo.do/agentfs'
 
 try {
   await auditCollection.updateOne(
@@ -86,7 +86,7 @@ try {
 
 ### MCP Error Classes
 
-For MCP (Model Context Protocol) integrations, MondoDB provides specialized error classes:
+For MCP (Model Context Protocol) integrations, mongo.do provides specialized error classes:
 
 ```typescript
 import {
@@ -98,7 +98,7 @@ import {
   ToolNotFoundError,
   ToolExecutionError,
   InvalidParamsError,
-} from 'mondodb/mcp/adapters/errors'
+} from 'mongo.do/mcp/adapters/errors'
 
 // Connection errors (retryable)
 throw new ConnectionError('Failed to connect to database')
@@ -122,10 +122,10 @@ throw new InvalidParamsError('Missing required field: filter')
 
 ## Error Codes
 
-MondoDB uses MongoDB-compatible error codes:
+mongo.do uses MongoDB-compatible error codes:
 
 ```typescript
-import { ErrorCode, getErrorCodeName } from 'mondodb/types/rpc'
+import { ErrorCode, getErrorCodeName } from 'mongo.do/types/rpc'
 
 // Common error codes
 ErrorCode.OK                  // 0 - Success
@@ -147,7 +147,7 @@ const name = getErrorCodeName(11000) // Returns 'DuplicateKey'
 For MCP integrations, JSON-RPC 2.0 compliant codes are used:
 
 ```typescript
-import { McpErrorCode } from 'mondodb/mcp/adapters/errors'
+import { McpErrorCode } from 'mongo.do/mcp/adapters/errors'
 
 // Standard JSON-RPC errors
 McpErrorCode.ParseError       // -32700 - Invalid JSON
@@ -281,7 +281,7 @@ if (result.upsertedId) {
 
 ## Transaction Conflict Handling
 
-Transactions can fail due to conflicts with concurrent operations. MondoDB supports automatic retry for transient transaction errors:
+Transactions can fail due to conflicts with concurrent operations. mongo.do supports automatic retry for transient transaction errors:
 
 ### Using withTransaction (Recommended)
 
@@ -393,7 +393,7 @@ async function transferFundsWithRetry(
 Handle network errors with automatic reconnection:
 
 ```typescript
-import { isRetryableError, getRetryDelay } from 'mondodb/mcp/adapters/errors'
+import { isRetryableError, getRetryDelay } from 'mongo.do/mcp/adapters/errors'
 
 async function resilientOperation<T>(
   operation: () => Promise<T>,
@@ -599,7 +599,7 @@ try {
 Classify errors for appropriate handling:
 
 ```typescript
-import { classifyError, McpErrorCode } from 'mondodb/mcp/adapters/errors'
+import { classifyError, McpErrorCode } from 'mongo.do/mcp/adapters/errors'
 
 function handleError(error: Error): void {
   const errorCode = classifyError(error)
@@ -632,7 +632,7 @@ function handleError(error: Error): void {
 
 1. **Always use try-catch** - Wrap database operations in try-catch blocks
 2. **Check error codes** - Use specific error codes to determine appropriate handling
-3. **Use withTransaction** - Let MondoDB handle transaction retries automatically
+3. **Use withTransaction** - Let mongo.do handle transaction retries automatically
 4. **Implement exponential backoff** - Avoid overwhelming the server with rapid retries
 5. **Add jitter to delays** - Prevent thundering herd problems in distributed systems
 6. **Set timeouts** - Prevent operations from hanging indefinitely

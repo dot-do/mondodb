@@ -45,13 +45,13 @@ describe('ConnectionPage', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       ...mockStore,
       connections: [
-        { id: '1', name: 'Test DB', url: 'mondodb://localhost' },
+        { id: '1', name: 'Test DB', url: 'mongodo://localhost' },
       ],
     })
 
     render(<ConnectionPage />)
     expect(screen.getByText('Test DB')).toBeInTheDocument()
-    expect(screen.getByText('mondodb://localhost')).toBeInTheDocument()
+    expect(screen.getByText('mongodo://localhost')).toBeInTheDocument()
   })
 
   it('calls addConnection and connect on form submit', async () => {
@@ -64,7 +64,7 @@ describe('ConnectionPage', () => {
 
     expect(mockStore.addConnection).toHaveBeenCalledWith({
       name: 'My Database',
-      url: 'mondodb://localhost',
+      url: 'mongodo://localhost',
     })
     expect(mockStore.connect).toHaveBeenCalledWith('test-id')
   })
@@ -83,7 +83,7 @@ describe('ConnectionPage', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       ...mockStore,
       connections: [
-        { id: '1', name: 'Test DB', url: 'mondodb://localhost' },
+        { id: '1', name: 'Test DB', url: 'mongodo://localhost' },
       ],
       isConnecting: true,
     })

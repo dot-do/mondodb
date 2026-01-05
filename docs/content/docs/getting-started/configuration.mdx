@@ -1,23 +1,23 @@
 ---
 title: Configuration
-description: Configure MondoDB for your application
+description: Configure mongo.do for your application
 ---
 
 # Configuration
 
-This guide covers all configuration options for MondoDB, from Wrangler settings to client options.
+This guide covers all configuration options for mongo.do, from Wrangler settings to client options.
 
 ## Wrangler Configuration
 
-MondoDB requires specific Durable Object configuration in your Wrangler settings.
+mongo.do requires specific Durable Object configuration in your Wrangler settings.
 
 ### Minimal Configuration
 
-The minimum required configuration for MondoDB:
+The minimum required configuration for mongo.do:
 
 ```jsonc
 {
-  "name": "my-mondodb-app",
+  "name": "my-mongo.do-app",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -47,7 +47,7 @@ A complete configuration with all options:
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-mondodb-app",
+  "name": "my-mongo.do-app",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
 
@@ -113,7 +113,7 @@ A complete configuration with all options:
 If you prefer TOML format:
 
 ```toml
-name = "my-mondodb-app"
+name = "my-mongo.do-app"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
@@ -136,7 +136,7 @@ local_protocol = "http"
 When creating a MongoClient, you can pass configuration options:
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
 // Production: Using environment binding
 const client = new MongoClient(env, {
@@ -146,7 +146,7 @@ const client = new MongoClient(env, {
 });
 
 // Testing: Using URI string
-const testClient = new MongoClient('mondodb://localhost:27017/testdb', {
+const testClient = new MongoClient('mongodo://localhost:27017/testdb', {
   maxPoolSize: 100,
   minPoolSize: 0
 });
@@ -166,7 +166,7 @@ const testClient = new MongoClient('mondodb://localhost:27017/testdb', {
 
 ## Connection Modes
 
-MondoDB supports two connection modes:
+mongo.do supports two connection modes:
 
 ### Environment Mode (Production)
 
@@ -191,14 +191,14 @@ This mode:
 For local development and testing, use a connection URI:
 
 ```typescript
-const client = new MongoClient('mondodb://localhost:27017/mydb');
+const client = new MongoClient('mongodo://localhost:27017/mydb');
 await client.connect();
 ```
 
 Supported URI formats:
-- `mondodb://localhost:27017/dbname`
+- `mongodo://localhost:27017/dbname`
 - `mongodb://localhost:27017/dbname` (also accepted)
-- `mondodb://user:pass@localhost:27017/dbname?options`
+- `mongodo://user:pass@localhost:27017/dbname?options`
 
 This mode:
 - Uses in-memory storage

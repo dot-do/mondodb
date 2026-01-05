@@ -92,12 +92,12 @@ export class PingCommand implements CommandHandler {
 export class BuildInfoCommand implements CommandHandler {
   async execute(_command: Document, _context: CommandContext): Promise<CommandResult> {
     const response = successResponse({
-      version: '6.0.0-mondodb',
-      gitVersion: 'mondodb-0.1.0',
+      version: '6.0.0-mongo.do',
+      gitVersion: 'mongo.do-0.1.0',
       modules: [],
       allocator: 'system',
       javascriptEngine: 'none',
-      sysInfo: 'mondodb-on-workers',
+      sysInfo: 'mongo.do-on-workers',
       versionArray: [6, 0, 0, 0],
       openssl: {
         running: 'not-applicable',
@@ -123,7 +123,7 @@ export class HostInfoCommand implements CommandHandler {
     const response = successResponse({
       system: {
         currentTime: now,
-        hostname: 'mondodb-server',
+        hostname: 'mongo.do-server',
         cpuAddrSize: 64,
         memSizeMB: 512,
         memLimitMB: 512,
@@ -226,7 +226,7 @@ export class GetCmdLineOptsCommand implements CommandHandler {
   async execute(_command: Document, _context: CommandContext): Promise<CommandResult> {
     return {
       response: successResponse({
-        argv: ['mondodb-server'],
+        argv: ['mongo.do-server'],
         parsed: {
           storage: {
             engine: 'sqlite',

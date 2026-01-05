@@ -71,7 +71,7 @@ export const useConnectionStore = create<ConnectionState>()(
           const healthUrl = new URL('/api/health', connection.url).toString()
           const response = await fetch(healthUrl)
           if (!response.ok) {
-            throw new Error('Failed to connect to mondodb')
+            throw new Error('Failed to connect to mongo.do')
           }
 
           set({
@@ -103,7 +103,7 @@ export const useConnectionStore = create<ConnectionState>()(
       },
     }),
     {
-      name: 'mondodb-connections',
+      name: 'mongo.do-connections',
       partialize: (state) => ({
         connections: state.connections,
       }),

@@ -1,15 +1,15 @@
 ---
 title: Text Search
-description: Full-text search capabilities in MondoDB using SQLite FTS5
+description: Full-text search capabilities in mongo.do using SQLite FTS5
 ---
 
 # Text Search
 
-MondoDB provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
+mongo.do provides full-text search capabilities powered by SQLite's FTS5 (Full-Text Search 5) engine. The search API is compatible with MongoDB Atlas Search syntax, making it easy to migrate existing applications or build new search features.
 
 ## Overview
 
-Full-text search in MondoDB enables:
+Full-text search in mongo.do enables:
 
 - **Natural language search** - Find documents matching search terms
 - **Phrase matching** - Search for exact phrases
@@ -25,9 +25,9 @@ Before you can search, create a text index on the fields you want to search.
 ### Single Field Index
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://your-worker.workers.dev')
+const client = new MongoClient('mongodo://your-worker.workers.dev')
 await client.connect()
 
 const db = client.db('mydb')
@@ -276,7 +276,7 @@ const results = await articles.aggregate([
 
 ## Scoring and Ranking
 
-MondoDB uses the BM25 algorithm for relevance scoring. Results are automatically sorted by score (highest first).
+mongo.do uses the BM25 algorithm for relevance scoring. Results are automatically sorted by score (highest first).
 
 ### Including Search Score
 
@@ -389,9 +389,9 @@ async function facetedSearch(query: string, category?: string) {
 
 ## FTS5 Implementation Details
 
-MondoDB translates search operators to SQLite FTS5 MATCH syntax:
+mongo.do translates search operators to SQLite FTS5 MATCH syntax:
 
-| MondoDB Operator | FTS5 Syntax | Example |
+| mongo.do Operator | FTS5 Syntax | Example |
 |------------------|-------------|---------|
 | text (single term) | `term` | `mongodb` |
 | text (multiple terms) | `term1 term2` | `mongodb database` |

@@ -26,7 +26,7 @@ test.describe('Connection Page', () => {
   test('can fill in connection details', async ({ page }) => {
     await page.getByRole('button', { name: 'Add Connection' }).click()
     await page.getByLabel('Connection Name').fill('Test Connection')
-    await page.getByLabel('Connection URL').fill('mondodb://localhost:8787')
+    await page.getByLabel('Connection URL').fill('mongodo://localhost:8787')
     await expect(page.getByLabel('Connection Name')).toHaveValue('Test Connection')
   })
 })

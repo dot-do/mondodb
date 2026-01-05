@@ -1,5 +1,5 @@
 /**
- * MCP Server Factory for MondoDB
+ * MCP Server Factory for mongo.do
  *
  * Creates MCP server instances that provide:
  * - search: Query documents (readonly)
@@ -36,7 +36,7 @@ export interface McpServerConfig {
   dbAccess: DatabaseAccess
   /** Optional code loader for secure code execution (enables 'do' tool) */
   codeLoader?: CodeLoader
-  /** Server name (default: 'mondodb') */
+  /** Server name (default: 'mongo.do') */
   name?: string
   /** Server version (default: '1.0.0') */
   version?: string
@@ -86,14 +86,14 @@ export interface McpServer {
 import type { DatabaseAccess } from './types'
 
 /**
- * Create an MCP server instance for MondoDB
+ * Create an MCP server instance for mongo.do
  *
  * @param config - Server configuration including database access and optional code loader
  * @returns Configured MCP server instance
  */
 export function createMcpServer(config: McpServerConfig): McpServer {
   const { dbAccess, codeLoader, name, version } = config
-  const serverName = name ?? 'mondodb'
+  const serverName = name ?? 'mongo.do'
   const serverVersion = version ?? '1.0.0'
   const tools = new Map<string, McpRegisteredTool>()
 

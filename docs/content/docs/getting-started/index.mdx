@@ -1,13 +1,13 @@
 ---
 title: Getting Started
-description: Get up and running with MondoDB in your Cloudflare Workers project
+description: Get up and running with mongo.do in your Cloudflare Workers project
 ---
 
-# Getting Started with MondoDB
+# Getting Started with mongo.do
 
-MondoDB is a MongoDB-compatible database built for Cloudflare Workers. It provides a familiar MongoDB API while running entirely on Cloudflare's edge network, backed by Durable Objects and SQLite for persistent storage.
+mongo.do is a MongoDB-compatible database built for Cloudflare Workers. It provides a familiar MongoDB API while running entirely on Cloudflare's edge network, backed by Durable Objects and SQLite for persistent storage.
 
-## Why MondoDB?
+## Why mongo.do?
 
 - **MongoDB-compatible API** - Use familiar operations like `find`, `insertOne`, `updateMany`, and `aggregate`
 - **Edge-native** - Built on Cloudflare Durable Objects for low-latency global access
@@ -16,10 +16,10 @@ MondoDB is a MongoDB-compatible database built for Cloudflare Workers. It provid
 
 ## Quick Overview
 
-Here's what using MondoDB looks like in a Cloudflare Worker:
+Here's what using mongo.do looks like in a Cloudflare Worker:
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -47,10 +47,10 @@ export default {
 
 <Cards>
   <Card title="Installation" href="/docs/getting-started/installation">
-    Install MondoDB and configure your Cloudflare Workers project
+    Install mongo.do and configure your Cloudflare Workers project
   </Card>
   <Card title="Quick Start" href="/docs/getting-started/quickstart">
-    Build your first application with MondoDB in 5 minutes
+    Build your first application with mongo.do in 5 minutes
   </Card>
   <Card title="Configuration" href="/docs/getting-started/configuration">
     Learn about environment configuration and advanced options
@@ -59,14 +59,14 @@ export default {
 
 ## Connection Modes
 
-MondoDB supports two connection modes:
+mongo.do supports two connection modes:
 
 ### Production Mode (Durable Objects)
 
 For production Cloudflare Workers, connect using your environment binding:
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
 // Connect via Durable Object binding
 const client = new MongoClient(env);
@@ -84,10 +84,10 @@ This mode uses Cloudflare Durable Objects with SQLite for persistent storage, pr
 For testing and local development, connect using a URI string:
 
 ```typescript
-import { MongoClient } from 'mondodb';
+import { MongoClient } from 'mongo.do';
 
 // Connect via URI (in-memory storage)
-const client = new MongoClient('mondodb://localhost:27017/testdb');
+const client = new MongoClient('mongodo://localhost:27017/testdb');
 await client.connect();
 const db = client.db('testdb');
 ```
@@ -99,7 +99,7 @@ This mode uses in-memory storage and is ideal for:
 
 ## Supported Operations
 
-MondoDB supports a comprehensive set of MongoDB operations:
+mongo.do supports a comprehensive set of MongoDB operations:
 
 ### CRUD Operations
 
@@ -119,7 +119,7 @@ MondoDB supports a comprehensive set of MongoDB operations:
 
 ### Query Operators
 
-MondoDB supports standard MongoDB query operators including:
+mongo.do supports standard MongoDB query operators including:
 - Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`
 - Logical: `$and`, `$or`, `$not`, `$nor`
 - Element: `$exists`, `$type`
@@ -134,7 +134,7 @@ Supported update operators include:
 
 ### Aggregation Pipeline
 
-MondoDB supports common aggregation stages:
+mongo.do supports common aggregation stages:
 - `$match` - Filter documents
 - `$project` - Reshape documents
 - `$group` - Group and aggregate
@@ -148,7 +148,7 @@ MondoDB supports common aggregation stages:
 
 ## Next Steps
 
-1. **[Install MondoDB](/docs/getting-started/installation)** - Set up your development environment
+1. **[Install mongo.do](/docs/getting-started/installation)** - Set up your development environment
 2. **[Quick Start Tutorial](/docs/getting-started/quickstart)** - Build your first app
 3. **[Explore Guides](/docs/guides)** - Learn advanced patterns and best practices
 4. **[API Reference](/docs/api-reference)** - Detailed API documentation

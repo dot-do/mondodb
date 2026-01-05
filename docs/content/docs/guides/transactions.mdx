@@ -5,15 +5,15 @@ description: Use multi-document transactions for atomic operations across docume
 
 # Transactions
 
-MondoDB supports multi-document transactions, providing ACID guarantees for operations that need to be atomic across multiple documents or collections. Transactions ensure that either all operations succeed together, or none of them take effect.
+mongo.do supports multi-document transactions, providing ACID guarantees for operations that need to be atomic across multiple documents or collections. Transactions ensure that either all operations succeed together, or none of them take effect.
 
 ## Overview
 
-Transactions in MondoDB work through sessions. A session tracks the state of a transaction and ensures that all operations within the transaction are executed atomically.
+Transactions in mongo.do work through sessions. A session tracks the state of a transaction and ensures that all operations within the transaction are executed atomically.
 
-### How Transactions Work in MondoDB
+### How Transactions Work in mongo.do
 
-MondoDB maps MongoDB transaction semantics to SQLite transactions:
+mongo.do maps MongoDB transaction semantics to SQLite transactions:
 
 | MongoDB Operation | SQLite Equivalent |
 |------------------|-------------------|
@@ -31,9 +31,9 @@ MondoDB maps MongoDB transaction semantics to SQLite transactions:
 Use `startSession()` on the MongoClient to create a new session:
 
 ```typescript
-import { MongoClient } from 'mondodb'
+import { MongoClient } from 'mongo.do'
 
-const client = new MongoClient('mondodb://localhost:27017')
+const client = new MongoClient('mongodo://localhost:27017')
 await client.connect()
 
 // Create a session
@@ -315,7 +315,7 @@ session.startTransaction({
 
 ## Transaction Scope in Durable Objects
 
-Understanding transaction scope is important when using MondoDB with Cloudflare Durable Objects:
+Understanding transaction scope is important when using mongo.do with Cloudflare Durable Objects:
 
 ### Single Durable Object Scope
 
@@ -351,7 +351,7 @@ await session.withTransaction(async (sess) => {
 
 ### SQLite Transaction Behavior
 
-In Durable Objects mode, MondoDB uses SQLite's `transactionSync()`:
+In Durable Objects mode, mongo.do uses SQLite's `transactionSync()`:
 
 ```typescript
 // Internally, bulk operations use transactionSync
@@ -975,7 +975,7 @@ try {
 
 ## Limitations
 
-### Current Limitations in MondoDB
+### Current Limitations in mongo.do
 
 1. **Single Durable Object scope**: Transactions are scoped to a single Durable Object instance
 2. **Cross-database transactions not supported**: Different databases map to different Durable Objects
@@ -984,7 +984,7 @@ try {
 
 ### Differences from MongoDB
 
-| Feature | MongoDB | MondoDB |
+| Feature | MongoDB | mongo.do |
 |---------|---------|---------|
 | Multi-document transactions | Across replica sets | Single Durable Object |
 | Distributed transactions | Supported | Not supported |

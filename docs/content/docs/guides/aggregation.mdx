@@ -1,11 +1,11 @@
 ---
 title: Aggregation Pipeline
-description: Comprehensive guide to MongoDB-style aggregation pipelines in MondoDB
+description: Comprehensive guide to MongoDB-style aggregation pipelines in mongo.do
 ---
 
 # Aggregation Pipeline
 
-MondoDB supports MongoDB's aggregation pipeline framework, allowing you to process and transform documents through a series of stages. The aggregation framework translates MongoDB pipeline syntax to optimized SQL queries executed against SQLite, providing familiar MongoDB semantics with the reliability of SQL.
+mongo.do supports MongoDB's aggregation pipeline framework, allowing you to process and transform documents through a series of stages. The aggregation framework translates MongoDB pipeline syntax to optimized SQL queries executed against SQLite, providing familiar MongoDB semantics with the reliability of SQL.
 
 ## Basic Usage
 
@@ -26,7 +26,7 @@ The `aggregate()` method returns a cursor that supports:
 
 ## Supported Pipeline Stages
 
-MondoDB supports the following aggregation pipeline stages:
+mongo.do supports the following aggregation pipeline stages:
 
 | Stage | Description |
 |-------|-------------|
@@ -1039,9 +1039,9 @@ await collection.aggregate([
 
 ## Limitations vs MongoDB
 
-While MondoDB supports most common aggregation operations, there are some differences from MongoDB:
+While mongo.do supports most common aggregation operations, there are some differences from MongoDB:
 
-| Feature | MondoDB Support | Notes |
+| Feature | mongo.do Support | Notes |
 |---------|-----------------|-------|
 | Core stages ($match, $group, etc.) | Full | Translated to optimized SQL |
 | Accumulator operators | Most | $first/$last use subqueries |

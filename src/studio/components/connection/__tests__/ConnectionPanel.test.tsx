@@ -24,7 +24,7 @@ import type { ConnectionConfig } from '../../../types/connection'
 const createMockConnection = (overrides: Partial<ConnectionConfig> = {}): ConnectionConfig => ({
   id: 'conn-1',
   name: 'Test Connection',
-  uri: 'mondodb://localhost:27017',
+  uri: 'mongodo://localhost:27017',
   host: 'localhost',
   port: 27017,
   database: 'testdb',
@@ -459,13 +459,13 @@ describe('ConnectionForm', () => {
           {...defaultFormProps}
           initialValues={{
             name: 'Preset Connection',
-            uri: 'mondodb://preset.host:27018/preset',
+            uri: 'mongodo://preset.host:27018/preset',
           }}
         />
       )
 
       expect(screen.getByTestId('connection-name-input')).toHaveValue('Preset Connection')
-      expect(screen.getByTestId('connection-uri-input')).toHaveValue('mondodb://preset.host:27018/preset')
+      expect(screen.getByTestId('connection-uri-input')).toHaveValue('mongodo://preset.host:27018/preset')
     })
   })
 })
@@ -879,12 +879,12 @@ describe('ConnectionPanel', () => {
       await userEvent.click(screen.getByTestId('tab-quick'))
 
       const input = screen.getByTestId('quick-connect-input')
-      await userEvent.type(input, 'mondodb://localhost:27017')
+      await userEvent.type(input, 'mongodo://localhost:27017')
 
       const connectButton = screen.getByTestId('quick-connect-button')
       await userEvent.click(connectButton)
 
-      expect(defaultProps.onQuickConnect).toHaveBeenCalledWith('mondodb://localhost:27017')
+      expect(defaultProps.onQuickConnect).toHaveBeenCalledWith('mongodo://localhost:27017')
     })
 
     it('shows recent connections in quick connect', async () => {
