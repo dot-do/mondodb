@@ -300,7 +300,7 @@ export class AggregationTranslator implements FacetTranslator {
    * Get the stage type from a stage object
    */
   private getStageType(stage: PipelineStage): string {
-    return Object.keys(stage)[0]
+    return Object.keys(stage)[0]!
   }
 
   /**

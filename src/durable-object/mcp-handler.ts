@@ -56,10 +56,10 @@ export function createDatabaseAccess(db: MondoDatabase): DatabaseAccess {
         if (sortEntries.length > 0) {
           processed.sort((a, b) => {
             for (const [field, order] of sortEntries) {
-              const aVal = a[field]
-              const bVal = b[field]
-              if (aVal < bVal) return order === 1 ? -1 : 1
-              if (aVal > bVal) return order === 1 ? 1 : -1
+              const aVal = a[field] as string | number | boolean | null | undefined
+              const bVal = b[field] as string | number | boolean | null | undefined
+              if (aVal != null && bVal != null && aVal < bVal) return order === 1 ? -1 : 1
+              if (aVal != null && bVal != null && aVal > bVal) return order === 1 ? 1 : -1
             }
             return 0
           })
@@ -189,8 +189,7 @@ export function createDatabaseAccess(db: MondoDatabase): DatabaseAccess {
     },
 
     async listCollections(): Promise<string[]> {
-      // Get collections from the schema manager
-      const schemaManager = db.getSchemaManager()
+      // Get collections from the storage
       const storage = db.getStorage()
       const sql = storage.sql
 

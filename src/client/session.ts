@@ -133,13 +133,6 @@ export class ClientSession {
   private _transactionNumber: number = 0
   private _hasEnded: boolean = false
 
-  // Pending SQL operations for transaction batching
-  private _pendingOperations: Array<{
-    type: 'begin' | 'commit' | 'rollback'
-    resolve: () => void
-    reject: (error: Error) => void
-  }> = []
-
   // Transaction snapshot tracking for rollback support
   private _collectionSnapshots: Map<string, CollectionSnapshot> = new Map()
   private _trackedCollections: Map<string, TransactableCollection> = new Map()

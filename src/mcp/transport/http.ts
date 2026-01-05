@@ -195,9 +195,9 @@ function generateSessionId(): string {
 /**
  * Build CORS headers based on options and request
  */
-function buildCorsHeaders(options: Required<CorsOptions>, request: Request): Record<string, string> {
+function buildCorsHeaders(options: Required<CorsOptions>, request: Request | null): Record<string, string> {
   const headers: Record<string, string> = {}
-  const requestOrigin = request.headers.get('Origin')
+  const requestOrigin = request?.headers.get('Origin') ?? null
 
   // Handle origin
   if (options.origin === '*') {
@@ -447,7 +447,7 @@ export function createHttpMcpHandler(
   // Support both old CorsOptions and new HttpTransportOptions for backwards compatibility
   const options: HttpTransportOptions = isHttpTransportOptions(corsOptionsOrOptions)
     ? corsOptionsOrOptions
-    : { cors: corsOptionsOrOptions }
+    : (corsOptionsOrOptions ? { cors: corsOptionsOrOptions } : {})
 
   const cors: Required<CorsOptions> = { ...DEFAULT_CORS, ...options.cors }
   const sessions: SessionStore = {
@@ -489,22 +489,28 @@ export function createHttpMcpHandler(
     const method = request.method.toUpperCase()
     let sessionId: string | undefined
     let rpcMethod: string | undefined
-    let statusCode = 200
     let errorMessage: string | undefined
 
     // Helper to log request
     const logRequest = (response: Response): Response => {
       if (options.onRequest) {
-        options.onRequest({
+        const logEntry: RequestLogEntry = {
           timestamp: new Date(startTime),
           method,
           url: request.url,
-          sessionId,
           statusCode: response.status,
           durationMs: Date.now() - startTime,
-          rpcMethod,
-          error: errorMessage,
-        })
+        }
+        if (sessionId) {
+          logEntry.sessionId = sessionId
+        }
+        if (rpcMethod) {
+          logEntry.rpcMethod = rpcMethod
+        }
+        if (errorMessage) {
+          logEntry.error = errorMessage
+        }
+        options.onRequest(logEntry)
       }
       return response
     }
@@ -555,16 +561,16 @@ export function createHttpMcpHandler(
         }
       }
 
-      sessions.lastActivity.set(sessionId, Date.now())
+      sessions.lastActivity.set(sessionId!, Date.now())
 
       // Handle GET for SSE streams
       if (method === 'GET') {
-        return logRequest(await handleSseRequest(request, sessionId, sessions, corsHeaders))
+        return logRequest(await handleSseRequest(request, sessionId!, sessions, corsHeaders))
       }
 
       // Handle POST for JSON-RPC
       if (method === 'POST') {
-        const response = await handleJsonRpcRequest(request, server, sessionId, sessions, corsHeaders, (m) => {
+        const response = await handleJsonRpcRequest(request, server, sessionId!, sessions, corsHeaders, (m) => {
           rpcMethod = m
         })
         return logRequest(response)
@@ -572,7 +578,7 @@ export function createHttpMcpHandler(
 
       // Handle DELETE for session termination
       if (method === 'DELETE') {
-        return logRequest(await handleDeleteSession(sessionId, sessions, corsHeaders))
+        return logRequest(await handleDeleteSession(sessionId!, sessions, corsHeaders))
       }
 
       // Method not allowed

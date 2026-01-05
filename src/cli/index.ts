@@ -17,7 +17,7 @@ import {
   parseArgs,
   validateOptions,
   printHelp,
-  printStartupMessage,
+  printStartupMessage as _printStartupMessage,
   printShutdownMessage,
   runServer,
   type CLIOptions,
@@ -97,20 +97,6 @@ function printVersion(): void {
  */
 function printError(message: string): void {
   console.error(`${colorize('error:', 'red')} ${message}`)
-}
-
-/**
- * Print a warning message
- */
-function printWarning(message: string): void {
-  console.warn(`${colorize('warning:', 'yellow')} ${message}`)
-}
-
-/**
- * Print success message
- */
-function printSuccess(message: string): void {
-  console.log(`${colorize('success:', 'green')} ${message}`)
 }
 
 /**

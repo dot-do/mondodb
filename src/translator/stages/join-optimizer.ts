@@ -119,7 +119,7 @@ export function estimateLookupCost(
  * Suggest a rewritten lookup for specific patterns
  */
 export function suggestLookupRewrite(
-  lookup: LookupStage
+  _lookup: LookupStage
 ): LookupStage | null {
   // Pattern: Simple equality join can be converted to correlated subquery
   // This is already what we do, so no change needed

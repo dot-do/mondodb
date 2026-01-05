@@ -116,7 +116,8 @@ export class WireProtocolServer {
   private connections: Map<number, ConnectionState> = new Map()
   private nextConnectionId = 1
   private nextRequestId = 1
-  private server: ReturnType<typeof Bun.listen> | null = null
+  // Use unknown to avoid typing issues with Bun.listen union types
+  private server: unknown = null
   private authenticator: ScramAuthenticator | null = null
 
   constructor(backend: MondoBackend, options: ServerOptions = {}) {
@@ -178,8 +179,6 @@ export class WireProtocolServer {
       },
 
       data: async (socket: Socket<SocketData>, data: Buffer) => {
-        const { connectionId } = socket.data
-
         // Accumulate data in buffer
         socket.data.buffer = Buffer.concat([socket.data.buffer, data])
 
@@ -188,13 +187,13 @@ export class WireProtocolServer {
       },
 
       close: (socket: Socket<SocketData>) => {
-        const { connectionId } = socket.data
+        const connId = socket.data.connectionId
 
         if (verbose) {
-          console.log(`[${connectionId}] Connection closed`)
+          console.log(`[${connId}] Connection closed`)
         }
 
-        this.connections.delete(connectionId)
+        this.connections.delete(connId)
       },
 
       error: (socket: Socket<SocketData>, error: Error) => {
@@ -267,7 +266,7 @@ export class WireProtocolServer {
    */
   async stop(): Promise<void> {
     if (this.server) {
-      this.server.stop()
+      (this.server as { stop: () => void }).stop()
       this.server = null
       console.log('Server stopped')
     }
@@ -351,15 +350,18 @@ export class WireProtocolServer {
     }
 
     // Execute the command
-    const result = await this.router.route(command, {
+    const context: Parameters<typeof this.router.route>[1] = {
       db,
       connectionId,
       requestId: message.header.requestID,
       documentSequences,
       // Pass auth info for SASL handlers
       auth: this.options.auth,
-      connection,
-    })
+    }
+    if (connection !== undefined) {
+      context.connection = connection
+    }
+    const result = await this.router.route(command, context)
 
     // Check if this was a successful authentication
     if (cmdName === 'saslContinue' && result.response.ok === 1 && result.response.done === true) {

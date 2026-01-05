@@ -5,9 +5,9 @@
  * the useDatabaseBrowser hook for listDatabases/listCollections operations.
  */
 
-import React, { useCallback, useState } from 'react'
-import { DatabaseBrowser, type DatabaseBrowserProps } from './DatabaseBrowser'
-import { useDatabaseBrowser, type UseDatabaseBrowserOptions } from '../../hooks/useDatabaseBrowser'
+import { useCallback, useState } from 'react'
+import { DatabaseBrowser } from './DatabaseBrowser'
+import { useDatabaseBrowser } from '../../hooks/useDatabaseBrowser'
 import type { RpcClient } from '../../../rpc/rpc-client'
 
 // ============================================================================

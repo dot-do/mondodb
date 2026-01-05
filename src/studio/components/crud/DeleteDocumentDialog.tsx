@@ -230,7 +230,7 @@ function UndoIcon() {
 
 export function DeleteDocumentDialog({
   open,
-  database,
+  database: _database,
   collection,
   documentId,
   documentIds = [],
@@ -304,6 +304,8 @@ export function DeleteDocumentDialog({
       setError(err instanceof Error ? err.message : 'Failed to undo deletion')
     }
   }, [deletionResult, onUndo])
+  // Silence unused variable warning - handleUndo is for future undo feature
+  void handleUndo
 
   const handleClose = useCallback(() => {
     setError(null)

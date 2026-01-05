@@ -27,7 +27,7 @@ export interface InsertOneModel<TDocument extends Document = Document> {
  */
 export interface UpdateOneModel<TDocument extends Document = Document> {
   updateOne: {
-    filter: object
+    filter: Partial<TDocument> | object
     update: object
     upsert?: boolean
     arrayFilters?: object[]
@@ -41,7 +41,7 @@ export interface UpdateOneModel<TDocument extends Document = Document> {
  */
 export interface UpdateManyModel<TDocument extends Document = Document> {
   updateMany: {
-    filter: object
+    filter: Partial<TDocument> | object
     update: object
     upsert?: boolean
     arrayFilters?: object[]
@@ -146,7 +146,7 @@ export interface BulkWriteError {
   /**
    * The operation that caused the error
    */
-  op?: BulkWriteOperation
+  op?: BulkWriteOperation | undefined
 }
 
 /**

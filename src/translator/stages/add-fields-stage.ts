@@ -14,7 +14,6 @@ export function translateAddFieldsStage(
 ): StageResult {
   const params: unknown[] = []
   const dialect: SQLDialect = context.dialect || 'sqlite'
-  const source = context.previousCte || context.collection
 
   // Build nested json_set calls for each field
   let result = 'data'

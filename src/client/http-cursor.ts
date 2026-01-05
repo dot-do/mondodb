@@ -160,12 +160,13 @@ export class HttpFindCursor<TDocument extends Document = Document> {
     if (this._error) throw this._error
 
     try {
-      // Build options for the request
-      const options: FindOptions<TDocument> = {}
-      if (this._sort) options.sort = this._sort as FindOptions<TDocument>['sort']
-      if (this._limit !== undefined) options.limit = this._limit
-      if (this._skip !== undefined) options.skip = this._skip
-      if (this._projection) options.projection = this._projection as FindOptions<TDocument>['projection']
+      // Build options for the request using spread to avoid exactOptionalPropertyTypes issue
+      const options: FindOptions<TDocument> = {
+        ...(this._sort !== undefined && { sort: this._sort as FindOptions<TDocument>['sort'] }),
+        ...(this._limit !== undefined && { limit: this._limit }),
+        ...(this._skip !== undefined && { skip: this._skip }),
+        ...(this._projection !== undefined && { projection: this._projection as FindOptions<TDocument>['projection'] })
+      }
 
       // Make the HTTP request
       this._buffer = await this.requestFn('POST', '/find', { filter: this.filter, options })
@@ -195,7 +196,7 @@ export class HttpFindCursor<TDocument extends Document = Document> {
       return null
     }
 
-    return this._buffer[this._position++]
+    return this._buffer[this._position++] ?? null
   }
 
   /**
@@ -242,8 +243,10 @@ export class HttpFindCursor<TDocument extends Document = Document> {
     let index = 0
     while (this._position < this._buffer.length) {
       const doc = this._buffer[this._position++]
-      const result = await callback(doc, index++)
-      if (result === false) break
+      if (doc !== undefined) {
+        const result = await callback(doc, index++)
+        if (result === false) break
+      }
     }
   }
 
@@ -428,7 +431,7 @@ export class HttpAggregationCursor<TResult extends Document = Document> {
       return null
     }
 
-    return this._buffer[this._position++]
+    return this._buffer[this._position++] ?? null
   }
 
   /**
@@ -475,8 +478,10 @@ export class HttpAggregationCursor<TResult extends Document = Document> {
     let index = 0
     while (this._position < this._buffer.length) {
       const doc = this._buffer[this._position++]
-      const result = await callback(doc, index++)
-      if (result === false) break
+      if (doc !== undefined) {
+        const result = await callback(doc, index++)
+        if (result === false) break
+      }
     }
   }
 

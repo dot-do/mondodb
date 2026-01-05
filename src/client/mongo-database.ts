@@ -5,7 +5,7 @@
  */
 
 import { MongoClient } from './MongoClient'
-import { MongoCollection } from './mongo-collection'
+import { MongoCollection, Document } from './mongo-collection'
 
 export interface CreateCollectionOptions {
   capped?: boolean
@@ -31,13 +31,12 @@ export interface CollectionInfo {
 }
 
 export class MongoDatabase {
-  private readonly client: MongoClient
   private readonly _databaseName: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly collectionCache: Map<string, MongoCollection<any>> = new Map()
-  private readonly collections: Map<string, CreateCollectionOptions> = new Map()
+  private readonly collections: Map<string, Record<string, unknown>> = new Map()
 
-  constructor(client: MongoClient, name: string) {
-    this.client = client
+  constructor(_client: MongoClient, name: string) {
     this._databaseName = name
   }
 
@@ -54,15 +53,15 @@ export class MongoDatabase {
    */
   collection<TSchema extends Document = Document>(name: string): MongoCollection<TSchema> {
     // Return cached instance if available
-    let col = this.collectionCache.get(name)
-    if (col) {
-      return col as MongoCollection<TSchema>
+    const cached = this.collectionCache.get(name)
+    if (cached) {
+      return cached as MongoCollection<TSchema>
     }
 
     // Create new collection instance
-    col = new MongoCollection<TSchema>(this, name)
+    const col = new MongoCollection<TSchema>(this, name)
     this.collectionCache.set(name, col)
-    return col as MongoCollection<TSchema>
+    return col
   }
 
   /**
@@ -79,8 +78,8 @@ export class MongoDatabase {
     name: string,
     options?: CreateCollectionOptions
   ): Promise<MongoCollection<TSchema>> {
-    // Store collection metadata
-    this.collections.set(name, options || {})
+    // Store collection metadata (cast to Record to satisfy type)
+    this.collections.set(name, (options || {}) as Record<string, unknown>)
 
     // Clear cache to force new instance
     this.collectionCache.delete(name)

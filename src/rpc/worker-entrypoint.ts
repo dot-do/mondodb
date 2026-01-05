@@ -99,7 +99,7 @@ export class WorkerEntrypoint {
   /**
    * Handle HTTP fetch requests
    */
-  async fetch(request: Request): Promise<Response> {
+  async fetch(_request: Request): Promise<Response> {
     return new Response('Method not implemented', { status: 501 });
   }
 }
@@ -152,7 +152,7 @@ export function validateEnv(env: unknown): boolean {
 export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
   protected override env: MondoEnv;
   private rpcTarget: MondoRpcTarget;
-  private options: Required<MondoEntrypointOptions>;
+  private entrypointOptions: Required<MondoEntrypointOptions>;
   private cleanupScheduled = false;
 
   constructor(ctx: ExecutionContext, env: MondoEnv) {
@@ -168,12 +168,19 @@ export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
 
     this.env = env;
     this.rpcTarget = new MondoRpcTarget(env);
-    this.options = {
+    this.entrypointOptions = {
       maxBatchSize: DEFAULT_OPTIONS.maxBatchSize,
       timeout: DEFAULT_OPTIONS.timeout,
       enableCleanup: DEFAULT_OPTIONS.enableCleanup,
       cleanupInterval: DEFAULT_OPTIONS.cleanupInterval,
     };
+  }
+
+  /**
+   * Get the entrypoint options
+   */
+  get options(): Required<MondoEntrypointOptions> {
+    return this.entrypointOptions;
   }
 
   /**

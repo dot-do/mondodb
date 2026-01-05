@@ -6,6 +6,7 @@
  * that can be emitted to downstream systems like Pipelines/ClickHouse.
  */
 
+import { randomUUID } from 'crypto';
 import { ObjectId } from '../../types/objectid';
 import { serialize, type Document } from 'bson';
 
@@ -86,7 +87,7 @@ export type CDCEvent = InsertEvent | UpdateEvent | DeleteEvent;
  * Generate a unique event ID
  */
 function generateEventId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  return randomUUID();
 }
 
 /**

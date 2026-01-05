@@ -6,7 +6,6 @@
  */
 
 import type { MongoCollection } from './mongo-collection'
-import { ObjectId } from '../types/objectid'
 
 // Base document type
 export type Document = Record<string, unknown>
@@ -39,10 +38,10 @@ export class FindCursor<TSchema extends Document = Document> {
     this.collection = collection
     this.filter = filter
     if (options) {
-      this._projection = options.projection
-      this._sort = options.sort
-      this._limit = options.limit
-      this._skip = options.skip
+      if (options.projection !== undefined) this._projection = options.projection
+      if (options.sort !== undefined) this._sort = options.sort
+      if (options.limit !== undefined) this._limit = options.limit
+      if (options.skip !== undefined) this._skip = options.skip
     }
   }
 
@@ -83,11 +82,11 @@ export class FindCursor<TSchema extends Document = Document> {
    */
   async toArray(): Promise<TSchema[]> {
     if (!this._executed) {
-      this._results = this.collection._findDocuments(this.filter, {
-        sort: this._sort,
-        skip: this._skip,
-        limit: this._limit,
-      })
+      const options: { sort?: Record<string, 1 | -1>; skip?: number; limit?: number } = {}
+      if (this._sort !== undefined) options.sort = this._sort
+      if (this._skip !== undefined) options.skip = this._skip
+      if (this._limit !== undefined) options.limit = this._limit
+      this._results = this.collection._findDocuments(this.filter, options)
 
       // Apply projection
       if (this._projection) {
@@ -132,7 +131,7 @@ export class FindCursor<TSchema extends Document = Document> {
    */
   async next(): Promise<TSchema | null> {
     const docs = await this.toArray()
-    return docs.length > 0 ? docs[0] : null
+    return docs.length > 0 ? docs[0] ?? null : null
   }
 
   /**
@@ -156,7 +155,7 @@ export class FindCursor<TSchema extends Document = Document> {
 /**
  * Cursor with map transformation applied
  */
-class MappedCursor<TSchema, U> {
+class MappedCursor<TSchema extends Document, U> {
   private readonly cursor: FindCursor<TSchema>
   private readonly mapFn: (doc: TSchema) => U
 

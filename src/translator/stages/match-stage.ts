@@ -8,7 +8,7 @@ import type { StageResult, StageContext } from './types'
 
 export function translateMatchStage(
   matchQuery: Record<string, unknown>,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   const queryTranslator = new QueryTranslator()
   const { sql, params } = queryTranslator.translate(matchQuery)

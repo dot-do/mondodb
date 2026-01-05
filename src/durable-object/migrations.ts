@@ -137,7 +137,8 @@ export function validateMigrations(): { valid: boolean; error?: string } {
 
   // Check for gaps (starting from 1)
   for (let i = 0; i < sortedVersions.length; i++) {
-    if (sortedVersions[i].version !== i + 1) {
+    const migration = sortedVersions[i];
+    if (migration && migration.version !== i + 1) {
       return {
         valid: false,
         error: `Missing migration version: ${i + 1}`,

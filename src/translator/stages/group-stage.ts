@@ -68,14 +68,16 @@ export function translateGroupStage(
   const selectClause = dialect === 'clickhouse'
     ? `tuple(${selectParts.join(', ')}) AS data`
     : `json_object(${selectParts.join(', ')}) AS data`
-  const groupByClause = groupByFields.length > 0 ? groupByFields.join(', ') : undefined
 
-  return {
+  const result: StageResult = {
     selectClause,
-    groupByClause,
     params,
     transformsShape: true
   }
+  if (groupByFields.length > 0) {
+    result.groupByClause = groupByFields.join(', ')
+  }
+  return result
 }
 
 function translateAccumulator(
@@ -83,7 +85,7 @@ function translateAccumulator(
   params: unknown[],
   dialect: SQLDialect = 'sqlite'
 ): string {
-  const operator = Object.keys(accumulator)[0]
+  const operator = Object.keys(accumulator)[0]!
   const value = accumulator[operator]
   const aggFns = getAggregationFunctions(dialect)
 

@@ -59,7 +59,7 @@ export class AggregationExecutor {
 
   constructor(
     private sql: SqlInterface,
-    private env: AggregationExecutorEnv
+    env: AggregationExecutorEnv
   ) {
     this.functionExecutor = env.LOADER ? new FunctionExecutor(env) : null
   }
@@ -127,7 +127,9 @@ export class AggregationExecutor {
 
     for (let docIndex = 0; docIndex < documents.length; docIndex++) {
       const doc = documents[docIndex]
-      this.collectFunctionInvocations(doc, doc, [], docIndex, batchItems)
+      if (doc) {
+        this.collectFunctionInvocations(doc, doc, [], docIndex, batchItems)
+      }
     }
 
     // Group by function body for batch execution
@@ -152,8 +154,13 @@ export class AggregationExecutor {
         // Apply results back to documents
         for (let i = 0; i < items.length; i++) {
           const item = items[i]
-          const result = results[i]
-          this.setFieldValue(documents[item.docIndex], item.fieldPath, result)
+          if (item) {
+            const result = results[i]
+            const doc = documents[item.docIndex]
+            if (doc) {
+              this.setFieldValue(doc, item.fieldPath, result)
+            }
+          }
         }
       } catch (error) {
         // Re-throw with context
@@ -242,7 +249,7 @@ export class AggregationExecutor {
     // Try to find the __FUNCTION__ marker in the string
     // Match __FUNCTION__ followed by a JSON object
     const match = value.match(/__FUNCTION__({.+})$/) || value.match(/__FUNCTION__({.+})'?$/)
-    if (match) {
+    if (match && match[1]) {
       try {
         return JSON.parse(match[1])
       } catch {
@@ -281,10 +288,12 @@ export class AggregationExecutor {
   private extractArgs(doc: Record<string, unknown>, fnSpec: ParsedFunctionSpec): unknown[] {
     return fnSpec.argOrder.map(arg => {
       if (arg.type === 'literal') {
-        return fnSpec.literalArgs[arg.index!]
+        const index = (arg as { type: 'literal'; index: number }).index
+        return fnSpec.literalArgs[index]
       }
       // Extract field value using path
-      return this.extractFieldValue(doc, arg.path!)
+      const path = (arg as { type: 'field'; path: string }).path
+      return this.extractFieldValue(doc, path)
     })
   }
 
@@ -313,10 +322,16 @@ export class AggregationExecutor {
     let current: Record<string, unknown> = doc
 
     for (let i = 0; i < path.length - 1; i++) {
-      current = current[path[i]] as Record<string, unknown>
+      const key = path[i]
+      if (key !== undefined) {
+        current = current[key] as Record<string, unknown>
+      }
     }
 
-    current[path[path.length - 1]] = value
+    const lastKey = path[path.length - 1]
+    if (lastKey !== undefined) {
+      current[lastKey] = value
+    }
   }
 
   /**
@@ -340,28 +355,4 @@ export class AggregationExecutor {
     return [result]
   }
 
-  /**
-   * Process function placeholders in a document recursively (legacy single-doc mode)
-   * Kept for potential future use with streaming results
-   */
-  private async processFunctionPlaceholders(
-    root: Record<string, unknown>,
-    doc: Record<string, unknown>
-  ): Promise<Record<string, unknown>> {
-    const result = { ...doc }
-
-    for (const [key, value] of Object.entries(result)) {
-      if (typeof value === 'string' && value.includes('__FUNCTION__')) {
-        const fnSpec = this.parseFunctionMarker(value)
-        if (fnSpec && this.functionExecutor) {
-          const args = this.extractArgs(root, fnSpec)
-          result[key] = await this.functionExecutor.execute(fnSpec.body, args)
-        }
-      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        result[key] = await this.processFunctionPlaceholders(root, value as Record<string, unknown>)
-      }
-    }
-
-    return result
-  }
 }

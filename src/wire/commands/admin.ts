@@ -222,7 +222,9 @@ export class DbStatsCommand implements CommandHandler {
 export class ServerStatusCommand implements CommandHandler {
   private startTime = new Date()
 
-  constructor(private backend: MondoBackend) {}
+  constructor(_backend: MondoBackend) {
+    void _backend; // Reserved for future backend status integration
+  }
 
   async execute(_command: Document, _context: CommandContext): Promise<CommandResult> {
     const now = new Date()

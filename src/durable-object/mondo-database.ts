@@ -111,7 +111,7 @@ export class MondoDatabase {
       name
     ).toArray() as { id: number }[];
 
-    if (existing.length > 0) {
+    if (existing.length > 0 && existing[0]) {
       return existing[0].id;
     }
 
@@ -127,6 +127,9 @@ export class MondoDatabase {
       name
     ).toArray() as { id: number }[];
 
+    if (!result[0]) {
+      throw new Error(`Failed to create collection: ${name}`);
+    }
     return result[0].id;
   }
 
@@ -140,7 +143,7 @@ export class MondoDatabase {
       name
     ).toArray() as { id: number }[];
 
-    return result.length > 0 ? result[0].id : undefined;
+    return result.length > 0 && result[0] ? result[0].id : undefined;
   }
 
   /**
@@ -234,7 +237,7 @@ export class MondoDatabase {
 
     const result = sql.exec(sqlQuery, collectionId, ...params).toArray() as { data: string }[];
 
-    if (result.length === 0) {
+    if (result.length === 0 || !result[0]) {
       return null;
     }
 
@@ -288,7 +291,7 @@ export class MondoDatabase {
 
     const found = sql.exec(findQuery, collectionId, ...params).toArray() as { id: number; data: string }[];
 
-    if (found.length === 0) {
+    if (found.length === 0 || !found[0]) {
       return { acknowledged: true, matchedCount: 0, modifiedCount: 0 };
     }
 
@@ -349,7 +352,7 @@ export class MondoDatabase {
 
     const found = sql.exec(findQuery, collectionId, ...params).toArray() as { id: number }[];
 
-    if (found.length === 0) {
+    if (found.length === 0 || !found[0]) {
       return { acknowledged: true, deletedCount: 0 };
     }
 
@@ -464,14 +467,17 @@ export class MondoDatabase {
     let current: Record<string, unknown> = obj;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
+      const key = keys[i]!;
       if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
         current[key] = {};
       }
       current = current[key] as Record<string, unknown>;
     }
 
-    current[keys[keys.length - 1]] = value;
+    const lastKey = keys[keys.length - 1];
+    if (lastKey !== undefined) {
+      current[lastKey] = value;
+    }
   }
 
   /**
@@ -482,14 +488,17 @@ export class MondoDatabase {
     let current: Record<string, unknown> = obj;
 
     for (let i = 0; i < keys.length - 1; i++) {
-      const key = keys[i];
+      const key = keys[i]!;
       if (!(key in current) || typeof current[key] !== 'object' || current[key] === null) {
         return; // Path doesn't exist
       }
       current = current[key] as Record<string, unknown>;
     }
 
-    delete current[keys[keys.length - 1]];
+    const lastKey = keys[keys.length - 1];
+    if (lastKey !== undefined) {
+      delete current[lastKey];
+    }
   }
 
   /**
@@ -591,7 +600,7 @@ export class MondoDatabase {
         // Handle both cases: with and without existing WHERE clause
         let modifiedQuery: string;
         const fromPattern = new RegExp(`FROM\\s+${collection}\\b(\\s+WHERE\\s+)?`, 'gi');
-        modifiedQuery = query.replace(fromPattern, (match, hasWhere) => {
+        modifiedQuery = query.replace(fromPattern, (_match, hasWhere) => {
           if (hasWhere) {
             // There's an existing WHERE clause, use AND to combine conditions
             return `FROM documents WHERE collection_id = ${collectionId} AND `;

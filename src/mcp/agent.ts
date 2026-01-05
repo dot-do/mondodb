@@ -9,7 +9,8 @@
  * - Code execution via Worker Loader or Miniflare fallback
  */
 
-import { createMcpServer, type McpServer, type CodeLoader, type McpServerConfig } from './server'
+import { randomUUID } from 'crypto'
+import { createMcpServer, type CodeLoader, type McpServerConfig } from './server'
 import { AgentFilesystem, type AgentFSDatabase } from '../agentfs/vfs'
 import { AgentFSKVStore, type KVStorageBackend, createInMemoryBackend } from '../agentfs/kv-store'
 import { ToolCallAuditLog, createInMemoryAuditBackend, type AuditBackend } from '../agentfs/toolcalls'
@@ -195,13 +196,16 @@ export interface MonDoAgent {
  * ```
  */
 export function createMonDoAgent(config: MonDoAgentConfig): MonDoAgent {
-  const agentId = config.id ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const agentId = config.id ?? `agent-${randomUUID()}`
 
   // Create MCP server
-  const mcpServer = createMcpServer({
+  const mcpServerConfig: McpServerConfig = {
     dbAccess: config.dbAccess,
-    codeLoader: config.codeLoader,
-  })
+  }
+  if (config.codeLoader) {
+    mcpServerConfig.codeLoader = config.codeLoader
+  }
+  const mcpServer = createMcpServer(mcpServerConfig)
 
   // Create filesystem (use in-memory database if not provided)
   const fsDatabase = config.fsDatabase ?? createInMemoryFsDatabase()
@@ -234,8 +238,9 @@ export function createMonDoAgent(config: MonDoAgentConfig): MonDoAgent {
     async writeFile(path: string, content: string) {
       await filesystem.writeFile(path, content)
     },
-    async deleteFile(path: string) {
-      return filesystem.deleteFile(path)
+    async deleteFile(path: string): Promise<boolean> {
+      await filesystem.deleteFile(path)
+      return true
     },
     async exists(path: string) {
       return filesystem.exists(path)
@@ -258,8 +263,8 @@ export function createMonDoAgent(config: MonDoAgentConfig): MonDoAgent {
 
   // Wrap KV store for the interface
   const kv: KVStoreLike = {
-    async get<T>(key: string) {
-      return kvStore.get<T>(key)
+    async get<T>(key: string): Promise<T | null> {
+      return kvStore.get(key) as Promise<T | null>
     },
     async set<T>(key: string, value: T) {
       await kvStore.set(key, value)
@@ -278,14 +283,27 @@ export function createMonDoAgent(config: MonDoAgentConfig): MonDoAgent {
   // Wrap audit log for the interface
   const audit: AuditLogLike = {
     async record(tool: string, inputs: unknown, outputs: unknown, durationMs?: number) {
-      return auditLog.record({ tool, inputs, outputs, durationMs })
+      const inputsRecord = inputs as Record<string, unknown>
+      const outputsRecord = outputs as Record<string, unknown>
+      if (durationMs !== undefined) {
+        const startTime = new Date(Date.now() - durationMs)
+        const endTime = new Date()
+        return auditLog.record(tool, inputsRecord, outputsRecord, { startTime, endTime })
+      }
+      return auditLog.record(tool, inputsRecord, outputsRecord)
     },
     async list(options?: { limit?: number; offset?: number; tool?: string }) {
-      const entries = await auditLog.list({
-        limit: options?.limit,
-        offset: options?.offset,
-        tool: options?.tool,
-      })
+      const listOptions: { limit?: number; offset?: number; tool?: string } = {}
+      if (options?.limit !== undefined) {
+        listOptions.limit = options.limit
+      }
+      if (options?.offset !== undefined) {
+        listOptions.offset = options.offset
+      }
+      if (options?.tool !== undefined) {
+        listOptions.tool = options.tool
+      }
+      const entries = await auditLog.list(listOptions)
       return entries.map((e) => ({ id: e.id, tool: e.tool, timestamp: new Date(e.timestamp) }))
     },
     async count() {
@@ -318,10 +336,16 @@ export function createMonDoAgent(config: MonDoAgentConfig): MonDoAgent {
 
         const result: ExecutionResult<T> = {
           success: !response.isError,
-          value: parsed.value as T | undefined,
-          error: response.isError ? (parsed.error as string) : undefined,
-          logs: parsed.logs as string[] | undefined,
           duration,
+        }
+        if (parsed.value !== undefined) {
+          result.value = parsed.value as T
+        }
+        if (response.isError && parsed.error) {
+          result.error = parsed.error as string
+        }
+        if (parsed.logs) {
+          result.logs = parsed.logs as string[]
         }
 
         // Record in audit log
@@ -426,6 +450,29 @@ function createInMemoryFsDatabase(): AgentFSDatabase {
       if (!path) return { deletedCount: 0 }
       const deleted = files.delete(path)
       return { deletedCount: deleted ? 1 : 0 }
+    },
+
+    async deleteMany(collection: string, filter: Record<string, unknown>) {
+      if (collection !== 'files') return { deletedCount: 0 }
+      let deletedCount = 0
+      for (const [path] of files) {
+        const pathFilter = filter.path as Record<string, unknown> | string | undefined
+        if (pathFilter) {
+          if (typeof pathFilter === 'string') {
+            if (path === pathFilter) {
+              files.delete(path)
+              deletedCount++
+            }
+          } else if (pathFilter.$regex) {
+            const regex = new RegExp(pathFilter.$regex as string)
+            if (regex.test(path)) {
+              files.delete(path)
+              deletedCount++
+            }
+          }
+        }
+      }
+      return { deletedCount }
     },
 
     async find(collection: string, filter: Record<string, unknown>) {

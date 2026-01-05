@@ -92,7 +92,9 @@ export class MongoProxyError extends Error {
     super(message)
     this.name = 'MongoProxyError'
     this.code = code
-    this.codeName = codeName
+    if (codeName) {
+      this.codeName = codeName
+    }
   }
 }
 
@@ -143,7 +145,9 @@ export class WorkersProxyBackend implements MondoBackend {
     }
 
     this.endpoint = options.endpoint
-    this.authToken = options.authToken
+    if (options.authToken) {
+      this.authToken = options.authToken
+    }
     this.timeout = options.timeout ?? 30000
     this.retries = options.retries ?? 0
     this.retryDelay = options.retryDelay ?? 1000
@@ -262,20 +266,26 @@ export class WorkersProxyBackend implements MondoBackend {
   // ==========================================================================
 
   async listCollections(db: string, filter?: Document): Promise<CollectionInfo[]> {
-    return this.rpc<CollectionInfo[]>({
+    const request: RpcRequest = {
       method: 'listCollections',
       db,
-      filter,
-    })
+    }
+    if (filter) {
+      request.filter = filter
+    }
+    return this.rpc<CollectionInfo[]>(request)
   }
 
   async createCollection(db: string, name: string, options?: Document): Promise<void> {
-    await this.rpc<null>({
+    const request: RpcRequest = {
       method: 'createCollection',
       db,
       collection: name,
-      options,
-    })
+    }
+    if (options) {
+      request.options = options
+    }
+    await this.rpc<null>(request)
   }
 
   async dropCollection(db: string, name: string): Promise<void> {
@@ -314,27 +324,32 @@ export class WorkersProxyBackend implements MondoBackend {
   // ==========================================================================
 
   async find(db: string, collection: string, options: FindOptions): Promise<FindResult> {
+    const request: RpcRequest = {
+      method: 'find',
+      db,
+      collection,
+    }
+    if (options.filter) {
+      request.filter = options.filter
+    }
+    const findOptions: Document = {}
+    if (options.projection) findOptions.projection = options.projection
+    if (options.sort) findOptions.sort = options.sort
+    if (options.limit !== undefined) findOptions.limit = options.limit
+    if (options.skip !== undefined) findOptions.skip = options.skip
+    if (options.batchSize !== undefined) findOptions.batchSize = options.batchSize
+    if (options.hint) findOptions.hint = options.hint
+    if (options.comment) findOptions.comment = options.comment
+    if (options.allowDiskUse !== undefined) findOptions.allowDiskUse = options.allowDiskUse
+    if (options.collation) findOptions.collation = options.collation
+    if (Object.keys(findOptions).length > 0) {
+      request.options = findOptions
+    }
     const result = await this.rpc<{
       documents: Document[]
       cursorId: string
       hasMore: boolean
-    }>({
-      method: 'find',
-      db,
-      collection,
-      filter: options.filter,
-      options: {
-        projection: options.projection,
-        sort: options.sort,
-        limit: options.limit,
-        skip: options.skip,
-        batchSize: options.batchSize,
-        hint: options.hint,
-        comment: options.comment,
-        allowDiskUse: options.allowDiskUse,
-        collation: options.collation,
-      },
-    })
+    }>(request)
 
     return {
       documents: result.documents,
@@ -388,14 +403,17 @@ export class WorkersProxyBackend implements MondoBackend {
     update: Document,
     options?: { upsert?: boolean; arrayFilters?: Document[] }
   ): Promise<UpdateResult> {
-    return this.rpc<UpdateResult>({
+    const request: RpcRequest = {
       method: 'updateOne',
       db,
       collection,
       filter,
       update,
-      options,
-    })
+    }
+    if (options) {
+      request.options = options
+    }
+    return this.rpc<UpdateResult>(request)
   }
 
   async updateMany(
@@ -405,14 +423,17 @@ export class WorkersProxyBackend implements MondoBackend {
     update: Document,
     options?: { upsert?: boolean; arrayFilters?: Document[] }
   ): Promise<UpdateResult> {
-    return this.rpc<UpdateResult>({
+    const request: RpcRequest = {
       method: 'updateMany',
       db,
       collection,
       filter,
       update,
-      options,
-    })
+    }
+    if (options) {
+      request.options = options
+    }
+    return this.rpc<UpdateResult>(request)
   }
 
   async deleteOne(db: string, collection: string, filter: Document): Promise<DeleteResult> {
@@ -438,22 +459,28 @@ export class WorkersProxyBackend implements MondoBackend {
   // ==========================================================================
 
   async count(db: string, collection: string, query?: Document): Promise<number> {
-    return this.rpc<number>({
+    const request: RpcRequest = {
       method: 'count',
       db,
       collection,
-      query,
-    })
+    }
+    if (query) {
+      request.query = query
+    }
+    return this.rpc<number>(request)
   }
 
   async distinct(db: string, collection: string, field: string, query?: Document): Promise<unknown[]> {
-    return this.rpc<unknown[]>({
+    const request: RpcRequest = {
       method: 'distinct',
       db,
       collection,
       field,
-      query,
-    })
+    }
+    if (query) {
+      request.query = query
+    }
+    return this.rpc<unknown[]>(request)
   }
 
   // ==========================================================================
@@ -466,17 +493,20 @@ export class WorkersProxyBackend implements MondoBackend {
     pipeline: Document[],
     options?: { batchSize?: number; allowDiskUse?: boolean }
   ): Promise<AggregateResult> {
-    const result = await this.rpc<{
-      documents: Document[]
-      cursorId: string
-      hasMore: boolean
-    }>({
+    const request: RpcRequest = {
       method: 'aggregate',
       db,
       collection,
       pipeline,
-      options,
-    })
+    }
+    if (options) {
+      request.options = options
+    }
+    const result = await this.rpc<{
+      documents: Document[]
+      cursorId: string
+      hasMore: boolean
+    }>(request)
 
     return {
       documents: result.documents,

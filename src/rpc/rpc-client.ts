@@ -126,11 +126,11 @@ export class WebSocketRpcTransport {
   private messageId = 0;
   private pending: Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }> = new Map();
   private messageHandlers: Set<(message: unknown) => void> = new Set();
-  private options?: { timeout?: number };
+  private options: { timeout?: number };
 
   constructor(ws: WebSocket, options?: { timeout?: number }) {
     this.ws = ws;
-    this.options = options;
+    this.options = options ?? {};
     this.setupMessageHandler();
   }
 
@@ -369,10 +369,14 @@ export class RpcClient {
 
       batch.forEach((item, index) => {
         const result = data.results[index];
-        if (result.error) {
-          item.reject(new Error(result.error));
+        if (result) {
+          if (result.error) {
+            item.reject(new Error(result.error));
+          } else {
+            item.resolve(result.result);
+          }
         } else {
-          item.resolve(result.result);
+          item.reject(new Error('Missing result for batch item'));
         }
       });
     } catch (error) {
@@ -431,7 +435,7 @@ export class RpcClient {
         resolve();
       });
 
-      ws.addEventListener('error', (event) => {
+      ws.addEventListener('error', (_event) => {
         reject(new Error('WebSocket connection failed'));
       });
 
@@ -468,7 +472,7 @@ export class RpcClient {
  */
 export class MongoClient {
   private client: RpcClient;
-  private connected = false;
+  private isConnected = false;
   private dbName: string | null = null;
 
   constructor(url: string, options: RpcClientOptions = {}) {
@@ -495,7 +499,7 @@ export class MongoClient {
       throw new Error('No database specified in connection string');
     }
     await this.client.call('connect', [`mongodb://localhost/${this.dbName}`]);
-    this.connected = true;
+    this.isConnected = true;
     return this;
   }
 
@@ -515,7 +519,14 @@ export class MongoClient {
    */
   close(): void {
     this.client.close();
-    this.connected = false;
+    this.isConnected = false;
+  }
+
+  /**
+   * Check if connected
+   */
+  get connected(): boolean {
+    return this.isConnected;
   }
 }
 
@@ -616,7 +627,7 @@ class RpcFindCursor<T = unknown> {
     if (this._closed) return null;
     await this.ensureFetched();
     if (this._position >= this._buffer.length) return null;
-    return this._buffer[this._position++];
+    return this._buffer[this._position++] ?? null;
   }
 
   async hasNext(): Promise<boolean> {
@@ -640,8 +651,10 @@ class RpcFindCursor<T = unknown> {
     let index = 0;
     while (this._position < this._buffer.length) {
       const doc = this._buffer[this._position++];
-      const result = await callback(doc, index++);
-      if (result === false) break;
+      if (doc !== undefined) {
+        const result = await callback(doc, index++);
+        if (result === false) break;
+      }
     }
   }
 
@@ -716,7 +729,7 @@ class RpcAggregationCursor<T = unknown> {
     if (this._closed) return null;
     await this.ensureFetched();
     if (this._position >= this._buffer.length) return null;
-    return this._buffer[this._position++];
+    return this._buffer[this._position++] ?? null;
   }
 
   async hasNext(): Promise<boolean> {
@@ -740,8 +753,10 @@ class RpcAggregationCursor<T = unknown> {
     let index = 0;
     while (this._position < this._buffer.length) {
       const doc = this._buffer[this._position++];
-      const result = await callback(doc, index++);
-      if (result === false) break;
+      if (doc !== undefined) {
+        const result = await callback(doc, index++);
+        if (result === false) break;
+      }
     }
   }
 

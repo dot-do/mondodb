@@ -7,7 +7,7 @@ import type { StageResult, StageContext } from './types'
 
 export function translateSkipStage(
   skip: number,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   return {
     offsetClause: `OFFSET ${skip}`,

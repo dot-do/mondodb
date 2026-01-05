@@ -421,7 +421,7 @@ function translateSwitch(
  * 2. Extract field references from args for document binding
  * 3. Store the function expression metadata for post-processing
  */
-function translateFunction(spec: FunctionSpec, params: unknown[]): string {
+function translateFunction(spec: FunctionSpec, _params: unknown[]): string {
   // Validate required fields
   if (!spec.body) {
     throw new Error('$function requires body')
@@ -466,12 +466,10 @@ function translateFunction(spec: FunctionSpec, params: unknown[]): string {
 }
 
 /**
- * Generate a unique function ID for placeholder identification
+ * Function ID counter for placeholder identification
+ * Exported for testing purposes
  */
-let functionIdCounter = 0
-function generateFunctionId(): string {
-  return `fn${++functionIdCounter}`
-}
+export let functionIdCounter = 0
 
 /**
  * Reset function ID counter (useful for testing)
@@ -534,7 +532,7 @@ export function parseFunctionPlaceholder(sql: string): {
   argOrder: Array<{ type: 'field'; path: string } | { type: 'literal'; index: number }>
 } | null {
   const match = sql.match(/'__FUNCTION__(.+?)'/)
-  if (!match) return null
+  if (!match || !match[1]) return null
 
   try {
     // Unescape single quotes and parse JSON

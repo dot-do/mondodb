@@ -286,6 +286,7 @@ export class ScramAuthenticator {
     if (!match) return null
 
     const clientFirstMessageBare = match[4]
+    if (!clientFirstMessageBare) return null
 
     // Parse the bare message for username and nonce
     const parts = new Map<string, string>()
@@ -339,7 +340,7 @@ export class ScramAuthenticator {
     const channelBinding = parts.get('c')
     const nonce = parts.get('r')
 
-    if (!channelBinding || !nonce) return null
+    if (!channelBinding || !nonce || !clientProof) return null
 
     return { channelBinding, nonce, clientProof, clientFinalMessageWithoutProof }
   }
@@ -369,7 +370,7 @@ export class ScramAuthenticator {
       const clientProof = Buffer.from(clientProofBase64, 'base64')
       const clientKey = Buffer.alloc(clientProof.length)
       for (let i = 0; i < clientProof.length; i++) {
-        clientKey[i] = clientProof[i] ^ clientSignature[i]
+        clientKey[i] = (clientProof[i] ?? 0) ^ (clientSignature[i] ?? 0)
       }
 
       // Verify: H(ClientKey) should equal StoredKey
@@ -412,7 +413,7 @@ export class ScramAuthenticator {
    * Compute SHA-256 hash
    */
   private async sha256(data: Buffer | Uint8Array): Promise<Buffer> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new Uint8Array(data))
     return Buffer.from(hashBuffer)
   }
 
@@ -425,7 +426,7 @@ export class ScramAuthenticator {
   ): Promise<Buffer> {
     const cryptoKey = await crypto.subtle.importKey(
       'raw',
-      key,
+      new Uint8Array(key),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
@@ -445,7 +446,7 @@ export class ScramAuthenticator {
     if (a.length !== b.length) return false
     let result = 0
     for (let i = 0; i < a.length; i++) {
-      result |= a[i] ^ b[i]
+      result |= (a[i] ?? 0) ^ (b[i] ?? 0)
     }
     return result === 0
   }
@@ -524,7 +525,7 @@ async function pbkdf2Sha256(
   const derivedBits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt: salt,
+      salt: new Uint8Array(salt),
       iterations: iterations,
       hash: 'SHA-256',
     },
@@ -535,7 +536,7 @@ async function pbkdf2Sha256(
 }
 
 async function sha256(data: Buffer | Uint8Array): Promise<Buffer> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new Uint8Array(data))
   return Buffer.from(hashBuffer)
 }
 
@@ -545,7 +546,7 @@ async function hmacSha256(
 ): Promise<Buffer> {
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    key,
+    new Uint8Array(key),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -574,7 +575,9 @@ export class InMemoryCredentialsProvider implements CredentialsProvider {
     roles?: Array<{ role: string; db: string }>
   ): Promise<void> {
     const creds = await createScramCredentials(username, password, db)
-    creds.roles = roles
+    if (roles) {
+      creds.roles = roles
+    }
     this.credentials.set(`${db}.${username}`, creds)
   }
 

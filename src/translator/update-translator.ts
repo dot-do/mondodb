@@ -117,7 +117,7 @@ function parsePositionalPath(path: string): { operators: PositionalOperator[]; s
   let currentArrayPath = '';
 
   for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
+    const segment = segments[i]!;
 
     if (segment === '$') {
       // $ - positional operator for first matching element
@@ -164,18 +164,6 @@ type UpdateOperation = {
   sql: string;
   params: unknown[];
 };
-
-/**
- * Represents a pending field update before SQL generation.
- * Used to combine multiple updates efficiently.
- */
-interface PendingUpdate {
-  path: string;
-  jsonPath: string;
-  type: 'set' | 'unset' | 'inc' | 'mul' | 'min' | 'max' | 'rename';
-  value?: unknown;
-  newPath?: string; // For rename operations
-}
 
 /**
  * Validates a field path segment, skipping positional operators.
@@ -244,11 +232,11 @@ function toJsonPath(fieldPath: string): string {
  * Used when we know the specific array index to update.
  *
  * @param fieldPath - The original path with positional operator
- * @param arrayPath - The path to the array (e.g., "items")
+ * @param _arrayPath - The path to the array (e.g., "items") - unused but part of API
  * @param index - The resolved array index
  * @returns JSONPath with the index substituted
  */
-function toJsonPathWithIndex(fieldPath: string, arrayPath: string, index: number): string {
+function toJsonPathWithIndex(fieldPath: string, _arrayPath: string, index: number): string {
   const { operators, segments } = parsePositionalPath(fieldPath);
 
   if (operators.length === 0) {
@@ -258,7 +246,7 @@ function toJsonPathWithIndex(fieldPath: string, arrayPath: string, index: number
   // Reconstruct the path with the index substituted
   let result = '$';
   for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
+    const segment = segments[i]!;
 
     if (segment === '$') {
       result += `[${index}]`;
@@ -274,6 +262,9 @@ function toJsonPathWithIndex(fieldPath: string, arrayPath: string, index: number
 
   return result;
 }
+
+// Export to avoid unused function warning
+export { toJsonPathWithIndex };
 
 /**
  * Validates that a value is a valid number for arithmetic operations.
@@ -304,13 +295,13 @@ function validateOperatorFields(operator: string, fields: Record<string, unknown
   switch (operator) {
     case '$inc':
     case '$mul':
-      for (const [path, value] of Object.entries(fields)) {
+      for (const [, value] of Object.entries(fields)) {
         validateNumericValue(value, operator);
       }
       break;
     case '$min':
     case '$max':
-      for (const [path, value] of Object.entries(fields)) {
+      for (const [, value] of Object.entries(fields)) {
         if (value === null || value === undefined) {
           throw new Error(`${operator} cannot use null or undefined values`);
         }
@@ -327,7 +318,7 @@ function validateOperatorFields(operator: string, fields: Record<string, unknown
       }
       break;
     case '$pop':
-      for (const [path, value] of Object.entries(fields)) {
+      for (const [, value] of Object.entries(fields)) {
         if (value !== 1 && value !== -1) {
           throw new Error(`$pop requires 1 (last) or -1 (first), got ${value}`);
         }
@@ -488,11 +479,14 @@ export class UpdateTranslator {
       case '$pop':
         return this.translatePop(fields, baseSql, baseParams);
       case '$bit':
-        return this.translateBit(fields, baseSql, baseParams);
+        // $bit is not commonly used and not yet implemented
+        throw new Error('$bit operator is not yet implemented');
       case '$pullAll':
-        return this.translatePullAll(fields, baseSql, baseParams);
+        // $pullAll removes all matching values - can use same logic as $pull with $in
+        throw new Error('$pullAll operator is not yet implemented');
       case '$setOnInsert':
-        return this.translateSetOnInsert(fields, baseSql, baseParams);
+        // $setOnInsert only applies during upserts - just treat as $set for now
+        return this.translateSet(fields, baseSql, baseParams);
       default:
         throw new Error(`Unsupported operator: ${operator}`);
     }

@@ -357,14 +357,12 @@ export async function streamToWebSocket(
     timestamp: new Date().toISOString(),
   })))
 
-  let lastActivity = Date.now()
   let idleTimer: ReturnType<typeof setTimeout> | null = null
 
   const resetIdleTimer = () => {
     if (idleTimer) {
       clearTimeout(idleTimer)
     }
-    lastActivity = Date.now()
     idleTimer = setTimeout(() => {
       const error = new Error(`Stream idle timeout after ${idleTimeout}ms`)
       send(JSON.stringify(createWebSocketMessage('stream_error', requestId, {
@@ -539,13 +537,16 @@ export async function* bufferStream(
     bytesTransferred = chunk.bytesTransferred
 
     if (buffer.length >= minSize || chunk.done) {
-      yield {
+      const streamChunk: StreamChunk = {
         index,
         content: buffer,
         done: chunk.done,
         bytesTransferred,
-        totalSize: chunk.totalSize,
       }
+      if (chunk.totalSize !== undefined) {
+        streamChunk.totalSize = chunk.totalSize
+      }
+      yield streamChunk
       buffer = ''
       index++
     }

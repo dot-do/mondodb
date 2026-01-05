@@ -5,7 +5,7 @@
  * This stage must be the first stage in an aggregation pipeline.
  */
 
-import { VectorTranslator, type VectorSearchStage, type VectorSearchTranslation } from '../vector-translator'
+import type { VectorSearchStage, VectorSearchResult } from '../vector-translator'
 import type { StageResult, StageContext } from './types'
 
 /**
@@ -16,12 +16,18 @@ export interface VectorSearchStageResult extends StageResult {
   isVectorSearchStage: boolean
   /** The collection being searched */
   collection: string
-  /** Vector search translation result */
-  vectorSearch?: VectorSearchTranslation
+  /** Vector search stage specification (to be executed later with VectorTranslator) */
+  vectorSearchStage?: VectorSearchStage
+  /** Vector search translation result (populated after async execution) */
+  vectorSearch?: VectorSearchResult
 }
 
 /**
  * Translate a $vectorSearch stage
+ *
+ * Note: This only prepares the stage for execution. Actual vector search
+ * requires async operation with a configured VectorTranslator instance
+ * that has access to Vectorize and AI bindings.
  *
  * @param stage - The $vectorSearch stage specification
  * @param context - The stage context with collection and CTE info
@@ -31,13 +37,12 @@ export function translateVectorSearchStage(
   stage: VectorSearchStage,
   context: StageContext
 ): VectorSearchStageResult {
-  const translator = new VectorTranslator()
-  const vectorSearch = translator.translateVectorSearch(stage, context.collection)
-
+  // Store the stage spec for deferred execution
+  // Actual vector search happens in the executor with proper bindings
   return {
     isVectorSearchStage: true,
     collection: context.collection,
-    vectorSearch,
+    vectorSearchStage: stage,
     params: [],
     transformsShape: true
   }

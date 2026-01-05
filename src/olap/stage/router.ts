@@ -111,7 +111,7 @@ const GROUP_BY_PATTERN = /\bGROUP\s+BY\b/i;
 const HAVING_PATTERN = /\bHAVING\b/i;
 const ORDER_BY_PATTERN = /\bORDER\s+BY\b/i;
 const DISTINCT_PATTERN = /\bDISTINCT\b/i;
-const TABLE_PATTERN = /\b(?:FROM|JOIN)\s+(\w+)/gi;
+// TABLE_PATTERN used only in countTables function with its own local pattern
 
 const LARGE_RESULT_THRESHOLD = 100000;
 const ROUTER_VERSION = '1.0.0';
@@ -154,9 +154,9 @@ export class QueryRouter {
       availability: config.availability ?? { r2sql: true, clickhouse: true },
       capabilities: config.capabilities ?? DEFAULT_CAPABILITIES,
       defaultEngine: config.defaultEngine ?? 'auto',
-      preferEngine: config.preferEngine,
-      enableCostBasedRouting: config.enableCostBasedRouting,
-      costFactors: config.costFactors,
+      ...(config.preferEngine !== undefined && { preferEngine: config.preferEngine }),
+      ...(config.enableCostBasedRouting !== undefined && { enableCostBasedRouting: config.enableCostBasedRouting }),
+      ...(config.costFactors !== undefined && { costFactors: config.costFactors }),
     };
   }
 
@@ -183,11 +183,12 @@ export class QueryRouter {
    */
   private _addMetadata(decision: RoutingDecision, options: OlapStageOptions): RoutingDecision {
     const complexity = decision.features ? this._mapComplexity(decision.features) : 'low';
+    const estimatedRows = options.maxRows ?? (options.partition ? 10000 : undefined);
     return {
       ...decision,
       timestamp: Date.now(),
       routerVersion: ROUTER_VERSION,
-      estimatedRows: options.maxRows ?? options.partition ? 10000 : undefined,
+      ...(estimatedRows !== undefined && { estimatedRows }),
       complexity,
     };
   }
@@ -279,13 +280,16 @@ export class QueryRouter {
       }
     }
 
-    return {
+    const result: RoutingDecision = {
       engine,
       reason: `Explicitly selected ${engine}`,
       features,
       overridden: true,
-      warnings: warnings.length > 0 ? warnings : undefined,
     };
+    if (warnings.length > 0) {
+      result.warnings = warnings;
+    }
+    return result;
   }
 
   private _autoSelectEngine(
@@ -296,7 +300,6 @@ export class QueryRouter {
     warnings: string[]
   ): RoutingDecision {
     const r2Caps = capabilities['r2sql'];
-    const chCaps = capabilities['clickhouse'];
 
     // Features that require ClickHouse
     const requiresClickHouse =
@@ -358,14 +361,17 @@ export class QueryRouter {
           warnings.push('CTEs are not supported');
         }
 
-        return {
+        const fallbackResult: RoutingDecision = {
           engine: 'r2sql',
           reason: 'ClickHouse unavailable, falling back to R2 SQL',
           features,
           fallback: true,
-          warnings: warnings.length > 0 ? warnings : undefined,
           mayFail,
         };
+        if (warnings.length > 0) {
+          fallbackResult.warnings = warnings;
+        }
+        return fallbackResult;
       }
       throw new Error('No OLAP engine available');
     }
@@ -385,13 +391,18 @@ export class QueryRouter {
     // Check if we're in a degraded state (one engine unavailable)
     const inDegradedState = !availability.r2sql || !availability.clickhouse;
 
-    return {
+    const result: RoutingDecision = {
       engine: preferredEngine,
       reason,
       features,
-      warnings: warnings.length > 0 ? warnings : undefined,
-      fallback: inDegradedState || undefined,
     };
+    if (warnings.length > 0) {
+      result.warnings = warnings;
+    }
+    if (inDegradedState) {
+      result.fallback = true;
+    }
+    return result;
   }
 }
 
@@ -407,7 +418,9 @@ function countTables(query: string): number {
   let match;
   const pattern = /\b(?:FROM|JOIN)\s+(\w+)/gi;
   while ((match = pattern.exec(query)) !== null) {
-    tables.add(match[1].toLowerCase());
+    if (match[1]) {
+      tables.add(match[1].toLowerCase());
+    }
   }
   return tables.size;
 }

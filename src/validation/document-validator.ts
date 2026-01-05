@@ -210,7 +210,7 @@ export class DocumentValidator {
    * @returns Validation result
    */
   validateUpdate(
-    originalDocument: Document,
+    _originalDocument: Document,
     resultingDocument: Document,
     modifiedFields?: Set<string>
   ): ValidationResult {
@@ -685,7 +685,7 @@ export class DocumentValidator {
  */
 export function createValidationError(
   result: ValidationResult,
-  operation: 'insert' | 'update' | 'replace' = 'insert'
+  _operation: 'insert' | 'update' | 'replace' = 'insert'
 ): DocumentValidationError {
   const message =
     result.errors.length > 0

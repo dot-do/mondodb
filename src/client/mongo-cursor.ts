@@ -356,8 +356,10 @@ export class MongoCursor<T = Document> extends EventEmitter {
 
     return [...docs].sort((a, b) => {
       for (let i = 0; i < sortFields.length; i++) {
-        const [, direction] = sortFields[i]
+        const sortField = sortFields[i]
         const path = fieldPaths[i]
+        if (!sortField || !path) continue
+        const [, direction] = sortField
         const aVal = this.getFieldValueOptimized(a, path)
         const bVal = this.getFieldValueOptimized(b, path)
 
@@ -400,13 +402,6 @@ export class MongoCursor<T = Document> extends EventEmitter {
     }
 
     return value
-  }
-
-  /**
-   * Get nested field value from document
-   */
-  private getFieldValue(doc: unknown, path: string): unknown {
-    return this.getFieldValueOptimized(doc, path.split('.'))
   }
 
   /**
@@ -546,6 +541,9 @@ export class MongoCursor<T = Document> extends EventEmitter {
     }
 
     const doc = this._buffer[this._position++]
+    if (doc === undefined) {
+      return null
+    }
 
     if (this._mapFn) {
       return this._mapFn(doc, this._position - 1) as T
@@ -622,6 +620,7 @@ export class MongoCursor<T = Document> extends EventEmitter {
       // Process current buffer
       while (this._position < this._buffer.length && shouldContinue) {
         const doc = this._buffer[this._position++]
+        if (doc === undefined) continue
         const mappedDoc = this._mapFn ? (this._mapFn(doc, index) as T) : doc
 
         const result = await callback(mappedDoc, index++)

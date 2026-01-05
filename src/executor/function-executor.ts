@@ -8,7 +8,7 @@
  * - Timeout enforcement
  */
 
-import type { WorkerLoader, WorkerCode, FunctionResult } from '../types/function'
+import type { WorkerLoader, WorkerCode } from '../types/function'
 
 interface Env {
   LOADER?: WorkerLoader
@@ -35,7 +35,8 @@ export class FunctionExecutor {
     const normalizedBody = this.normalizeBody(body)
     const hash = await this.hashFunction(normalizedBody)
 
-    const worker = this.env.LOADER.get(`fn-${hash}`, async (): Promise<WorkerCode> => ({
+    const loader = this.env.LOADER
+    const worker = loader.get(`fn-${hash}`, async (): Promise<WorkerCode> => ({
       compatibilityDate: '2024-09-25',
       mainModule: 'fn.js',
       modules: {
@@ -45,7 +46,11 @@ export class FunctionExecutor {
       env: {}
     }))
 
-    const response = await worker.getEntrypoint().fetch(
+    if (!worker.getEntrypoint) {
+      throw new Error('Worker stub does not support getEntrypoint')
+    }
+    const entrypoint = worker.getEntrypoint()
+    const response = await entrypoint.fetch(
       new Request('http://internal/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +81,8 @@ export class FunctionExecutor {
     const normalizedBody = this.normalizeBody(body)
     const hash = await this.hashFunction(normalizedBody)
 
-    const worker = this.env.LOADER.get(`fn-batch-${hash}`, async (): Promise<WorkerCode> => ({
+    const loader = this.env.LOADER
+    const worker = loader.get(`fn-batch-${hash}`, async (): Promise<WorkerCode> => ({
       compatibilityDate: '2024-09-25',
       mainModule: 'fn.js',
       modules: {
@@ -86,7 +92,11 @@ export class FunctionExecutor {
       env: {}
     }))
 
-    const response = await worker.getEntrypoint().fetch(
+    if (!worker.getEntrypoint) {
+      throw new Error('Worker stub does not support getEntrypoint')
+    }
+    const entrypoint = worker.getEntrypoint()
+    const response = await entrypoint.fetch(
       new Request('http://internal/execute-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

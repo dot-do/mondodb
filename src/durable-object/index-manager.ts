@@ -486,11 +486,13 @@ export class IndexManager {
 
       // Cache TTL metadata for quick access
       const ttlField = Object.keys(keys)[0]
-      const cacheKey = `${collectionName}:${indexName}`
-      this.ttlMetadataCache.set(cacheKey, {
-        field: ttlField,
-        expireAfterSeconds: options.expireAfterSeconds,
-      })
+      if (ttlField !== undefined) {
+        const cacheKey = `${collectionName}:${indexName}`
+        this.ttlMetadataCache.set(cacheKey, {
+          field: ttlField,
+          expireAfterSeconds: options.expireAfterSeconds,
+        })
+      }
     }
     if (isText) {
       indexInfo.textIndexVersion = 3
@@ -687,13 +689,15 @@ export class IndexManager {
       for (const index of indexes) {
         if (index.expireAfterSeconds !== undefined) {
           const field = Object.keys(index.key)[0]
-          ttlIndexes.push({
-            collectionName: collection.name,
-            collectionId: collection.id,
-            indexName: index.name,
-            field,
-            expireAfterSeconds: index.expireAfterSeconds,
-          })
+          if (field !== undefined) {
+            ttlIndexes.push({
+              collectionName: collection.name,
+              collectionId: collection.id,
+              indexName: index.name,
+              field,
+              expireAfterSeconds: index.expireAfterSeconds,
+            })
+          }
         }
       }
     }
@@ -848,6 +852,9 @@ export class IndexManager {
     }
 
     const field = Object.keys(index.key)[0]
+    if (field === undefined) {
+      return null
+    }
     const metadata: TTLMetadata = {
       field,
       expireAfterSeconds: index.expireAfterSeconds,

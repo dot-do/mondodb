@@ -106,12 +106,15 @@ function parseQuery(
   // Try to parse as JSON filter first
   if (trimmedQuery.startsWith('{')) {
     try {
-      const filter = JSON.parse(trimmedQuery)
-      return {
+      const filter = JSON.parse(trimmedQuery) as object
+      const result: { collection?: string; filter: object; database: string } = {
         filter,
         database: options.database ?? DEFAULT_DATABASE,
-        collection: options.collection,
       }
+      if (options.collection) {
+        result.collection = options.collection
+      }
+      return result
     } catch {
       // Fall through to other parsing methods
     }
@@ -120,29 +123,37 @@ function parseQuery(
   // Try db.collection: query format
   const dbCollMatch = trimmedQuery.match(/^(\w+)\.(\w+):\s*(.+)$/)
   if (dbCollMatch) {
+    const dbName = dbCollMatch[1]
+    const collName = dbCollMatch[2]
+    const queryPart = dbCollMatch[3]
     return {
-      database: dbCollMatch[1],
-      collection: dbCollMatch[2],
-      filter: parseSimpleQuery(dbCollMatch[3]),
+      database: dbName,
+      collection: collName,
+      filter: parseSimpleQuery(queryPart),
     }
   }
 
   // Try collection: query format
   const colonMatch = trimmedQuery.match(/^(\w+):\s*(.+)$/)
   if (colonMatch) {
+    const collName = colonMatch[1]
+    const queryPart = colonMatch[2]
     return {
-      collection: colonMatch[1],
-      filter: parseSimpleQuery(colonMatch[2]),
+      collection: collName,
+      filter: parseSimpleQuery(queryPart),
       database: options.database ?? DEFAULT_DATABASE,
     }
   }
 
   // Treat as natural language - search all text fields
-  return {
+  const result: { collection?: string; filter: object; database: string } = {
     filter: { $text: { $search: trimmedQuery } },
     database: options.database ?? DEFAULT_DATABASE,
-    collection: options.collection,
   }
+  if (options.collection) {
+    result.collection = options.collection
+  }
+  return result
 }
 
 /**
@@ -154,7 +165,7 @@ function parseSimpleQuery(query: string): object {
   // Handle "field = value" syntax
   const eqMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/)
   if (eqMatch) {
-    const field = eqMatch[1]
+    const field = eqMatch[1] as string
     let value: string | number = eqMatch[2].trim()
 
     // Remove quotes if present
@@ -168,10 +179,10 @@ function parseSimpleQuery(query: string): object {
     // Try to parse as number
     const numValue = Number(value)
     if (!isNaN(numValue) && value === String(numValue)) {
-      return { [field]: numValue }
+      return { [field]: numValue } as Record<string, unknown>
     }
 
-    return { [field]: value }
+    return { [field]: value } as Record<string, unknown>
   }
 
   // Default to text search
@@ -191,7 +202,7 @@ async function executeSearch(
 
   if (collection) {
     try {
-      return (await dbAccess.find(collection, filter, searchOptions)) as Document[]
+      return (await dbAccess.find(collection, filter as Record<string, unknown>, searchOptions)) as Document[]
     } catch (error) {
       // If $text search fails (index not available), try regex fallback
       if (
@@ -214,7 +225,7 @@ async function executeSearch(
     if (allResults.length >= limit) break
 
     try {
-      const docs = (await dbAccess.find(coll, filter, {
+      const docs = (await dbAccess.find(coll, filter as Record<string, unknown>, {
         limit: limit - allResults.length,
       })) as Document[]
       allResults.push(
@@ -249,7 +260,7 @@ async function executeRegexFallback(
 ): Promise<Document[]> {
   const textFilter = filter as { $text?: { $search?: string } }
   if (!textFilter.$text?.$search) {
-    return (await dbAccess.find(collection, filter, options)) as Document[]
+    return (await dbAccess.find(collection, filter as Record<string, unknown>, options)) as Document[]
   }
 
   const searchTerm = textFilter.$text.$search

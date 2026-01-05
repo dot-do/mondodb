@@ -117,10 +117,9 @@ export interface IcebergColumn {
  */
 export class ClickHouseIcebergClient {
   private _closed = false;
-  private _config: IcebergConnectionConfig;
 
-  constructor(config: IcebergConnectionConfig) {
-    this._config = config;
+  constructor(_config: IcebergConnectionConfig) {
+    // Configuration stored but not yet used in stub implementation
   }
 
   /**
@@ -181,7 +180,7 @@ export class ClickHouseIcebergClient {
  * Create a new Iceberg connection to ClickHouse
  */
 export async function createIcebergConnection(
-  config: IcebergConnectionConfig
+  _config: IcebergConnectionConfig
 ): Promise<ClickHouseIcebergClient> {
   throw new Error('Not implemented');
 }
@@ -190,8 +189,8 @@ export async function createIcebergConnection(
  * Discover an Iceberg catalog in ClickHouse
  */
 export async function discoverCatalog(
-  connection: ClickHouseIcebergClient,
-  catalogName: string
+  _connection: ClickHouseIcebergClient,
+  _catalogName: string
 ): Promise<IcebergCatalog> {
   throw new Error('Not implemented');
 }
@@ -200,8 +199,8 @@ export async function discoverCatalog(
  * Discover tables in an Iceberg catalog
  */
 export async function discoverTables(
-  connection: ClickHouseIcebergClient,
-  options?: { namespace?: string }
+  _connection: ClickHouseIcebergClient,
+  _options?: { namespace?: string }
 ): Promise<IcebergTable[]> {
   throw new Error('Not implemented');
 }
@@ -210,8 +209,8 @@ export async function discoverTables(
  * Get the schema of an Iceberg table
  */
 export async function getTableSchema(
-  connection: ClickHouseIcebergClient,
-  tableName: string
+  _connection: ClickHouseIcebergClient,
+  _tableName: string
 ): Promise<IcebergSchema> {
   throw new Error('Not implemented');
 }

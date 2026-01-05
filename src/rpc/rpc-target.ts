@@ -110,7 +110,7 @@ export class RpcTarget {
  */
 export class MondoRpcTarget extends RpcTarget {
   private env: MondoEnv;
-  private connectionString: string | null = null;
+  private currentConnectionString: string | null = null;
   private databases: Map<string, DatabaseRef> = new Map();
 
   /**
@@ -136,7 +136,7 @@ export class MondoRpcTarget extends RpcTarget {
    * Connect to a MongoDB-compatible connection string
    */
   async connect(connectionString: string): Promise<{ connected: boolean; database?: string }> {
-    this.connectionString = connectionString;
+    this.currentConnectionString = connectionString;
 
     // Parse connection string to extract database name
     const url = new URL(connectionString.replace('mongodb://', 'http://'));
@@ -149,6 +149,13 @@ export class MondoRpcTarget extends RpcTarget {
     this.databases.set(dbName, { name: dbName, stub });
 
     return { connected: true, database: dbName };
+  }
+
+  /**
+   * Get the current connection string
+   */
+  get connectionString(): string | null {
+    return this.currentConnectionString;
   }
 
   /**
@@ -377,10 +384,14 @@ export class BatchedRpcExecutor {
 
         batch.forEach((item, index) => {
           const result = results[index];
-          if (result.error) {
-            item.reject(new Error(result.error));
+          if (result) {
+            if (result.error) {
+              item.reject(new Error(result.error));
+            } else {
+              item.resolve(result.result);
+            }
           } else {
-            item.resolve(result.result);
+            item.reject(new Error('Missing result for batch item'));
           }
         });
       } catch (error) {
@@ -533,12 +544,19 @@ export class PipelinedRpcProxy {
 class PipelinedDbProxy {
   private parent: PipelinedRpcProxy;
   private dbName: string;
-  private opId: string;
+  private operationId: string;
 
   constructor(parent: PipelinedRpcProxy, dbName: string, opId: string) {
     this.parent = parent;
     this.dbName = dbName;
-    this.opId = opId;
+    this.operationId = opId;
+  }
+
+  /**
+   * Get the operation ID
+   */
+  get opId(): string {
+    return this.operationId;
   }
 
   /**

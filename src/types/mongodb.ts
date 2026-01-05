@@ -22,7 +22,7 @@ export interface ObjectId {
 /**
  * Filter query type for finding documents
  */
-export type Filter<T extends Document = Document> = {
+export type Filter<T = Document> = {
   [P in keyof T]?: T[P] | FilterOperators<T[P]>
 } & RootFilterOperators<T>
 
@@ -43,7 +43,7 @@ export interface FilterOperators<T> {
   $regex?: string | RegExp
   $options?: string
   $not?: FilterOperators<T>
-  $elemMatch?: Filter<T extends (infer U)[] ? U : never>
+  $elemMatch?: T extends (infer U)[] ? Filter<U & Document> : never
   $size?: number
 }
 
@@ -51,9 +51,9 @@ export interface FilterOperators<T> {
  * Root-level filter operators like $and, $or, $nor
  */
 export interface RootFilterOperators<T> {
-  $and?: Filter<T>[]
-  $or?: Filter<T>[]
-  $nor?: Filter<T>[]
+  $and?: Filter<T & Document>[]
+  $or?: Filter<T & Document>[]
+  $nor?: Filter<T & Document>[]
   $text?: {
     $search: string
     $language?: string
@@ -75,7 +75,7 @@ export interface UpdateFilter<T extends Document = Document> {
   $max?: Partial<T>
   $rename?: { [key: string]: string }
   $push?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | ArrayUpdateOperators<U> : never }
-  $pull?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | Filter<U> : never }
+  $pull?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | Filter<U & Document> : never }
   $addToSet?: { [P in keyof T]?: T[P] extends (infer U)[] ? U | { $each: U[] } : never }
   $pop?: { [P in keyof T]?: 1 | -1 }
   $currentDate?: { [P in keyof T]?: true | { $type: 'date' | 'timestamp' } }
@@ -95,13 +95,13 @@ export interface ArrayUpdateOperators<T> {
  * Options for find operations
  */
 export interface FindOptions<T extends Document = Document> {
-  projection?: { [P in keyof T]?: 0 | 1 | boolean }
-  sort?: { [P in keyof T]?: 1 | -1 } | [string, 1 | -1][]
-  skip?: number
-  limit?: number
-  hint?: string | { [key: string]: 1 | -1 }
-  maxTimeMS?: number
-  readConcern?: { level: 'local' | 'majority' | 'linearizable' | 'available' | 'snapshot' }
+  projection?: { [P in keyof T]?: 0 | 1 | boolean } | undefined
+  sort?: { [P in keyof T]?: 1 | -1 } | [string, 1 | -1][] | undefined
+  skip?: number | undefined
+  limit?: number | undefined
+  hint?: string | { [key: string]: 1 | -1 } | undefined
+  maxTimeMS?: number | undefined
+  readConcern?: { level: 'local' | 'majority' | 'linearizable' | 'available' | 'snapshot' } | undefined
 }
 
 /**
@@ -144,14 +144,14 @@ export interface DeleteResult {
  * Options for aggregation pipeline
  */
 export interface AggregateOptions {
-  allowDiskUse?: boolean
-  maxTimeMS?: number
-  bypassDocumentValidation?: boolean
-  readConcern?: { level: string }
-  collation?: CollationOptions
-  hint?: string | Document
-  comment?: string
-  let?: Document
+  allowDiskUse?: boolean | undefined
+  maxTimeMS?: number | undefined
+  bypassDocumentValidation?: boolean | undefined
+  readConcern?: { level: string } | undefined
+  collation?: CollationOptions | undefined
+  hint?: string | Document | undefined
+  comment?: string | undefined
+  let?: Document | undefined
 }
 
 /**

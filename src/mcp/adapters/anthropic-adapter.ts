@@ -13,14 +13,12 @@
  * @see https://docs.anthropic.com/claude/docs/tool-use
  */
 
-import { BaseAdapter, type BaseAdapterConfig, type ToolCallResult } from './base-adapter'
+import { BaseAdapter, type BaseAdapterConfig } from './base-adapter'
 import type { McpToolDefinition, McpToolResponse, JsonSchema } from '../types'
-import { McpError, McpErrorCode, ToolNotFoundError, ToolExecutionError } from './errors'
+import { McpError, McpErrorCode, ToolNotFoundError } from './errors'
 import {
   streamTextContent,
   streamToWebSocket,
-  collectStreamToResponse,
-  type StreamOptions,
   type WebSocketStreamConfig,
 } from './streaming'
 
@@ -276,7 +274,7 @@ export class AnthropicAdapter extends BaseAdapter {
     return {
       type: 'object',
       properties,
-      required: schema.required,
+      ...(schema.required && { required: schema.required }),
     }
   }
 
@@ -286,7 +284,7 @@ export class AnthropicAdapter extends BaseAdapter {
   private convertSchemaProperty(prop: JsonSchema | { type: string; description?: string }): AnthropicToolParameter {
     const param: AnthropicToolParameter = {
       type: prop.type,
-      description: prop.description,
+      ...(prop.description && { description: prop.description }),
     }
 
     if ('enum' in prop && prop.enum) {
@@ -426,14 +424,16 @@ export class AnthropicAdapter extends BaseAdapter {
 
       if (executing.length >= concurrency) {
         await Promise.race(executing)
-        // Remove completed promises
+        // Remove completed promises by filtering based on Promise.race
         const completed = await Promise.allSettled(executing)
-        executing.length = 0
+        const stillPending: Promise<void>[] = []
         for (let i = 0; i < completed.length; i++) {
-          if (completed[i].status === 'pending') {
-            executing.push(executing[i])
+          if (completed[i].status !== 'fulfilled') {
+            stillPending.push(executing[i])
           }
         }
+        executing.length = 0
+        executing.push(...stillPending)
       }
     }
 
@@ -523,7 +523,7 @@ export class AnthropicAdapter extends BaseAdapter {
       type: 'tool_result',
       tool_use_id: toolUseId,
       content,
-      is_error: response.isError,
+      ...(response.isError && { is_error: response.isError }),
     }
   }
 

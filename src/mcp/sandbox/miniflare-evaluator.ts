@@ -12,6 +12,7 @@
  * This is the fallback for CLI/local development when Worker Loader is not available.
  */
 
+import { randomUUID } from 'crypto'
 import type { EvaluatorResult, DatabaseAccess, WorkerEvaluator, EvaluatorOptions, Fetcher } from './worker-evaluator'
 
 /**
@@ -69,7 +70,7 @@ export async function createMiniflareEvaluator(
   code: string,
   options: EvaluatorOptions = {}
 ): Promise<MiniflareEvaluator> {
-  const workerId = options.id ?? `miniflare-sandbox-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const workerId = options.id ?? `miniflare-sandbox-${randomUUID()}`
   const timeout = options.timeout ?? 30000
   let disposed = false
 
@@ -140,12 +141,17 @@ export async function createMiniflareEvaluator(
         const response = await Promise.race([executePromise, timeoutPromise])
         const result = await response.json() as EvaluatorResult
 
-        return {
+        const evalResult: EvaluatorResult = {
           success: result.success,
-          value: result.value,
           logs: result.logs ?? [],
-          error: result.error,
         }
+        if (result.value !== undefined) {
+          evalResult.value = result.value
+        }
+        if (result.error) {
+          evalResult.error = result.error
+        }
+        return evalResult
       } catch (error) {
         return {
           success: false,

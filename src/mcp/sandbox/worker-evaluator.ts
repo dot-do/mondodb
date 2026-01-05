@@ -9,6 +9,7 @@
  * - Timeout enforcement
  */
 
+import { randomUUID } from 'crypto'
 import { generateSandboxCode } from './template'
 import type { WorkerLoader, WorkerCode, WorkerStub, WorkerEntrypoint } from '../../types/function'
 
@@ -90,7 +91,7 @@ export function createWorkerEvaluator(
   code: string,
   options: EvaluatorOptions = {}
 ): WorkerEvaluator {
-  const workerId = options.id ?? `sandbox-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const workerId = options.id ?? `sandbox-${randomUUID()}`
   const timeout = options.timeout ?? 30000
 
   return {
@@ -114,6 +115,13 @@ export function createWorkerEvaluator(
         }))
 
         // Get the entrypoint and execute with timeout
+        if (!worker.getEntrypoint) {
+          return {
+            success: false,
+            error: 'Worker does not have getEntrypoint method',
+            logs: [],
+          }
+        }
         const entrypoint = worker.getEntrypoint()
 
         // Create timeout promise
@@ -136,12 +144,17 @@ export function createWorkerEvaluator(
 
         const result = await response.json() as EvaluatorResult
 
-        return {
+        const evalResult: EvaluatorResult = {
           success: result.success,
-          value: result.value,
           logs: result.logs ?? [],
-          error: result.error
         }
+        if (result.value !== undefined) {
+          evalResult.value = result.value
+        }
+        if (result.error) {
+          evalResult.error = result.error
+        }
+        return evalResult
       } catch (error) {
         return {
           success: false,

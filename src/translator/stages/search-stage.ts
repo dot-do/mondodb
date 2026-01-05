@@ -81,16 +81,23 @@ export function translateSearchStage(
   // Build ORDER BY clause for relevance ranking
   const orderByClause = context.includeScore ? `_searchScore DESC` : undefined;
 
-  return {
+  const result: SearchStageResult = {
     ftsMatch: searchResult.ftsMatch,
     ftsTable,
     ftsJoin,
-    selectClause,
     whereClause,
-    orderByClause,
     params: [searchResult.ftsMatch],
-    transformsShape: context.includeScore, // Score adds a new field
   };
+  if (selectClause !== undefined) {
+    result.selectClause = selectClause;
+  }
+  if (orderByClause !== undefined) {
+    result.orderByClause = orderByClause;
+  }
+  if (context.includeScore !== undefined) {
+    result.transformsShape = context.includeScore;
+  }
+  return result;
 }
 
 /**
@@ -116,7 +123,6 @@ export function buildSearchSQL(
   const result = translateSearchStage(searchSpec, context);
 
   const selectClause = result.selectClause || '*';
-  const ftsTable = result.ftsTable;
 
   const sql = `
     SELECT ${selectClause}

@@ -9,7 +9,7 @@ import { validateFieldPath } from '../../utils/sql-safety.js'
 
 export function translateBucketStage(
   bucket: BucketStage,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   const params: unknown[] = []
   const { groupBy, boundaries, output } = bucket
@@ -67,7 +67,7 @@ function translateBucketAccumulator(
   accumulator: Record<string, unknown>,
   params: unknown[]
 ): string {
-  const operator = Object.keys(accumulator)[0]
+  const operator = Object.keys(accumulator)[0]!
   const value = accumulator[operator]
 
   switch (operator) {

@@ -72,6 +72,7 @@ export class AgentGrep {
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i]
+          if (line === undefined) continue
 
           // Reset regex lastIndex for global flag
           regex.lastIndex = 0
@@ -128,7 +129,7 @@ export class AgentGrep {
    * @returns Map of file path to match count
    */
   async grepCount(pattern: string, options?: Omit<GrepOptions, 'pattern'>): Promise<Map<string, number>> {
-    const optionsWithoutLimit = { ...options, maxResults: undefined }
+    const { maxResults: _maxResults, ...optionsWithoutLimit } = options ?? {}
     const matches = await this.grep(pattern, optionsWithoutLimit)
     const counts = new Map<string, number>()
 
@@ -185,6 +186,7 @@ export class AgentGrep {
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i]
+          if (line === undefined) continue
 
           regex.lastIndex = 0
           const match = regex.exec(line)

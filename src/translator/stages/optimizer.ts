@@ -8,7 +8,7 @@
  * 4. Redundant stage elimination
  */
 
-import type { PipelineStage, GroupStage } from './types'
+import type { PipelineStage } from './types'
 
 /**
  * Optimize an aggregation pipeline
@@ -32,7 +32,7 @@ function pushdownPredicates(pipeline: PipelineStage[]): PipelineStage[] {
   const result: PipelineStage[] = []
 
   for (let i = 0; i < pipeline.length; i++) {
-    const stage = pipeline[i]
+    const stage = pipeline[i]!
     const stageType = getStageType(stage)
 
     if (stageType !== '$match') {
@@ -66,7 +66,7 @@ function findEarliestPushPosition(
 
   // Walk backwards through stages
   for (let i = stages.length - 1; i >= 0; i--) {
-    const stage = stages[i]
+    const stage = stages[i]!
     const stageType = getStageType(stage)
 
     // Can't push past stages that modify the fields we're matching on
@@ -119,7 +119,7 @@ function mergeAdjacentStages(pipeline: PipelineStage[]): PipelineStage[] {
       continue
     }
 
-    const prevStage = result[result.length - 1]
+    const prevStage = result[result.length - 1]!
     const merged = tryMergeStages(prevStage, stage)
 
     if (merged) {
@@ -216,7 +216,7 @@ function eliminateRedundantStages(pipeline: PipelineStage[]): PipelineStage[] {
     // Remove duplicate $sort stages (only last one matters)
     if (stageType === '$sort' && index < pipeline.length - 1) {
       for (let i = index + 1; i < pipeline.length; i++) {
-        const laterStageType = getStageType(pipeline[i])
+        const laterStageType = getStageType(pipeline[i]!)
         if (laterStageType === '$sort') {
           return false
         }
@@ -236,7 +236,7 @@ function eliminateRedundantStages(pipeline: PipelineStage[]): PipelineStage[] {
  */
 
 function getStageType(stage: PipelineStage): string {
-  return Object.keys(stage)[0]
+  return Object.keys(stage)[0]!
 }
 
 function extractFieldsFromCondition(condition: Record<string, unknown>): string[] {

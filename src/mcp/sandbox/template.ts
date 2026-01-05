@@ -151,7 +151,11 @@ export function escapeUserCode(userCode: string): string {
 export function generateSafeSandboxCode(userCode: string): { code: string; error?: string } {
   const validation = validateUserCode(userCode);
   if (!validation.valid) {
-    return { code: '', error: validation.error };
+    const result: { code: string; error?: string } = { code: '' };
+    if (validation.error) {
+      result.error = validation.error;
+    }
+    return result;
   }
 
   const escapedCode = escapeUserCode(userCode);

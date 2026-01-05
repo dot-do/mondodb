@@ -8,7 +8,7 @@ import { getFieldPath } from './expression-translator'
 
 export function translateSortStage(
   sort: Record<string, 1 | -1>,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   const orderParts: string[] = []
 

@@ -171,22 +171,38 @@ function validateJsonRpcRequest(obj: unknown): ValidationResult {
 
   // Validate jsonrpc version
   if (request.jsonrpc !== '2.0') {
-    return { valid: false, error: 'Invalid JSON-RPC version (expected "2.0")', id }
+    const result: InvalidRequestResult = { valid: false, error: 'Invalid JSON-RPC version (expected "2.0")' }
+    if (id !== undefined) {
+      result.id = id
+    }
+    return result
   }
 
   // Validate id (must be string or number)
   if (request.id === undefined || (typeof request.id !== 'string' && typeof request.id !== 'number')) {
-    return { valid: false, error: 'Missing or invalid id field', id }
+    const result: InvalidRequestResult = { valid: false, error: 'Missing or invalid id field' }
+    if (id !== undefined) {
+      result.id = id
+    }
+    return result
   }
 
   // Validate method
   if (typeof request.method !== 'string') {
-    return { valid: false, error: 'Missing or invalid method field', id }
+    const result: InvalidRequestResult = { valid: false, error: 'Missing or invalid method field' }
+    if (id !== undefined) {
+      result.id = id
+    }
+    return result
   }
 
   // Params is optional but must be object/array if present
   if (request.params !== undefined && typeof request.params !== 'object') {
-    return { valid: false, error: 'Invalid params field (must be object or array)', id }
+    const result: InvalidRequestResult = { valid: false, error: 'Invalid params field (must be object or array)' }
+    if (id !== undefined) {
+      result.id = id
+    }
+    return result
   }
 
   return {

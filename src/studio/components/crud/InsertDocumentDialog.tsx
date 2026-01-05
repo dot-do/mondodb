@@ -6,7 +6,7 @@
  * Can use either a basic textarea or an enhanced CodeMirror editor.
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 // Styles for the dialog
 const dialogStyles = {
@@ -290,7 +290,7 @@ export interface InsertDocumentDialogProps {
  * InsertDocumentDialog component
  */
 export function InsertDocumentDialog({
-  database,
+  database: _database,
   collection,
   open,
   onClose,

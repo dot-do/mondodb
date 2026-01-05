@@ -183,6 +183,38 @@ function isSystemCollection(name: string): boolean {
   return name.startsWith('system.')
 }
 
+/**
+ * Timing-safe string comparison to prevent timing attacks
+ *
+ * Compares strings in constant time, preventing attackers from
+ * inferring token values through timing analysis.
+ *
+ * Security note: When lengths differ, we still perform a constant-time
+ * comparison against a buffer of equal length to avoid leaking length
+ * information through timing differences.
+ */
+function safeCompare(a: string, b: string): boolean {
+  const encoder = new TextEncoder()
+  const bufA = encoder.encode(a)
+  const bufB = encoder.encode(b)
+
+  if (bufA.length !== bufB.length) {
+    // Do a dummy comparison to maintain constant time
+    let result = 0
+    for (let i = 0; i < bufA.length; i++) {
+      result |= (bufA[i] ?? 0) ^ (bufA[i] ?? 0)
+    }
+    return false
+  }
+
+  // Timing-safe comparison
+  let result = 0
+  for (let i = 0; i < bufA.length; i++) {
+    result |= (bufA[i] ?? 0) ^ (bufB[i] ?? 0)
+  }
+  return result === 0
+}
+
 // ============================================================================
 // RPC Handler Implementation
 // ============================================================================
@@ -228,7 +260,7 @@ export function createRpcHandler(env: RpcEnv, _ctx: ExecutionContext): RpcHandle
           token = tokenHeader
         }
 
-        if (!token || token !== env.MONDO_AUTH_TOKEN) {
+        if (!token || !safeCompare(token, env.MONDO_AUTH_TOKEN)) {
           return errorResponse('Unauthorized', ErrorCodes.Unauthorized, 401)
         }
       }
@@ -411,7 +443,9 @@ async function routeToDurableObject(
     } | null
     if (errorData?.error) {
       const error = new Error(errorData.error) as Error & { code?: number }
-      error.code = errorData.code
+      if (errorData.code !== undefined) {
+        error.code = errorData.code
+      }
       throw error
     }
     throw new Error(`Durable Object returned status ${response.status}`)
@@ -681,7 +715,7 @@ export function createJsonRpcHandler(env: RpcEnv, _ctx: ExecutionContext): JsonR
           token = tokenHeader
         }
 
-        if (!token || token !== env.MONDO_AUTH_TOKEN) {
+        if (!token || !safeCompare(token, env.MONDO_AUTH_TOKEN)) {
           return jsonRpcErrorResponse(
             jsonRpcError(null, JsonRpcErrorCodes.SERVER_ERROR_AUTH, 'Unauthorized'),
             401
@@ -902,7 +936,9 @@ async function executeJsonRpcMethod(
     } | null
     if (errorData?.error) {
       const error = new Error(errorData.error) as Error & { code?: number; data?: unknown }
-      error.code = errorData.code
+      if (errorData.code !== undefined) {
+        error.code = errorData.code
+      }
       error.data = errorData
       throw error
     }
@@ -966,7 +1002,7 @@ function buildJsonRpcInternalBody(params: Record<string, unknown> | undefined): 
 /**
  * Map MongoDB error codes to JSON-RPC error codes
  */
-function mapMongoErrorToJsonRpcCode(mongoCode: number | undefined): number {
+function mapMongoErrorToJsonRpcCode(_mongoCode: number | undefined): number {
   // For backend errors, use the internal error code
   // But preserve the original code in the data field
   return JsonRpcErrorCodes.INTERNAL_ERROR

@@ -58,13 +58,13 @@ export class Collection<TDocument extends Document = Document> {
     const stub = this.getStub()
     const url = `https://mondo.internal/${this.dbName}/${this.collectionName}${path}`
 
-    const response = await stub.fetch(
-      new Request(url, {
-        method,
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      })
-    )
+    const response = body
+      ? await stub.fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+      : await stub.fetch(url, { method })
 
     if (!response.ok) {
       const error = await response.text()

@@ -112,7 +112,7 @@ export function createMcpServer(config: McpServerConfig): McpServer {
         name,
         description: annotations?.title ?? name,
         inputSchema,
-        annotations,
+        ...(annotations && { annotations }),
       }
       tools.set(name, {
         definition,
@@ -382,6 +382,9 @@ export function createMockDatabaseAccess(): DatabaseAccess {
     },
     async listDatabases() {
       return []
+    },
+    getProxy() {
+      return this
     },
   }
 }

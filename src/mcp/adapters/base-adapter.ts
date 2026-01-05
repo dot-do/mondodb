@@ -16,7 +16,6 @@ import {
   McpError,
   McpErrorCode,
   TimeoutError,
-  RateLimitError,
   isRetryableError,
   getRetryDelay,
   createErrorResponse,

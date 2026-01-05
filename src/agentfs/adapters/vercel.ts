@@ -331,9 +331,9 @@ export function createAgentFSVercelTools(context: AgentFSToolContext) {
       }),
       execute: async (params: {
         pattern: string
-        glob?: string
-        caseInsensitive?: boolean
-        maxResults?: number
+        glob?: string | undefined
+        caseInsensitive?: boolean | undefined
+        maxResults?: number | undefined
       }): Promise<GrepMatch[]> => {
         const { pattern, ...searchOptions } = params
         return executeWithErrorHandling(
@@ -413,7 +413,9 @@ export function createAgentFSVercelTools(context: AgentFSToolContext) {
           throw new Error(`Text not found in file: "${old_string.substring(0, 50)}${old_string.length > 50 ? '...' : ''}"`)
         }
 
-        const newContent = content.replace(old_string, new_string)
+        // Use a function as replacement to prevent special replacement patterns
+        // ($&, $`, $', $1, etc.) in new_string from being interpreted
+        const newContent = content.replace(old_string, () => new_string)
         await executeWithErrorHandling(
           () => fs.writeFile(path, newContent),
           `edit:write(${path})`

@@ -69,9 +69,9 @@ export class CommandRouter {
   private handlers: Map<string, CommandHandler>
   private authEnabled: boolean
   private authenticator?: ScramAuthenticator
-  private getConnectionState?: (connectionId: number) => ConnectionState | undefined
-  private setConnectionAuthenticated?: (connectionId: number, username: string, db: string) => void
-  private clearConnectionAuthentication?: (connectionId: number) => void
+  private getConnectionState: ((connectionId: number) => ConnectionState | undefined) | undefined
+  private setConnectionAuthenticated: ((connectionId: number, username: string, db: string) => void) | undefined
+  private clearConnectionAuthentication: ((connectionId: number) => void) | undefined
 
   constructor(backend: MondoBackend, options: RouterOptions = {}) {
     this.authEnabled = options.authEnabled ?? false

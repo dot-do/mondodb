@@ -2,7 +2,6 @@
  * DatabaseBrowser Component Tests
  */
 
-import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -25,7 +24,7 @@ describe('DatabaseBrowser', () => {
   const mockFetchCollections = vi.fn().mockResolvedValue(mockCollections)
 
   const mockFetchCollectionStats = vi.fn().mockImplementation(
-    (db: string, coll: string): Promise<CollectionStats> =>
+    (_db: string, coll: string): Promise<CollectionStats> =>
       Promise.resolve({
         name: coll,
         count: 1000,

@@ -64,29 +64,53 @@ export class VectorTranslator {
   /** The embedding model to use for text-to-vector conversion */
   public readonly embeddingModel: string
 
-  private readonly vectorize: VectorizeIndex
-  private readonly ai?: Ai
+  /** The Vectorize index binding */
+  protected readonly vectorize: VectorizeIndex
 
-  constructor(options: VectorTranslatorOptions) {
-    this.vectorize = options.vectorize
-    this.ai = options.ai
-    this.embeddingModel = options.embeddingModel ?? '@cf/baai/bge-m3'
+  /** The AI binding for text embedding */
+  protected readonly ai: Ai | undefined
+
+  constructor(options?: VectorTranslatorOptions) {
+    this.vectorize = options?.vectorize as VectorizeIndex
+    this.ai = options?.ai
+    this.embeddingModel = options?.embeddingModel ?? '@cf/baai/bge-m3'
+  }
+
+  /** Get the vectorize index (for subclasses or testing) */
+  protected getVectorize(): VectorizeIndex {
+    return this.vectorize
+  }
+
+  /** Get the AI binding (for subclasses or testing) */
+  protected getAi(): Ai | undefined {
+    return this.ai
   }
 
   /**
-   * Translate a MongoDB $vectorSearch stage to Cloudflare Vectorize query
+   * Translate a MongoDB $vectorSearch stage (sync version for CTE-based pipelines)
+   */
+  translateVectorSearch(
+    _stage: VectorSearchStage,
+    _collectionName: string
+  ): VectorSearchResult {
+    // Return empty result for sync translation - actual vector search happens at execution time
+    return { docIds: [], scores: [] }
+  }
+
+  /**
+   * Translate a MongoDB $vectorSearch stage to Cloudflare Vectorize query (async)
    *
    * @param stage - The $vectorSearch stage from the aggregation pipeline
    * @param collectionName - The name of the collection being searched
    * @returns Promise resolving to document IDs and scores
    * @throws Error if queryVector not provided and AI binding not configured
    */
-  async translateVectorSearch(
+  async translateVectorSearchAsync(
     _stage: VectorSearchStage,
     _collectionName: string
   ): Promise<VectorSearchResult> {
     // RED phase stub - not implemented
-    throw new Error('VectorTranslator.translateVectorSearch not implemented')
+    throw new Error('VectorTranslator.translateVectorSearchAsync not implemented')
   }
 
   /**

@@ -57,9 +57,7 @@ export class Database {
     const stub = this.env.MONDO_DATABASE.get(id)
 
     const response = await stub.fetch(
-      new Request(`https://mondo.internal/${this.dbName}/_listCollections`, {
-        method: 'GET',
-      })
+      `https://mondo.internal/${this.dbName}/_listCollections`
     )
 
     if (!response.ok) {
@@ -81,11 +79,12 @@ export class Database {
     const stub = this.env.MONDO_DATABASE.get(id)
 
     const response = await stub.fetch(
-      new Request(`https://mondo.internal/${this.dbName}/_createCollection`, {
+      `https://mondo.internal/${this.dbName}/_createCollection`,
+      {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
-      })
+      }
     )
 
     if (!response.ok) {
@@ -104,9 +103,8 @@ export class Database {
     const stub = this.env.MONDO_DATABASE.get(id)
 
     const response = await stub.fetch(
-      new Request(`https://mondo.internal/${this.dbName}/${name}/_drop`, {
-        method: 'POST',
-      })
+      `https://mondo.internal/${this.dbName}/${name}/_drop`,
+      { method: 'POST' }
     )
 
     if (response.status === 404) {
@@ -133,9 +131,7 @@ export class Database {
     const stub = this.env.MONDO_DATABASE.get(id)
 
     const response = await stub.fetch(
-      new Request(`https://mondo.internal/${this.dbName}/_stats`, {
-        method: 'GET',
-      })
+      `https://mondo.internal/${this.dbName}/_stats`
     )
 
     if (!response.ok) {

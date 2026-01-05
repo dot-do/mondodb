@@ -46,19 +46,10 @@ import {
   McpErrorCode,
   TimeoutError,
   ToolNotFoundError,
-  ToolExecutionError,
   InvalidParamsError,
   isRetryableError,
   getRetryDelay,
-  type McpErrorCodeType,
 } from '../../mcp/adapters/errors'
-import {
-  streamTextContent,
-  streamSearchResults,
-  collectStreamToResponse,
-  type StreamOptions,
-  type SearchResultItem,
-} from '../../mcp/adapters/streaming'
 
 // =============================================================================
 // Types
@@ -370,7 +361,7 @@ export class AnthropicMCPAdapter {
      */
     async function withRetry<T>(
       operation: () => Promise<T>,
-      toolName: string
+      _toolName: string
     ): Promise<T> {
       let lastError: Error | null = null
 
@@ -690,7 +681,9 @@ export class AnthropicMCPAdapter {
         return errorResponse(`String not found in file: "${oldString.slice(0, 50)}${oldString.length > 50 ? '...' : ''}"`)
       }
 
-      const updated = content.replace(oldString, newString)
+      // Use a function as replacement to prevent special replacement patterns
+      // ($&, $`, $', $1, etc.) in newString from being interpreted
+      const updated = content.replace(oldString, () => newString)
       await this.provider.fs.writeFile(path, updated)
 
       return successResponse('OK')
@@ -790,6 +783,7 @@ export class AnthropicMCPAdapter {
               description: 'The key to set',
             },
             value: {
+              type: 'object',
               description: 'The value to store (any JSON-serializable type)',
             },
           },

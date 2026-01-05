@@ -454,6 +454,7 @@ export function useDatabaseBrowser(options: UseDatabaseBrowserOptions): UseDatab
         }
       }
     }
+    return undefined
   }, [autoRefreshInterval, refresh])
 
   return {

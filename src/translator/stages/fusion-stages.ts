@@ -99,7 +99,7 @@ const DEFAULT_WEIGHTS = { vector: 0.5, text: 0.5 };
  */
 export function translateRankFusionStage(
   spec: RankFusionStageSpec,
-  context: StageContext
+  _context: StageContext
 ): FusionStageResult {
   // Validate input
   if (!spec.input?.pipelines) {
@@ -115,15 +115,18 @@ export function translateRankFusionStage(
   // Extract RRF k constant
   const rrfK = spec.combination?.k ?? DEFAULT_RRF_K;
 
-  return {
+  const result: FusionStageResult = {
     fusionType: 'rrf',
     vectorPipeline: pipelines.vector,
     textPipeline: pipelines.text,
     rrfK,
-    limit: spec.limit,
     params: [],
     transformsShape: true,
   };
+  if (spec.limit !== undefined) {
+    result.limit = spec.limit;
+  }
+  return result;
 }
 
 // ============================================================
@@ -146,7 +149,7 @@ export function translateRankFusionStage(
  */
 export function translateScoreFusionStage(
   spec: ScoreFusionStageSpec,
-  context: StageContext
+  _context: StageContext
 ): FusionStageResult {
   // Validate input
   if (!spec.input?.pipelines) {
@@ -166,16 +169,19 @@ export function translateScoreFusionStage(
   // Extract normalization option
   const normalizeScores = spec.combination?.normalizeScores ?? true;
 
-  return {
+  const result: FusionStageResult = {
     fusionType: 'score',
     vectorPipeline: pipelines.vector,
     textPipeline: pipelines.text,
     weights,
     normalizeScores,
-    limit: spec.limit,
     params: [],
     transformsShape: true,
   };
+  if (spec.limit !== undefined) {
+    result.limit = spec.limit;
+  }
+  return result;
 }
 
 // ============================================================
@@ -216,7 +222,7 @@ function normalizeWeights(weights: { vector: number; text: number }): {
  */
 export function buildRankFusionSQL(
   result: FusionStageResult,
-  collection: string
+  _collection: string
 ): { sql: string; params: unknown[] } {
   const k = result.rrfK ?? DEFAULT_RRF_K;
 
@@ -261,7 +267,7 @@ export function buildRankFusionSQL(
  */
 export function buildScoreFusionSQL(
   result: FusionStageResult,
-  collection: string
+  _collection: string
 ): { sql: string; params: unknown[] } {
   const { vector: vectorWeight, text: textWeight } = result.weights ?? DEFAULT_WEIGHTS;
 

@@ -3,7 +3,7 @@
  * Translates to SQL LEFT JOIN or subquery
  */
 
-import type { StageResult, StageContext, LookupStage, PipelineStage } from './types'
+import type { StageResult, StageContext, LookupStage } from './types'
 import { getFieldPath } from './expression-translator'
 
 export function translateLookupStage(
@@ -11,7 +11,7 @@ export function translateLookupStage(
   context: StageContext
 ): StageResult {
   const params: unknown[] = []
-  const { from, localField, foreignField, as } = lookup
+  const { localField, foreignField } = lookup
 
   if (localField && foreignField) {
     // Simple lookup with localField/foreignField
@@ -66,7 +66,7 @@ function translatePipelineLookup(
   context: StageContext,
   params: unknown[]
 ): StageResult {
-  const { from, let: letVars, pipeline, as } = lookup
+  const { from, as } = lookup
 
   // For pipeline lookups, we need to handle variable substitution
   // This is a simplified implementation

@@ -166,20 +166,6 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Get the basename (final component) from a path.
-   *
-   * @param path - Path to extract basename from
-   * @returns The basename, or empty string for root
-   * @internal
-   */
-  private getBasename(path: string): string {
-    const normalized = this.normalizePath(path)
-    if (normalized === '/') return ''
-    const lastSlash = normalized.lastIndexOf('/')
-    return normalized.substring(lastSlash + 1)
-  }
-
-  /**
    * Escape special regex characters in a string.
    *
    * @param str - String to escape
@@ -552,7 +538,7 @@ export class AgentFilesystem implements FileSystem {
 
     // Filter to only include files, not directories
     return files
-      .filter((f) => (f as FileDocument).type === 'file')
+      .filter((f) => (f as unknown as FileDocument).type === 'file')
       .map((f) => f.path as string)
       .sort()
   }

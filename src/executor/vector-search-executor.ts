@@ -9,8 +9,18 @@
  */
 
 import type { VectorizeIndex, VectorizeVector, VectorizeMatch } from '../types/vectorize'
-import type { VectorSearchTranslation } from '../translator/vector-translator'
-import { VectorTranslator } from '../translator/vector-translator'
+
+/**
+ * Translation parameters for vector search execution
+ */
+export interface VectorSearchTranslation {
+  /** The query vector for similarity search */
+  queryVector: number[]
+  /** Maximum number of results to return */
+  limit: number
+  /** Field name to store the similarity score */
+  scoreField: string
+}
 
 /**
  * SQL interface for executing queries
@@ -23,13 +33,11 @@ interface SqlInterface {
  * Executes vector search operations using Cloudflare Vectorize
  */
 export class VectorSearchExecutor {
-  private vectorTranslator: VectorTranslator
-
   constructor(
-    private sql: SqlInterface,
+    _sql: SqlInterface,
     private vectorize?: VectorizeIndex
   ) {
-    this.vectorTranslator = new VectorTranslator()
+    // SQL interface available for potential future use
   }
 
   /**
@@ -99,7 +107,7 @@ export class VectorSearchExecutor {
       throw new Error('Vectorize is not configured. Add VECTORIZE binding to your worker.')
     }
 
-    const vectorId = this.vectorTranslator.generateVectorId(collection, documentId)
+    const vectorId = this.generateVectorId(collection, documentId)
 
     const vectorData: VectorizeVector = {
       id: vectorId,
@@ -128,8 +136,15 @@ export class VectorSearchExecutor {
       throw new Error('Vectorize is not configured. Add VECTORIZE binding to your worker.')
     }
 
-    const vectorId = this.vectorTranslator.generateVectorId(collection, documentId)
+    const vectorId = this.generateVectorId(collection, documentId)
     await this.vectorize.deleteByIds([vectorId])
+  }
+
+  /**
+   * Generate a unique vector ID from collection and document ID
+   */
+  private generateVectorId(collection: string, documentId: string): string {
+    return `${collection}:${documentId}`
   }
 
   /**

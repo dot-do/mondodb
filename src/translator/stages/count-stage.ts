@@ -7,7 +7,7 @@ import type { StageResult, StageContext } from './types'
 
 export function translateCountStage(
   fieldName: string,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   return {
     selectClause: `json_object('${fieldName}', COUNT(*)) AS data`,

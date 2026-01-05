@@ -26,7 +26,9 @@ function collectFunctionFieldRefs(expr: unknown): string[] {
         if (isFieldReference(arg)) {
           // Extract field name from $fieldName reference
           const fieldName = (arg as string).substring(1).split('.')[0]
-          fields.push(fieldName)
+          if (fieldName) {
+            fields.push(fieldName)
+          }
         }
       }
     }
@@ -66,7 +68,7 @@ export function translateProjectStage(
 
 function translateExclusionProject(
   projection: Record<string, unknown>,
-  context: StageContext,
+  _context: StageContext,
   params: unknown[],
   dialect: SQLDialect = 'sqlite'
 ): StageResult {
@@ -77,8 +79,6 @@ function translateExclusionProject(
       validateFieldPath(key)
       return `'$.${key}'`
     })
-
-  const source = context.previousCte || context.collection
 
   let selectClause: string
   if (fieldsToRemove.length > 0) {
@@ -100,7 +100,7 @@ function translateExclusionProject(
 
 function translateInclusionProject(
   projection: Record<string, unknown>,
-  context: StageContext,
+  _context: StageContext,
   params: unknown[],
   dialect: SQLDialect = 'sqlite'
 ): StageResult {
@@ -109,7 +109,7 @@ function translateInclusionProject(
   // Collect all field references needed by $function expressions
   // These need to be included in the output so the function executor can extract them
   const functionFieldRefs = new Set<string>()
-  for (const [key, value] of Object.entries(projection)) {
+  for (const [, value] of Object.entries(projection)) {
     if (typeof value === 'object' && value !== null) {
       const refs = collectFunctionFieldRefs(value)
       refs.forEach(ref => functionFieldRefs.add(ref))

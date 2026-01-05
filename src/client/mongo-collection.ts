@@ -26,7 +26,6 @@ import {
   ChangeStreamPipeline,
   ChangeStreamOptions,
   ChangeEventStore,
-  StoredChangeEvent,
 } from './change-stream'
 import { ClientSession, TransactableCollection } from './session'
 import {
@@ -74,10 +73,10 @@ export interface SessionOption {
 
 // Options types
 export interface FindOptions extends SessionOption {
-  projection?: Record<string, 0 | 1>
-  sort?: Record<string, 1 | -1>
-  limit?: number
-  skip?: number
+  projection?: Record<string, 0 | 1> | undefined
+  sort?: Record<string, 1 | -1> | undefined
+  limit?: number | undefined
+  skip?: number | undefined
 }
 
 export interface InsertOneOptions extends SessionOption {}
@@ -85,33 +84,33 @@ export interface InsertOneOptions extends SessionOption {}
 export interface InsertManyOptions extends SessionOption {}
 
 export interface UpdateOptions extends SessionOption {
-  upsert?: boolean
-  arrayFilters?: object[]
+  upsert?: boolean | undefined
+  arrayFilters?: object[] | undefined
 }
 
 export interface ReplaceOptions extends SessionOption {
-  upsert?: boolean
+  upsert?: boolean | undefined
 }
 
 export interface DeleteOptions extends SessionOption {}
 
 export interface FindOneAndUpdateOptions extends SessionOption {
-  projection?: Record<string, 0 | 1>
-  sort?: Record<string, 1 | -1>
-  upsert?: boolean
-  returnDocument?: 'before' | 'after'
+  projection?: Record<string, 0 | 1> | undefined
+  sort?: Record<string, 1 | -1> | undefined
+  upsert?: boolean | undefined
+  returnDocument?: 'before' | 'after' | undefined
 }
 
 export interface FindOneAndDeleteOptions extends SessionOption {
-  projection?: Record<string, 0 | 1>
-  sort?: Record<string, 1 | -1>
+  projection?: Record<string, 0 | 1> | undefined
+  sort?: Record<string, 1 | -1> | undefined
 }
 
 export interface FindOneAndReplaceOptions extends SessionOption {
-  projection?: Record<string, 0 | 1>
-  sort?: Record<string, 1 | -1>
-  upsert?: boolean
-  returnDocument?: 'before' | 'after'
+  projection?: Record<string, 0 | 1> | undefined
+  sort?: Record<string, 1 | -1> | undefined
+  upsert?: boolean | undefined
+  returnDocument?: 'before' | 'after' | undefined
 }
 
 /**
@@ -123,7 +122,6 @@ export class MongoCollection<TSchema extends Document = Document>
   private readonly database: MongoDatabase
   private readonly _collectionName: string
   private documents: Map<string, TSchema & { _id: ObjectId }> = new Map()
-  private _created: boolean = false
   private readonly _changeEventStore: ChangeEventStore = new ChangeEventStore()
   private readonly _activeChangeStreams: Set<ChangeStream<TSchema>> = new Set()
 
@@ -144,7 +142,6 @@ export class MongoCollection<TSchema extends Document = Document>
    * @internal
    */
   async _ensureCreated(): Promise<void> {
-    this._created = true
     this.database._registerCollection(this._collectionName)
   }
 
@@ -154,7 +151,6 @@ export class MongoCollection<TSchema extends Document = Document>
    */
   async _drop(): Promise<void> {
     this.documents.clear()
-    this._created = false
   }
 
   /**
@@ -260,7 +256,9 @@ export class MongoCollection<TSchema extends Document = Document>
     const insertedIds: Record<number, ObjectId> = {}
 
     for (let i = 0; i < docs.length; i++) {
-      const result = await this.insertOne(docs[i], options)
+      const doc = docs[i]
+      if (doc === undefined) continue
+      const result = await this.insertOne(doc, options)
       insertedIds[i] = result.insertedId
     }
 
@@ -284,6 +282,9 @@ export class MongoCollection<TSchema extends Document = Document>
     }
 
     const doc = docs[0]
+    if (doc === undefined) {
+      return null
+    }
     return options?.projection ? this._applyProjection(doc, options.projection) : doc
   }
 
@@ -291,7 +292,14 @@ export class MongoCollection<TSchema extends Document = Document>
    * Find multiple documents, returns a cursor
    */
   find(filter: object = {}, options?: FindOptions): FindCursor<TSchema & { _id: ObjectId }> {
-    return new FindCursor<TSchema & { _id: ObjectId }>(this as any, filter, options)
+    // Convert to a clean object to avoid exactOptionalPropertyTypes issues
+    const cursorOptions = options ? {
+      ...(options.projection !== undefined && { projection: options.projection }),
+      ...(options.sort !== undefined && { sort: options.sort }),
+      ...(options.limit !== undefined && { limit: options.limit }),
+      ...(options.skip !== undefined && { skip: options.skip }),
+    } : undefined
+    return new FindCursor<TSchema & { _id: ObjectId }>(this as any, filter, cursorOptions)
   }
 
   /**
@@ -365,6 +373,13 @@ export class MongoCollection<TSchema extends Document = Document>
 
     // Update first matching document
     const doc = docs[0]
+    if (doc === undefined) {
+      return {
+        acknowledged: true,
+        matchedCount: 0,
+        modifiedCount: 0,
+      }
+    }
     const updatedDoc = this._applyUpdate(doc, update)
     this.documents.set(doc._id.toHexString(), updatedDoc)
 
@@ -473,6 +488,13 @@ export class MongoCollection<TSchema extends Document = Document>
 
     // Replace first matching document, preserving _id
     const doc = docs[0]
+    if (doc === undefined) {
+      return {
+        acknowledged: true,
+        matchedCount: 0,
+        modifiedCount: 0,
+      }
+    }
     const replacedDoc = { ...replacement, _id: doc._id } as TSchema & { _id: ObjectId }
     this.documents.set(doc._id.toHexString(), replacedDoc)
 
@@ -507,7 +529,14 @@ export class MongoCollection<TSchema extends Document = Document>
     }
 
     // Delete first matching document
-    const docId = docs[0]._id
+    const firstDoc = docs[0]
+    if (firstDoc === undefined) {
+      return {
+        acknowledged: true,
+        deletedCount: 0,
+      }
+    }
+    const docId = firstDoc._id
     this.documents.delete(docId.toHexString())
 
     // Emit delete change event
@@ -564,20 +593,28 @@ export class MongoCollection<TSchema extends Document = Document>
     update: object,
     options?: FindOneAndUpdateOptions
   ): Promise<(TSchema & { _id: ObjectId }) | null> {
-    const docs = this._findDocuments(filter, { sort: options?.sort })
+    const docs = this._findDocuments(filter, {
+      ...(options?.sort !== undefined && { sort: options.sort })
+    })
 
     if (docs.length === 0) {
       if (options?.upsert) {
         const newDoc = this._applyUpdate({} as TSchema, update, filter)
         await this.insertOne(newDoc)
-        return options?.returnDocument === 'after'
-          ? this.findOne(filter, { projection: options?.projection })
-          : null
+        if (options?.returnDocument === 'after') {
+          return this.findOne(filter, {
+            ...(options?.projection !== undefined && { projection: options.projection })
+          })
+        }
+        return null
       }
       return null
     }
 
     const doc = docs[0]
+    if (doc === undefined) {
+      return null
+    }
     const originalDoc = { ...doc }
 
     // Update the document
@@ -596,13 +633,18 @@ export class MongoCollection<TSchema extends Document = Document>
     filter: object,
     options?: FindOneAndDeleteOptions
   ): Promise<(TSchema & { _id: ObjectId }) | null> {
-    const docs = this._findDocuments(filter, { sort: options?.sort })
+    const docs = this._findDocuments(filter, {
+      ...(options?.sort !== undefined && { sort: options.sort })
+    })
 
     if (docs.length === 0) {
       return null
     }
 
     const doc = docs[0]
+    if (doc === undefined) {
+      return null
+    }
     this.documents.delete(doc._id.toHexString())
 
     return options?.projection ? this._applyProjection(doc, options.projection) : doc
@@ -616,19 +658,27 @@ export class MongoCollection<TSchema extends Document = Document>
     replacement: TSchema,
     options?: FindOneAndReplaceOptions
   ): Promise<(TSchema & { _id: ObjectId }) | null> {
-    const docs = this._findDocuments(filter, { sort: options?.sort })
+    const docs = this._findDocuments(filter, {
+      ...(options?.sort !== undefined && { sort: options.sort })
+    })
 
     if (docs.length === 0) {
       if (options?.upsert) {
         await this.insertOne(replacement)
-        return options?.returnDocument === 'after'
-          ? this.findOne(filter, { projection: options?.projection })
-          : null
+        if (options?.returnDocument === 'after') {
+          return this.findOne(filter, {
+            ...(options?.projection !== undefined && { projection: options.projection })
+          })
+        }
+        return null
       }
       return null
     }
 
     const doc = docs[0]
+    if (doc === undefined) {
+      return null
+    }
     const originalDoc = { ...doc }
 
     // Replace the document, preserving _id
@@ -670,6 +720,7 @@ export class MongoCollection<TSchema extends Document = Document>
     // Process operations
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i]
+      if (op === undefined) continue
 
       try {
         if (isInsertOneModel(op)) {
@@ -680,7 +731,10 @@ export class MongoCollection<TSchema extends Document = Document>
           const updateResult = await this.updateOne(
             op.updateOne.filter,
             op.updateOne.update,
-            { upsert: op.updateOne.upsert, arrayFilters: op.updateOne.arrayFilters }
+            {
+              ...(op.updateOne.upsert !== undefined && { upsert: op.updateOne.upsert }),
+              ...(op.updateOne.arrayFilters !== undefined && { arrayFilters: op.updateOne.arrayFilters })
+            }
           )
           result.matchedCount += updateResult.matchedCount
           result.modifiedCount += updateResult.modifiedCount
@@ -692,7 +746,10 @@ export class MongoCollection<TSchema extends Document = Document>
           const updateResult = await this.updateMany(
             op.updateMany.filter,
             op.updateMany.update,
-            { upsert: op.updateMany.upsert, arrayFilters: op.updateMany.arrayFilters }
+            {
+              ...(op.updateMany.upsert !== undefined && { upsert: op.updateMany.upsert }),
+              ...(op.updateMany.arrayFilters !== undefined && { arrayFilters: op.updateMany.arrayFilters })
+            }
           )
           result.matchedCount += updateResult.matchedCount
           result.modifiedCount += updateResult.modifiedCount
@@ -704,7 +761,9 @@ export class MongoCollection<TSchema extends Document = Document>
           const replaceResult = await this.replaceOne(
             op.replaceOne.filter,
             op.replaceOne.replacement,
-            { upsert: op.replaceOne.upsert }
+            {
+              ...(op.replaceOne.upsert !== undefined && { upsert: op.replaceOne.upsert })
+            }
           )
           result.matchedCount += replaceResult.matchedCount
           result.modifiedCount += replaceResult.modifiedCount
@@ -1139,13 +1198,17 @@ export class MongoCollection<TSchema extends Document = Document>
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i]
+      if (part === undefined) continue
       if (current[part] === undefined || current[part] === null) {
         current[part] = {}
       }
       current = current[part] as Record<string, unknown>
     }
 
-    current[parts[parts.length - 1]] = value
+    const lastPart = parts[parts.length - 1]
+    if (lastPart !== undefined) {
+      current[lastPart] = value
+    }
   }
 
   /**
@@ -1157,13 +1220,17 @@ export class MongoCollection<TSchema extends Document = Document>
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i]
+      if (part === undefined) continue
       if (current[part] === undefined || current[part] === null) {
         return
       }
       current = current[part] as Record<string, unknown>
     }
 
-    delete current[parts[parts.length - 1]]
+    const lastPart = parts[parts.length - 1]
+    if (lastPart !== undefined) {
+      delete current[lastPart]
+    }
   }
 
   /**
@@ -1338,7 +1405,7 @@ export class MongoCollection<TSchema extends Document = Document>
       lookupCollection: async (name: string) => {
         // Get documents from another collection for $lookup
         const targetCollection = this.database.collection(name)
-        return targetCollection._findDocuments({}) as Document[]
+        return targetCollection._findDocuments({}) as unknown as Document[]
       },
       functionExecutor: async (fn: FunctionStage, doc: Document) => {
         // Execute $function stage
@@ -1408,6 +1475,7 @@ export class MongoCollection<TSchema extends Document = Document>
 
     for (const stage of pipeline) {
       const stageType = Object.keys(stage)[0]
+      if (stageType === undefined) continue
       const stageValue = (stage as Record<string, unknown>)[stageType]
 
       switch (stageType) {
@@ -1590,6 +1658,7 @@ export class MongoCollection<TSchema extends Document = Document>
         if (typeof accumulator === 'object' && accumulator !== null) {
           const accObj = accumulator as Record<string, unknown>
           const accType = Object.keys(accObj)[0]
+          if (accType === undefined) continue
           const accValue = accObj[accType]
 
           switch (accType) {
@@ -1634,13 +1703,15 @@ export class MongoCollection<TSchema extends Document = Document>
 
             case '$first':
               if (typeof accValue === 'string' && accValue.startsWith('$')) {
-                result[key] = docs.length > 0 ? this._getNestedValue(docs[0], accValue.slice(1)) : null
+                const firstDoc = docs[0]
+                result[key] = firstDoc !== undefined ? this._getNestedValue(firstDoc, accValue.slice(1)) : null
               }
               break
 
             case '$last':
               if (typeof accValue === 'string' && accValue.startsWith('$')) {
-                result[key] = docs.length > 0 ? this._getNestedValue(docs[docs.length - 1], accValue.slice(1)) : null
+                const lastDoc = docs[docs.length - 1]
+                result[key] = lastDoc !== undefined ? this._getNestedValue(lastDoc, accValue.slice(1)) : null
               }
               break
 
@@ -1781,7 +1852,7 @@ export class MongoCollection<TSchema extends Document = Document>
       if (lookupSpec.localField && lookupSpec.foreignField) {
         const localValue = this._getNestedValue(doc, lookupSpec.localField)
         const matched = targetDocs.filter(targetDoc => {
-          const foreignValue = this._getNestedValue(targetDoc, lookupSpec.foreignField!)
+          const foreignValue = this._getNestedValue(targetDoc as Record<string, unknown>, lookupSpec.foreignField!)
           return this._valuesEqual(localValue, foreignValue)
         })
         result[lookupSpec.as] = matched
@@ -1804,6 +1875,7 @@ export class MongoCollection<TSchema extends Document = Document>
 
     const exprObj = expr as Record<string, unknown>
     const operator = Object.keys(exprObj)[0]
+    if (operator === undefined) return expr
     const operand = exprObj[operator]
 
     switch (operator) {
@@ -1898,6 +1970,7 @@ export class MongoCollection<TSchema extends Document = Document>
 
     const condObj = condition as Record<string, unknown>
     const operator = Object.keys(condObj)[0]
+    if (operator === undefined) return true
     const operand = condObj[operator] as unknown[]
 
     switch (operator) {

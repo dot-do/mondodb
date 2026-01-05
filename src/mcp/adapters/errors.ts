@@ -115,7 +115,9 @@ export class McpError extends Error {
     super(message)
     this.name = 'McpError'
     this.code = code
-    this.data = data
+    if (data) {
+      this.data = data
+    }
     this.timestamp = new Date()
     this.retryable = data?.retryable ?? isTransientErrorCode(code)
 
@@ -149,11 +151,14 @@ export class McpError extends Error {
     }
 
     const errorCode = code ?? classifyError(error)
-    return new McpError(errorCode, error.message, {
+    const data: McpErrorData = {
       originalError: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       retryable: isTransientErrorCode(errorCode),
-    })
+    }
+    if (process.env.NODE_ENV === 'development' && error.stack) {
+      data.stack = error.stack
+    }
+    return new McpError(errorCode, error.message, data)
   }
 }
 

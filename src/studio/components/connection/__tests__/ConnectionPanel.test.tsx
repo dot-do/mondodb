@@ -5,7 +5,6 @@
  * ConnectionList, and ConnectionStatusIndicator components.
  */
 
-import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -13,15 +12,10 @@ import {
   ConnectionPanel,
   ConnectionStatusIndicator,
   type ConnectionPanelProps,
-  type ConnectionStatusIndicatorProps,
 } from '../ConnectionPanel'
 import { ConnectionForm, type ConnectionFormProps } from '../ConnectionForm'
 import { ConnectionList, type ConnectionListProps } from '../ConnectionList'
-import type {
-  ConnectionConfig,
-  ConnectionFormValues,
-  ConnectionStatus,
-} from '../../../types/connection'
+import type { ConnectionConfig } from '../../../types/connection'
 
 // ============================================================================
 // Test Fixtures

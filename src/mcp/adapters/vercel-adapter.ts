@@ -13,14 +13,11 @@
  * @see https://sdk.vercel.ai/docs/ai-sdk-core/tools-and-tool-calling
  */
 
-import { BaseAdapter, type BaseAdapterConfig, type ToolCallResult } from './base-adapter'
+import { BaseAdapter, type BaseAdapterConfig } from './base-adapter'
 import type { McpToolDefinition, McpToolResponse, JsonSchema } from '../types'
-import { McpError, McpErrorCode, ToolNotFoundError, ToolExecutionError } from './errors'
+import { McpError } from './errors'
 import {
   streamTextContent,
-  collectStreamToResponse,
-  type StreamChunk,
-  type StreamOptions,
 } from './streaming'
 import { z } from 'zod'
 
@@ -304,7 +301,7 @@ export class VercelAdapter extends BaseAdapter {
           }
           zodType = z.object(nestedShape)
         } else {
-          zodType = z.record(z.unknown())
+          zodType = z.record(z.string(), z.unknown())
         }
         if (prop.description) {
           zodType = zodType.describe(prop.description)
@@ -522,7 +519,7 @@ export class VercelAdapter extends BaseAdapter {
 
     for await (const chunk of streamTextContent(content, {
       chunkSize,
-      signal: options?.signal,
+      ...(options?.signal && { signal: options.signal }),
     })) {
       yield chunk.content
     }

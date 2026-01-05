@@ -6,7 +6,7 @@
  * is unavailable.
  */
 
-import type { CDCEvent, InsertEvent, UpdateEvent, DeleteEvent } from './cdc-schema';
+import type { CDCEvent } from './cdc-schema';
 import { createInsertEvent, createUpdateEvent, createDeleteEvent } from './cdc-schema';
 import { CDCBuffer } from './cdc-buffer';
 import type { ObjectId } from '../../types/objectid';
@@ -86,17 +86,23 @@ export class CDCEmitter {
    * @param config - Configuration options
    */
   constructor(config: CDCEmitterConfig) {
-    this.pipeline = config.pipeline;
+    // Handle optional pipeline with exactOptionalPropertyTypes
+    if ('pipeline' in config && config.pipeline !== undefined) {
+      this.pipeline = config.pipeline;
+    }
     this.database = config.database;
     this.collection = config.collection;
     this.retryAttempts = config.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS;
 
     // Initialize buffer if batching is configured
     this.batchingEnabled = (config.batchSize ?? 1) > 1;
-    this.buffer = new CDCBuffer({
+    const bufferConfig: { maxBatchSize: number; flushTimeoutMs?: number } = {
       maxBatchSize: config.batchSize ?? 1,
-      flushTimeoutMs: config.batchTimeoutMs,
-    });
+    };
+    if (config.batchTimeoutMs !== undefined) {
+      bufferConfig.flushTimeoutMs = config.batchTimeoutMs;
+    }
+    this.buffer = new CDCBuffer(bufferConfig);
 
     // Start auto-flush if batching is enabled and pipeline is available
     if (this.batchingEnabled && this.pipeline) {

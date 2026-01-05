@@ -3,6 +3,7 @@
  */
 
 import '@testing-library/jest-dom'
+import { vi } from 'vitest'
 
 // Mock window.confirm for deletion confirmations
 Object.defineProperty(window, 'confirm', {

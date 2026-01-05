@@ -267,7 +267,7 @@ export class SearchTranslator {
     if (compound.must && compound.must.length > 0) {
       const mustClauses = compound.must.map(op => this.translateOperator(op));
       if (mustClauses.length === 1) {
-        parts.push(mustClauses[0]);
+        parts.push(mustClauses[0]!);
       } else {
         parts.push(`(${mustClauses.join(' AND ')})`);
       }
@@ -277,7 +277,7 @@ export class SearchTranslator {
     if (compound.filter && compound.filter.length > 0) {
       const filterClauses = compound.filter.map(op => this.translateOperator(op));
       if (filterClauses.length === 1) {
-        parts.push(filterClauses[0]);
+        parts.push(filterClauses[0]!);
       } else {
         parts.push(`(${filterClauses.join(' AND ')})`);
       }
@@ -287,7 +287,7 @@ export class SearchTranslator {
     if (compound.should && compound.should.length > 0) {
       const shouldClauses = compound.should.map(op => this.translateOperator(op));
       if (shouldClauses.length === 1) {
-        parts.push(shouldClauses[0]);
+        parts.push(shouldClauses[0]!);
       } else {
         parts.push(`(${shouldClauses.join(' OR ')})`);
       }
@@ -304,7 +304,7 @@ export class SearchTranslator {
     }
 
     if (parts.length === 1) {
-      return parts[0];
+      return parts[0]!;
     }
 
     // Join all parts with AND

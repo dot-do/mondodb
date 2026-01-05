@@ -191,7 +191,7 @@ export class ChangeStream<TDocument = Record<string, unknown>> {
   private readonly options: ChangeStreamOptions
   private readonly getDocumentById: (id: ObjectId) => Promise<TDocument | null>
   private readonly getChangeEvents: (afterSequence: number) => Promise<StoredChangeEvent[]>
-  private readonly onClose?: () => void
+  private readonly onClose?: (() => void) | undefined
 
   private _closed: boolean = false
   private _resumeToken: ResumeToken | null = null
@@ -276,8 +276,10 @@ export class ChangeStream<TDocument = Record<string, unknown>> {
         // Store remaining events for subsequent calls
         this._pendingEvents = events.slice(1)
         const event = events[0]
-        this._resumeToken = event._id
-        return event
+        if (event) {
+          this._resumeToken = event._id
+          return event
+        }
       }
 
       // Wait before next poll
@@ -309,8 +311,10 @@ export class ChangeStream<TDocument = Record<string, unknown>> {
     if (events.length > 0) {
       this._pendingEvents = events.slice(1)
       const event = events[0]
-      this._resumeToken = event._id
-      return event
+      if (event) {
+        this._resumeToken = event._id
+        return event
+      }
     }
 
     return null
@@ -476,7 +480,7 @@ export class ChangeStream<TDocument = Record<string, unknown>> {
       }
 
       // Get the value from the event
-      const eventValue = this.getNestedValue(event, key)
+      const eventValue = this.getNestedValue(event as unknown as Record<string, unknown>, key)
 
       // Handle comparison operators
       if (value !== null && typeof value === 'object' && !Array.isArray(value)) {

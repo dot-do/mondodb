@@ -168,12 +168,21 @@ export class HybridSearchTranslator {
       const fusedScore =
         weights.vector * vectorScore + weights.text * textScore;
 
-      docScores.set(docId, {
+      const vectorOriginal = vectorResults.find((r) => r.docId === docId);
+      const textOriginal = textResults.find((r) => r.docId === docId);
+
+      const result: FusedResult = {
         docId,
         fusedScore,
-        vectorScore: vectorResults.find((r) => r.docId === docId)?.score,
-        textScore: textResults.find((r) => r.docId === docId)?.score,
-      });
+      };
+      if (vectorOriginal !== undefined) {
+        result.vectorScore = vectorOriginal.score;
+      }
+      if (textOriginal !== undefined) {
+        result.textScore = textOriginal.score;
+      }
+
+      docScores.set(docId, result);
     }
 
     // Sort by fused score descending
@@ -193,7 +202,8 @@ export class HybridSearchTranslator {
   private normalizeScores(results: SearchResult[]): SearchResult[] {
     if (results.length === 0) return [];
     // For single result, keep original score (vector scores assumed to be in [0, 1])
-    if (results.length === 1) return [{ ...results[0] }];
+    const first = results[0];
+    if (results.length === 1 && first) return [{ docId: first.docId, score: first.score }];
 
     const scores = results.map((r) => r.score);
     const minScore = Math.min(...scores);
@@ -220,10 +230,11 @@ export class HybridSearchTranslator {
   private normalizeTextScores(results: SearchResult[]): SearchResult[] {
     if (results.length === 0) return [];
     // For single result, keep original score if non-negative, otherwise use 1
-    if (results.length === 1) {
-      const score = results[0].score;
+    const first = results[0];
+    if (results.length === 1 && first) {
+      const score = first.score;
       // If score is non-negative, assume it's already normalized or in valid range
-      return [{ ...results[0], score: score >= 0 ? score : 1 }];
+      return [{ docId: first.docId, score: score >= 0 ? score : 1 }];
     }
 
     const scores = results.map((r) => r.score);

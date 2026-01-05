@@ -5,6 +5,8 @@
  * for security and debugging purposes.
  */
 
+import { randomUUID } from 'crypto'
+
 /**
  * Types of audit events that can be logged
  */
@@ -140,9 +142,7 @@ const LOG_LEVEL_ORDER: Record<AuditLogLevel, number> = {
  * Generates a unique ID for audit entries
  */
 function defaultGenerateId(): string {
-  const timestamp = Date.now().toString(36)
-  const random = Math.random().toString(36).substring(2, 10)
-  return `audit_${timestamp}_${random}`
+  return `audit_${randomUUID()}`
 }
 
 /**
@@ -251,11 +251,16 @@ export class ToolCallAuditor {
     if (!this.shouldLog('error')) return
 
     const entry = this.createEntry(callId, tool, 'error', 'error')
-    entry.error = {
+    const auditError: AuditError = {
       message: error.message,
-      code: (error as any).code,
-      stack: error.stack,
     }
+    if ((error as any).code) {
+      auditError.code = (error as any).code
+    }
+    if (error.stack) {
+      auditError.stack = error.stack
+    }
+    entry.error = auditError
     entry.durationMs = durationMs
     if (metadata) {
       entry.metadata = metadata
@@ -302,13 +307,22 @@ export class ToolCallAuditor {
    * Get summary statistics for audit entries
    */
   async getSummary(filter?: { from?: Date; to?: Date }): Promise<AuditSummary> {
-    const baseFilter = filter ? { from: filter.from, to: filter.to } : {}
+    const buildFilter = (eventType: AuditEventType): AuditFilter => {
+      const f: AuditFilter = { eventType }
+      if (filter?.from) {
+        f.from = filter.from
+      }
+      if (filter?.to) {
+        f.to = filter.to
+      }
+      return f
+    }
 
     const [totalCalls, successCount, errorCount, timeoutCount] = await Promise.all([
-      this.storage.count({ ...baseFilter, eventType: 'invoke' }),
-      this.storage.count({ ...baseFilter, eventType: 'success' }),
-      this.storage.count({ ...baseFilter, eventType: 'error' }),
-      this.storage.count({ ...baseFilter, eventType: 'timeout' }),
+      this.storage.count(buildFilter('invoke')),
+      this.storage.count(buildFilter('success')),
+      this.storage.count(buildFilter('error')),
+      this.storage.count(buildFilter('timeout')),
     ])
 
     return {

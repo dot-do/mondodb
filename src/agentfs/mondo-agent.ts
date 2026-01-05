@@ -12,7 +12,8 @@
  * Designed for use with Cloudflare's Agent infrastructure.
  */
 
-import type { FileSystem, GlobOptions, GrepOptions, GrepMatch, KeyValueStore, FileStat } from './types'
+import { randomUUID } from 'crypto'
+import type { FileSystem, GrepMatch, KeyValueStore, FileStat } from './types'
 
 // =============================================================================
 // TYPE DEFINITIONS FOR CLOUDFLARE AGENT INTEGRATION
@@ -95,9 +96,9 @@ export interface SqlDatabase {
 // =============================================================================
 import { AgentFilesystem, type AgentFSDatabase } from './vfs'
 import { AgentGrep } from './grep'
-import { AgentFSKVStore, type KVStorageBackend, createInMemoryBackend } from './kv-store'
-import { ToolCallAuditLog, type AuditBackend, createInMemoryAuditBackend } from './toolcalls'
-import { matchGlob, filterGlob, type CompiledGlob, compileGlob } from './glob'
+import { AgentFSKVStore, type KVStorageBackend } from './kv-store'
+import { ToolCallAuditLog, type AuditBackend, type ToolCallEntry } from './toolcalls'
+import { filterGlob } from './glob'
 
 /**
  * Options for creating a MonDoAgent instance (legacy)
@@ -347,7 +348,7 @@ function createInMemoryDatabase(): AgentFSDatabase {
 
     async insertOne(collection: string, document: Record<string, unknown>): Promise<{ insertedId: string }> {
       const col = getCollection(collection)
-      const id = (document._id as string) ?? `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const id = (document._id as string) ?? randomUUID()
       const docWithId = { ...document, _id: id }
       col.set(id, docWithId)
       return { insertedId: id }
@@ -373,7 +374,7 @@ function createInMemoryDatabase(): AgentFSDatabase {
       }
 
       if (!matched && options?.upsert) {
-        const id = (filter._id as string) ?? `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const id = (filter._id as string) ?? randomUUID()
         const newDoc = { ...filter, ...update.$set, ...update.$setOnInsert, _id: id }
         col.set(id, newDoc)
         return { matchedCount: 0, modifiedCount: 0, upsertedId: id }
@@ -413,6 +414,55 @@ function createInMemoryDatabase(): AgentFSDatabase {
 }
 
 /**
+ * Maximum allowed regex pattern length to prevent DoS
+ */
+const MAX_REGEX_LENGTH = 1000
+
+/**
+ * Patterns that indicate potential ReDoS vulnerability
+ * These detect nested quantifiers and other dangerous constructs
+ */
+const REDOS_PATTERNS = [
+  /\([^)]*[+*]\)[+*]/, // Nested quantifiers like (a+)+
+  /\([^)]*[+*]\)\{/, // Quantifier followed by {n,m} like (a+){2,}
+  /\([^)]*\|[^)]*\)[+*]/, // Alternation with quantifier like (a|b)+
+  /\.\*.*\.\*/, // Multiple .* patterns
+  /\.\+.*\.\+/, // Multiple .+ patterns
+  /\([^)]*\.\*[^)]*\)[+*]/, // .* inside quantified group
+  /\([^)]*\.\+[^)]*\)[+*]/, // .+ inside quantified group
+]
+
+/**
+ * Validates a regex pattern for safety and creates a RegExp if valid
+ * Protects against ReDoS attacks and invalid patterns
+ *
+ * @param pattern - The regex pattern string to validate
+ * @param flags - Optional regex flags
+ * @returns The compiled RegExp or null if invalid/unsafe
+ */
+function createSafeRegex(pattern: string, flags?: string): RegExp | null {
+  // Check pattern length
+  if (pattern.length > MAX_REGEX_LENGTH) {
+    return null
+  }
+
+  // Check for potential ReDoS patterns
+  for (const redosPattern of REDOS_PATTERNS) {
+    if (redosPattern.test(pattern)) {
+      return null
+    }
+  }
+
+  // Try to compile the regex
+  try {
+    return new RegExp(pattern, flags)
+  } catch {
+    // Invalid regex syntax
+    return null
+  }
+}
+
+/**
  * Simple query matching helper
  */
 function matchesQuery(doc: Record<string, unknown>, query: Record<string, unknown>): boolean {
@@ -427,7 +477,11 @@ function matchesQuery(doc: Record<string, unknown>, query: Record<string, unknow
       const operators = condition as Record<string, unknown>
 
       if ('$regex' in operators) {
-        const regex = new RegExp(operators.$regex as string)
+        const regex = createSafeRegex(operators.$regex as string)
+        if (regex === null) {
+          // Invalid or unsafe regex pattern - treat as non-match
+          return false
+        }
         if (typeof value !== 'string' || !regex.test(value)) {
           return false
         }
@@ -528,28 +582,32 @@ function createAuditBackendFromDatabase(db: AgentFSDatabase): AuditBackend {
     async findById(id: string) {
       const doc = await db.findOne(collection, { _id: id })
       if (!doc) return null
-      return {
+      const entry: ToolCallEntry = {
         id: doc.id as string,
         tool: doc.tool as string,
         inputs: doc.inputs as Record<string, unknown>,
         outputs: doc.outputs as Record<string, unknown>,
         timestamp: new Date(doc.timestamp as Date),
-        durationMs: doc.durationMs as number | undefined,
-        metadata: doc.metadata as Record<string, unknown> | undefined,
       }
+      if (doc.durationMs !== undefined) entry.durationMs = doc.durationMs as number
+      if (doc.metadata !== undefined) entry.metadata = doc.metadata as Record<string, unknown>
+      return entry
     },
 
     async list(options) {
       const docs = await db.find(collection, {})
-      const entries = docs.map((doc) => ({
-        id: doc.id as string,
-        tool: doc.tool as string,
-        inputs: doc.inputs as Record<string, unknown>,
-        outputs: doc.outputs as Record<string, unknown>,
-        timestamp: new Date(doc.timestamp as Date),
-        durationMs: doc.durationMs as number | undefined,
-        metadata: doc.metadata as Record<string, unknown> | undefined,
-      }))
+      const entries = docs.map((doc) => {
+        const entry: ToolCallEntry = {
+          id: doc.id as string,
+          tool: doc.tool as string,
+          inputs: doc.inputs as Record<string, unknown>,
+          outputs: doc.outputs as Record<string, unknown>,
+          timestamp: new Date(doc.timestamp as Date),
+        }
+        if (doc.durationMs !== undefined) entry.durationMs = doc.durationMs as number
+        if (doc.metadata !== undefined) entry.metadata = doc.metadata as Record<string, unknown>
+        return entry
+      })
 
       // Sort by timestamp
       entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
@@ -561,29 +619,35 @@ function createAuditBackendFromDatabase(db: AgentFSDatabase): AuditBackend {
 
     async findByTool(toolName: string) {
       const docs = await db.find(collection, { tool: toolName })
-      return docs.map((doc) => ({
-        id: doc.id as string,
-        tool: doc.tool as string,
-        inputs: doc.inputs as Record<string, unknown>,
-        outputs: doc.outputs as Record<string, unknown>,
-        timestamp: new Date(doc.timestamp as Date),
-        durationMs: doc.durationMs as number | undefined,
-        metadata: doc.metadata as Record<string, unknown> | undefined,
-      }))
-    },
-
-    async findByTimeRange(start: Date, end: Date) {
-      const docs = await db.find(collection, {})
-      return docs
-        .map((doc) => ({
+      return docs.map((doc) => {
+        const entry: ToolCallEntry = {
           id: doc.id as string,
           tool: doc.tool as string,
           inputs: doc.inputs as Record<string, unknown>,
           outputs: doc.outputs as Record<string, unknown>,
           timestamp: new Date(doc.timestamp as Date),
-          durationMs: doc.durationMs as number | undefined,
-          metadata: doc.metadata as Record<string, unknown> | undefined,
-        }))
+        }
+        if (doc.durationMs !== undefined) entry.durationMs = doc.durationMs as number
+        if (doc.metadata !== undefined) entry.metadata = doc.metadata as Record<string, unknown>
+        return entry
+      })
+    },
+
+    async findByTimeRange(start: Date, end: Date) {
+      const docs = await db.find(collection, {})
+      return docs
+        .map((doc) => {
+          const entry: ToolCallEntry = {
+            id: doc.id as string,
+            tool: doc.tool as string,
+            inputs: doc.inputs as Record<string, unknown>,
+            outputs: doc.outputs as Record<string, unknown>,
+            timestamp: new Date(doc.timestamp as Date),
+          }
+          if (doc.durationMs !== undefined) entry.durationMs = doc.durationMs as number
+          if (doc.metadata !== undefined) entry.metadata = doc.metadata as Record<string, unknown>
+          return entry
+        })
         .filter((e) => e.timestamp >= start && e.timestamp <= end)
     },
 
@@ -647,9 +711,6 @@ export class MonDoAgent {
   /** Internal raw KV store (without auditing wrapper) */
   private readonly _rawKv: AgentFSKVStore
 
-  /** Internal grep instance */
-  private readonly _grep: AgentGrep
-
   /** Agent state */
   private _state: AgentState = { initialized: false }
 
@@ -693,9 +754,6 @@ export class MonDoAgent {
     // Create audited wrappers
     this.fs = new AuditedFilesystem(this._rawFs, this.audit)
     this.kv = new AuditedKVStore(this._rawKv, this.audit)
-
-    // Initialize grep with audited filesystem
-    this._grep = new AgentGrep(this.fs)
   }
 
   /**
@@ -822,9 +880,9 @@ export class MonDoAgent {
   private async executeToolCall(
     tool: string,
     inputs: Record<string, unknown>,
-    stream: boolean,
-    ws: WebSocketConnection,
-    callId: string
+    _stream: boolean,
+    _ws: WebSocketConnection,
+    _callId: string
   ): Promise<Record<string, unknown>> {
     switch (tool) {
       case 'fs.readFile': {
@@ -1025,7 +1083,9 @@ export class MonDoAgent {
    * @returns Map of file path to match count
    */
   async grepCount(pattern: string, options?: AgentGrepOptions): Promise<Map<string, number>> {
-    const matches = await this.grep(pattern, { ...options, maxResults: undefined })
+    // Remove maxResults to get all matches for counting
+    const { maxResults: _maxResults, ...restOptions } = options ?? {}
+    const matches = await this.grep(pattern, restOptions)
     const counts = new Map<string, number>()
 
     for (const match of matches) {
@@ -1042,7 +1102,7 @@ export class MonDoAgent {
  * @param options - Configuration options
  * @returns Configured MonDoAgent instance
  */
-export function createMonDoAgent(options: MonDoAgentOptions): MonDoAgent {
+export function createMonDoAgent(_options: MonDoAgentOptions): MonDoAgent {
   // Create a mock context and env for legacy compatibility
   const ctx: AgentContext = {
     id: 'legacy-agent',

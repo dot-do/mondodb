@@ -140,7 +140,7 @@ export class SaslContinueCommand implements CommandHandler {
  * Modern drivers use SASL, but some tools may still use this.
  */
 export class AuthenticateCommand implements CommandHandler {
-  async execute(command: Document, _context: CommandContext): Promise<CommandResult> {
+  async execute(_command: Document, _context: CommandContext): Promise<CommandResult> {
     // The legacy authenticate command is deprecated
     // Direct clients to use SASL authentication
     return {

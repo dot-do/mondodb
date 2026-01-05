@@ -54,42 +54,29 @@ export interface QueryStatistics {
   bytesRead: number;
 }
 
-/**
- * Query result
- */
-export interface QueryResult<T = Record<string, unknown>> {
-  /** Result rows */
-  rows: T[];
-  /** Column metadata */
-  meta: ColumnMeta[];
-  /** Query statistics */
-  statistics: QueryStatistics;
-  /** Query ID */
-  queryId?: string;
-  /** Profile information (if enabled) */
-  profile?: unknown;
-}
+// Re-export QueryResult from query-executor.ts
+import type { QueryResult } from './query-executor';
+export type { QueryResult };
 
 // =============================================================================
-// Query Executor
+// Iceberg Query Executor (Legacy Stub)
 // =============================================================================
 
 /**
- * Executor for ClickHouse queries
+ * Legacy Executor for ClickHouse queries via Iceberg connection
+ * Note: The main ClickHouseQueryExecutor is in query-executor.ts
  */
-export class ClickHouseQueryExecutor {
-  private _connection: ClickHouseIcebergClient;
-
-  constructor(connection: ClickHouseIcebergClient) {
-    this._connection = connection;
+export class IcebergQueryExecutor {
+  constructor(_connection: ClickHouseIcebergClient) {
+    // Connection stored but not yet used in stub implementation
   }
 
   /**
    * Execute a query
    */
   async execute<T = Record<string, unknown>>(
-    sql: string,
-    options?: QueryOptions
+    _sql: string,
+    _options?: QueryOptions
   ): Promise<QueryResult<T>> {
     throw new Error('Not implemented');
   }
@@ -98,9 +85,9 @@ export class ClickHouseQueryExecutor {
    * Execute a parameterized query
    */
   async executeWithParams<T = Record<string, unknown>>(
-    sql: string,
-    params: Record<string, unknown>,
-    options?: QueryOptions
+    _sql: string,
+    _params: Record<string, unknown>,
+    _options?: QueryOptions
   ): Promise<QueryResult<T>> {
     throw new Error('Not implemented');
   }
@@ -108,7 +95,7 @@ export class ClickHouseQueryExecutor {
   /**
    * Cancel a running query
    */
-  async cancel(queryId: string): Promise<void> {
+  async cancel(_queryId: string): Promise<void> {
     throw new Error('Not implemented');
   }
 }
@@ -157,9 +144,9 @@ export interface ClickHouseQueryBuilder {
  * Execute a query on the ClickHouse connection
  */
 export async function executeQuery<T = Record<string, unknown>>(
-  connection: ClickHouseIcebergClient,
-  sql: string,
-  options?: QueryOptions
+  _connection: ClickHouseIcebergClient,
+  _sql: string,
+  _options?: QueryOptions
 ): Promise<QueryResult<T>> {
   throw new Error('Not implemented');
 }
@@ -168,10 +155,10 @@ export async function executeQuery<T = Record<string, unknown>>(
  * Execute a parameterized query
  */
 export async function executeQueryWithParams<T = Record<string, unknown>>(
-  connection: ClickHouseIcebergClient,
-  sql: string,
-  params: Record<string, unknown>,
-  options?: QueryOptions
+  _connection: ClickHouseIcebergClient,
+  _sql: string,
+  _params: Record<string, unknown>,
+  _options?: QueryOptions
 ): Promise<QueryResult<T>> {
   throw new Error('Not implemented');
 }
@@ -180,8 +167,8 @@ export async function executeQueryWithParams<T = Record<string, unknown>>(
  * Cancel a running query
  */
 export async function cancelQuery(
-  connection: ClickHouseIcebergClient,
-  queryId: string
+  _connection: ClickHouseIcebergClient,
+  _queryId: string
 ): Promise<void> {
   throw new Error('Not implemented');
 }
@@ -190,7 +177,7 @@ export async function cancelQuery(
  * Create a query builder instance
  */
 export function createQueryBuilder(
-  connection: ClickHouseIcebergClient
+  _connection: ClickHouseIcebergClient
 ): ClickHouseQueryBuilder {
   throw new Error('Not implemented');
 }

@@ -105,13 +105,13 @@ export interface GrepOptions {
   /** Regular expression pattern to search for */
   pattern: string
   /** Optional glob pattern to filter files */
-  glob?: string
+  glob?: string | undefined
   /** Case-insensitive search (default: false) */
-  caseInsensitive?: boolean
+  caseInsensitive?: boolean | undefined
   /** Maximum number of results to return */
-  maxResults?: number
+  maxResults?: number | undefined
   /** Number of context lines before and after match */
-  contextLines?: number
+  contextLines?: number | undefined
 }
 
 /**

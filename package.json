@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "bin": {
-    "mondodb": "./src/cli/index.ts"
+    "mondodb": "./dist/cli/index.js"
   },
   "exports": {
     ".": {
@@ -58,6 +58,8 @@
     "@types/bun": "^1.2.4",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.19.27",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "jsdom": "^27.4.0",
     "mongodb": "^7.0.0",

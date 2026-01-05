@@ -309,13 +309,13 @@ export interface ArrayFunctions {
 export function getArrayFunctions(dialect: SQLDialect): ArrayFunctions {
   if (dialect === 'clickhouse') {
     return {
-      unwind: (source, arrayPath, aliasName) => ({
+      unwind: (_source, arrayPath, aliasName) => ({
         sql: `${arrayPath} AS ${aliasName}`,
         joinType: 'ARRAY JOIN'
       }),
       filter: (array, varName, condition) => `arrayFilter(${varName} -> ${condition}, ${array})`,
       map: (array, varName, expr) => `arrayMap(${varName} -> ${expr}, ${array})`,
-      reduce: (array, initial, varName, accName, expr) => `arrayReduce('sumState', ${array})`,
+      reduce: (array, _initial, _varName, _accName, _expr) => `arrayReduce('sumState', ${array})`,
       slice: (array, start, count) => count ? `arraySlice(${array}, ${start}, ${count})` : `arraySlice(${array}, ${start})`,
       concat: (arrays) => `arrayConcat(${arrays.join(', ')})`,
       in: (value, array) => `has(${array}, ${value})`
@@ -323,13 +323,13 @@ export function getArrayFunctions(dialect: SQLDialect): ArrayFunctions {
   }
   // SQLite
   return {
-    unwind: (source, arrayPath, aliasName) => ({
+    unwind: (_source, arrayPath, aliasName) => ({
       sql: `json_each(${arrayPath}) AS ${aliasName}`,
       joinType: 'JOIN'
     }),
     filter: (array, varName, condition) => `(SELECT json_group_array(value) FROM json_each(${array}) WHERE ${condition.replace(new RegExp(varName, 'g'), 'value')})`,
     map: (array, varName, expr) => `(SELECT json_group_array(${expr.replace(new RegExp(varName, 'g'), 'value')}) FROM json_each(${array}))`,
-    reduce: (array, initial, varName, accName, expr) => `(SELECT ${initial} + TOTAL(value) FROM json_each(${array}))`,
+    reduce: (array, initial, _varName, _accName, _expr) => `(SELECT ${initial} + TOTAL(value) FROM json_each(${array}))`,
     slice: (array, start, count) => count
       ? `(SELECT json_group_array(value) FROM (SELECT value FROM json_each(${array}) LIMIT ${count} OFFSET ${start}))`
       : `(SELECT json_group_array(value) FROM (SELECT value FROM json_each(${array}) OFFSET ${start}))`,
@@ -358,7 +358,7 @@ export function regexMatch(dialect: SQLDialect, column: string, pattern: string,
 /**
  * NULL handling by dialect
  */
-export function nullCheck(dialect: SQLDialect, column: string): string {
+export function nullCheck(_dialect: SQLDialect, column: string): string {
   // Both dialects support IS NULL
   return `${column} IS NULL`
 }

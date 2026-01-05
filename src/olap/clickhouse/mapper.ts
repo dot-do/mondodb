@@ -185,38 +185,8 @@ function tryParseJSON(value: string): unknown {
  */
 function parseWrapperType(type: string): { wrapper: string; inner: string } | null {
   const match = type.match(/^(\w+)\((.+)\)$/);
-  if (match) {
+  if (match && match[1] && match[2]) {
     return { wrapper: match[1], inner: match[2] };
-  }
-  return null;
-}
-
-/**
- * Extract Decimal precision and scale from type
- * "Decimal(38, 18)" -> { precision: 38, scale: 18 }
- */
-function parseDecimalType(type: string): { precision: number; scale: number } | null {
-  const match = type.match(/^Decimal(?:32|64|128|256)?\((\d+)(?:,\s*(\d+))?\)$/);
-  if (match) {
-    return {
-      precision: parseInt(match[1], 10),
-      scale: match[2] ? parseInt(match[2], 10) : 0,
-    };
-  }
-  return null;
-}
-
-/**
- * Extract DateTime64 precision and timezone
- * "DateTime64(3, 'UTC')" -> { precision: 3, timezone: "UTC" }
- */
-function parseDateTime64Type(type: string): { precision: number; timezone?: string } | null {
-  const match = type.match(/^DateTime64\((\d+)(?:,\s*'([^']+)')?\)$/);
-  if (match) {
-    return {
-      precision: parseInt(match[1], 10),
-      timezone: match[2],
-    };
   }
   return null;
 }

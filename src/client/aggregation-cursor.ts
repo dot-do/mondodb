@@ -247,9 +247,10 @@ export class AggregationCursor<TSchema extends Document = Document> extends Even
     }
 
     // Propagate first error if any
-    if (errors.length > 0) {
+    const firstError = errors[0]
+    if (firstError) {
       throw new AggregationError(
-        `$function stage failed: ${errors[0].message}`,
+        `$function stage failed: ${firstError.message}`,
         errors
       )
     }
@@ -401,8 +402,8 @@ export class AggregationCursor<TSchema extends Document = Document> extends Even
     scopedVars: Record<string, unknown>
   ): boolean {
     const keys = Object.keys(expr)
-    if (keys.length === 0) return true
     const operator = keys[0]
+    if (!operator) return true
     const operands = expr[operator] as unknown[]
 
     const resolveValue = (val: unknown): unknown => {
@@ -601,8 +602,9 @@ export class AggregationCursor<TSchema extends Document = Document> extends Even
     return {
       pipeline: this._pipeline.map(stage => {
         const keys = Object.keys(stage)
+        const stageName = keys[0]
         return {
-          stage: keys.length > 0 ? keys[0] : '',
+          stage: stageName ?? '',
           isAsync: this.isAsyncStage(stage)
         }
       }),

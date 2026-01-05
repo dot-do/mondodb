@@ -25,7 +25,6 @@ import {
 import {
   ClickHouseResultMapper,
   type ClickHouseColumnMeta,
-  type BSONDocument,
 } from './mapper';
 import type {
   MondoBackend,
@@ -577,6 +576,7 @@ export class ClickHouseOLAPBackend implements MondoBackend {
 
     for (const stage of pipeline) {
       const stageType = Object.keys(stage)[0];
+      if (!stageType) continue;
       const stageValue = (stage as Record<string, unknown>)[stageType];
 
       switch (stageType) {
@@ -706,7 +706,14 @@ export class ClickHouseOLAPBackend implements MondoBackend {
           // We'll return a modified SQL that includes the JOIN
           const joinedTable = `${tableName}${joinClause}`;
           const joinSql = `SELECT ${selectClause} FROM ${joinedTable}`;
-          return { sql: joinSql + (whereClause ? ` WHERE ${whereClause}` : ''), params, facets };
+          const result: { sql: string; params: unknown[]; facets?: Record<string, Document[]> } = {
+            sql: joinSql + (whereClause ? ` WHERE ${whereClause}` : ''),
+            params,
+          };
+          if (facets) {
+            result.facets = facets;
+          }
+          return result;
         }
 
         case '$facet': {
@@ -724,7 +731,11 @@ export class ClickHouseOLAPBackend implements MondoBackend {
     if (limitClause) sql += ` ${limitClause}`;
     if (offsetClause) sql += ` ${offsetClause}`;
 
-    return { sql, params, facets };
+    const result: { sql: string; params: unknown[]; facets?: Record<string, Document[]> } = { sql, params };
+    if (facets) {
+      result.facets = facets;
+    }
+    return result;
   }
 
   /**
@@ -732,6 +743,7 @@ export class ClickHouseOLAPBackend implements MondoBackend {
    */
   private _translateExpression(expr: Document, params: unknown[]): string {
     const op = Object.keys(expr)[0];
+    if (!op) return '';
     const value = (expr as Record<string, unknown>)[op];
 
     switch (op) {
@@ -795,6 +807,7 @@ export class ClickHouseOLAPBackend implements MondoBackend {
    */
   private _translateAccumulator(accum: Document, _params: unknown[]): string {
     const op = Object.keys(accum)[0];
+    if (!op) return '';
     const value = (accum as Record<string, unknown>)[op];
 
     switch (op) {
@@ -1290,13 +1303,13 @@ export async function createClickHouseOLAPBackend(
   // Create executor with config
   const executorConfig: QueryExecutorConfig = {
     host: config.host,
-    port: config.port,
     database: config.database,
-    username: config.username,
-    password: config.password,
-    secure: config.secure,
-    queryTimeout: config.queryTimeout,
   };
+  if (config.port !== undefined) executorConfig.port = config.port;
+  if (config.username !== undefined) executorConfig.username = config.username;
+  if (config.password !== undefined) executorConfig.password = config.password;
+  if (config.secure !== undefined) executorConfig.secure = config.secure;
+  if (config.queryTimeout !== undefined) executorConfig.queryTimeout = config.queryTimeout;
 
   const executor = createQueryExecutor(executorConfig);
 

@@ -5,6 +5,8 @@
  * in the mondodb Studio UI.
  */
 
+import { randomUUID } from 'crypto'
+
 /**
  * Authentication type for database connections
  */
@@ -396,7 +398,7 @@ export function buildConnectionURI(values: ConnectionFormValues): string {
  * Generate a unique connection ID
  */
 export function generateConnectionId(): string {
-  return `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  return `conn_${randomUUID()}`
 }
 
 /**

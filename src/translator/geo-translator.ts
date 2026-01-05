@@ -135,7 +135,7 @@ export class GeoTranslator {
       // The ring must be closed (first point === last point)
       const first = ring[0];
       const last = ring[ring.length - 1];
-      if (first[0] !== last[0] || first[1] !== last[1]) {
+      if (!first || !last || first[0] !== last[0] || first[1] !== last[1]) {
         return false;
       }
 
@@ -249,10 +249,12 @@ export class GeoTranslator {
     let inside = false;
 
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const xi = polygon[i][0],
-        yi = polygon[i][1];
-      const xj = polygon[j][0],
-        yj = polygon[j][1];
+      const pi = polygon[i]!;
+      const pj = polygon[j]!;
+      const xi = pi[0],
+        yi = pi[1];
+      const xj = pj[0],
+        yj = pj[1];
 
       // Check if point is on an edge
       if (
@@ -342,12 +344,12 @@ export class GeoTranslator {
       }
     }
 
-    const sql =
+    const sql: string =
       conditions.length === 1
-        ? conditions[0]
+        ? conditions[0]!
         : `(${conditions.join(' AND ')})`;
 
-    return { sql, params, orderBy };
+    return { sql, params, ...(orderBy !== undefined && { orderBy }) };
   }
 
   private translateLogicalOperator(
@@ -359,25 +361,27 @@ export class GeoTranslator {
       case '$and': {
         const conditions = value as Record<string, unknown>[];
         const parts = conditions.map((c) => this.translate(c));
+        const foundOrderBy = parts.find((p) => p.orderBy)?.orderBy;
         return {
           sql:
             parts.length === 1
-              ? parts[0].sql
+              ? parts[0]!.sql
               : `(${parts.map((p) => p.sql).join(' AND ')})`,
           params: params.concat(...parts.map((p) => p.params)),
-          orderBy: parts.find((p) => p.orderBy)?.orderBy,
+          ...(foundOrderBy !== undefined && { orderBy: foundOrderBy }),
         };
       }
       case '$or': {
         const conditions = value as Record<string, unknown>[];
         const parts = conditions.map((c) => this.translate(c));
+        const foundOrderBy = parts.find((p) => p.orderBy)?.orderBy;
         return {
           sql:
             parts.length === 1
-              ? parts[0].sql
+              ? parts[0]!.sql
               : `(${parts.map((p) => p.sql).join(' OR ')})`,
           params: params.concat(...parts.map((p) => p.params)),
-          orderBy: parts.find((p) => p.orderBy)?.orderBy,
+          ...(foundOrderBy !== undefined && { orderBy: foundOrderBy }),
         };
       }
       default:
@@ -505,7 +509,7 @@ export class GeoTranslator {
     }
 
     return {
-      sql: conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`,
+      sql: conditions.length === 1 ? conditions[0]! : `(${conditions.join(' AND ')})`,
       params,
     };
   }
@@ -682,7 +686,6 @@ export class GeoTranslator {
     const minDistance = spec.$minDistance as number | undefined;
 
     const distanceSQL = this.generateHaversineSQL(path, lng, lat);
-    const distanceAlias = `geo_distance(${distanceSQL})`;
 
     const conditions: string[] = [];
 
@@ -699,7 +702,7 @@ export class GeoTranslator {
     // Always include a condition to ensure the location exists
     conditions.push(`json_extract(data, '${path}') IS NOT NULL`);
 
-    const sql = conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`;
+    const sql = conditions.length === 1 ? conditions[0]! : `(${conditions.join(' AND ')})`;
 
     return {
       sql,
@@ -734,7 +737,6 @@ export class GeoTranslator {
     const minDistance = spec.$minDistance as number | undefined;
 
     const distanceSQL = this.generateHaversineSQL(path, lng, lat);
-    const distanceAlias = `geo_distance_sphere(${distanceSQL})`;
 
     const conditions: string[] = [];
 
@@ -751,7 +753,7 @@ export class GeoTranslator {
     // Always include a condition to ensure the location exists
     conditions.push(`json_extract(data, '${path}') IS NOT NULL`);
 
-    const sql = conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`;
+    const sql = conditions.length === 1 ? conditions[0]! : `(${conditions.join(' AND ')})`;
 
     return {
       sql,
@@ -791,7 +793,7 @@ export class GeoTranslator {
     // Always include a condition to ensure the location exists
     conditions.push(`json_extract(data, '${path}') IS NOT NULL`);
 
-    const sql = conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`;
+    const sql = conditions.length === 1 ? conditions[0]! : `(${conditions.join(' AND ')})`;
 
     return {
       sql,
@@ -830,7 +832,7 @@ export class GeoTranslator {
     // Always include a condition to ensure the location exists
     conditions.push(`json_extract(data, '${path}') IS NOT NULL`);
 
-    const sql = conditions.length === 1 ? conditions[0] : `(${conditions.join(' AND ')})`;
+    const sql = conditions.length === 1 ? conditions[0]! : `(${conditions.join(' AND ')})`;
 
     return {
       sql,

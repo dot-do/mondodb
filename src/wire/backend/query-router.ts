@@ -133,8 +133,11 @@ const HEAVY_AGGREGATION_STAGES = [
   '$fill',
 ];
 
-/** Stages that are lightweight and suitable for OLTP */
-const LIGHTWEIGHT_STAGES = [
+/**
+ * Stages that are lightweight and suitable for OLTP.
+ * Used by the query analyzer to determine routing decisions.
+ */
+const LIGHTWEIGHT_STAGES: readonly string[] = [
   '$match',
   '$project',
   '$limit',
@@ -142,6 +145,9 @@ const LIGHTWEIGHT_STAGES = [
   '$sort',
   '$count',
 ];
+
+// Export for testing
+export { LIGHTWEIGHT_STAGES };
 
 // =============================================================================
 // Query Analysis Functions
@@ -217,6 +223,7 @@ export function analyzeQuery(pipeline: Document[]): QueryCharacteristics {
 
   for (const stage of pipeline) {
     const stageType = Object.keys(stage)[0];
+    if (!stageType) continue;
     const stageValue = stage[stageType];
 
     // Check for heavy aggregation stages
@@ -555,7 +562,11 @@ export class QueryRouter implements MondoBackend {
 
   async count(db: string, collection: string, query?: Document): Promise<number> {
     // Route count queries like find queries
-    const characteristics = analyzeFindQuery({ filter: query });
+    const findOptions: FindOptions = {}
+    if (query) {
+      findOptions.filter = query
+    }
+    const characteristics = analyzeFindQuery(findOptions);
 
     if (this._olap && characteristics.estimatedRows > this._config.rowThreshold) {
       return this._olap.count(db, collection, query);
@@ -571,7 +582,11 @@ export class QueryRouter implements MondoBackend {
     query?: Document
   ): Promise<unknown[]> {
     // Distinct on large collections benefits from OLAP
-    const characteristics = analyzeFindQuery({ filter: query });
+    const findOptions: FindOptions = {}
+    if (query) {
+      findOptions.filter = query
+    }
+    const characteristics = analyzeFindQuery(findOptions);
 
     if (this._olap && characteristics.estimatedRows > this._config.rowThreshold) {
       return this._olap.distinct(db, collection, field, query);

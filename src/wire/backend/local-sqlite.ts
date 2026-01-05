@@ -1096,7 +1096,9 @@ export class LocalSQLiteBackend implements MondoBackend {
     let result = [...documents]
 
     for (const stage of pipeline) {
-      const [op, value] = Object.entries(stage)[0]
+      const entry = Object.entries(stage)[0]
+      if (!entry) continue
+      const [op, value] = entry
 
       switch (op) {
         case '$match':
@@ -1212,7 +1214,9 @@ export class LocalSQLiteBackend implements MondoBackend {
     const result = [...array]
     for (let i = result.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
-      ;[result[i], result[j]] = [result[j], result[i]]
+      const temp = result[i]!
+      result[i] = result[j]!
+      result[j] = temp
     }
     return result
   }
@@ -1265,12 +1269,18 @@ export class LocalSQLiteBackend implements MondoBackend {
               break
             case '$first':
               if (fieldPath && docs.length > 0) {
-                grouped[field] = docs[0][fieldPath]
+                const firstDoc = docs[0]
+                if (firstDoc) {
+                  grouped[field] = firstDoc[fieldPath]
+                }
               }
               break
             case '$last':
               if (fieldPath && docs.length > 0) {
-                grouped[field] = docs[docs.length - 1][fieldPath]
+                const lastDoc = docs[docs.length - 1]
+                if (lastDoc) {
+                  grouped[field] = lastDoc[fieldPath]
+                }
               }
               break
           }

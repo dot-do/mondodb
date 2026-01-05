@@ -396,12 +396,10 @@ export class ClickHouseQueryExecutor {
           // Create abort controller for timeout
           const controller = new AbortController();
           let timeoutId: ReturnType<typeof setTimeout> | undefined;
-          let timeoutReject: ((reason: Error) => void) | undefined;
 
           // Create a timeout promise that rejects after the timeout
           const timeoutPromise = options?.timeout
             ? new Promise<never>((_, reject) => {
-                timeoutReject = reject;
                 timeoutId = setTimeout(() => {
                   controller.abort();
                   reject(new Error('Query timeout exceeded'));
@@ -603,10 +601,13 @@ export class ClickHouseQueryExecutor {
     sql: string,
     options?: StreamOptions
   ): AsyncGenerator<StreamChunk<T>> {
-    const url = this._buildUrl({
+    const streamOptions: ExecuteOptions = {
       format: 'JSONEachRow',
-      timeout: options?.timeout,
-    });
+    };
+    if (options?.timeout !== undefined) {
+      streamOptions.timeout = options.timeout;
+    }
+    const url = this._buildUrl(streamOptions);
 
     const controller = new AbortController();
     const signal = options?.signal;

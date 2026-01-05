@@ -22,7 +22,7 @@ import {
   jsonArrayLength as dialectJsonArrayLength,
   regexMatch as dialectRegexMatch,
 } from './dialect.js';
-import { translateExpression, translateExpressionValue } from './stages/expression-translator.js';
+import { translateExpression } from './stages/expression-translator.js';
 
 export interface TranslatedQuery {
   sql: string;
@@ -341,7 +341,7 @@ export class QueryTranslator {
       const lenExpr = dialectJsonArrayLength(this.dialect, 'data', path);
       return `${lenExpr} = ?`;
     },
-    $all: (path, value, params) => {
+    $all: (path, value, params): string => {
       const arr = value as unknown[];
       if (arr.length === 0) {
         return '1 = 1';
@@ -352,7 +352,7 @@ export class QueryTranslator {
         return `EXISTS (SELECT 1 FROM json_each(${this.jsonExtract(path)}) WHERE value = ?)`;
       });
       return conditions.length === 1
-        ? conditions[0]
+        ? conditions[0]!
         : `(${conditions.join(' AND ')})`;
     },
     $elemMatch: (path, value, params) => {
@@ -468,7 +468,7 @@ export class QueryTranslator {
     }
 
     if (conditions.length === 1) {
-      return conditions[0];
+      return conditions[0]!;
     }
 
     return `(${conditions.join(' AND ')})`;
@@ -486,7 +486,7 @@ export class QueryTranslator {
 
     // Direct value comparison (implicit $eq)
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-      return this.comparisonOperators.$eq(path, value, params);
+      return this.comparisonOperators.$eq!(path, value, params);
     }
 
     // Object with operators
@@ -499,7 +499,7 @@ export class QueryTranslator {
     }
 
     // Plain object equality (implicit $eq)
-    return this.comparisonOperators.$eq(path, value, params);
+    return this.comparisonOperators.$eq!(path, value, params);
   }
 
   /**
@@ -537,16 +537,16 @@ export class QueryTranslator {
           $options: conditions.$options,
           $regexType: conditions.$regexType
         };
-        sql = this.comparisonOperators[op](actualPath, regexValue, params);
+        sql = this.comparisonOperators[op]!(actualPath, regexValue, params);
       } else if (this.comparisonOperators[op]) {
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
-        sql = this.comparisonOperators[op](actualPath, value, params);
+        sql = this.comparisonOperators[op]!(actualPath, value, params);
       } else if (this.elementOperators[op]) {
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
-        sql = this.elementOperators[op](actualPath, value, params);
+        sql = this.elementOperators[op]!(actualPath, value, params);
       } else if (this.arrayOperators[op]) {
         const actualPath = isElemMatch ? this.elemMatchFieldPath(path, '') : path;
-        sql = this.arrayOperators[op](actualPath, value, params);
+        sql = this.arrayOperators[op]!(actualPath, value, params);
       } else {
         // Unknown operator - treat as nested field in elemMatch context
         if (isElemMatch) {
@@ -565,7 +565,7 @@ export class QueryTranslator {
     }
 
     if (sqlParts.length === 1) {
-      return sqlParts[0];
+      return sqlParts[0]!;
     }
 
     return `(${sqlParts.join(' AND ')})`;
@@ -587,7 +587,7 @@ export class QueryTranslator {
         }
         const parts = conditions.map(c => this.translateDocument(c, params));
         if (parts.length === 1) {
-          return parts[0];
+          return parts[0]!;
         }
         return `(${parts.join(' AND ')})`;
       }
@@ -599,7 +599,7 @@ export class QueryTranslator {
         }
         const parts = conditions.map(c => this.translateDocument(c, params));
         if (parts.length === 1) {
-          return parts[0];
+          return parts[0]!;
         }
         return `(${parts.join(' OR ')})`;
       }
@@ -912,7 +912,7 @@ export class QueryTranslator {
       return '1 = 1';
     }
 
-    return sqlParts.length === 1 ? sqlParts[0] : `(${sqlParts.join(' AND ')})`;
+    return sqlParts.length === 1 ? sqlParts[0]! : `(${sqlParts.join(' AND ')})`;
   }
 
   /**
@@ -1035,7 +1035,7 @@ export class QueryTranslator {
     // Collect all array fields that have multiple operations
     const arrayFieldOps = this.collectArrayOperations(query);
     const cteDefinitions: string[] = [];
-    const cteAliases: Map<string, string> = new Map();
+    const cteAliases = new Map<string, string>();
     let cteIndex = 0;
 
     // Create CTEs for fields with multiple array operations
@@ -1094,7 +1094,7 @@ export class QueryTranslator {
   private translateDocumentWithCTE(
     query: Record<string, unknown>,
     params: unknown[],
-    cteAliases: Map<string, string>
+    _cteAliases: Map<string, string>
   ): string {
     // For now, fall back to standard translation
     // CTE optimization would replace json_each references with CTE aliases
@@ -1179,8 +1179,8 @@ export class QueryTranslator {
    */
   private convertToFTS5Query(
     search: string,
-    caseSensitive?: boolean,
-    diacriticSensitive?: boolean
+    _caseSensitive?: boolean,
+    _diacriticSensitive?: boolean
   ): string {
     // Escape special FTS5 characters except quotes and minus
     const escaped = search.replace(/[&|()^~*:]/g, (char) => {
@@ -1360,7 +1360,7 @@ export class QueryTranslator {
         return `${typeExpr} = '${sqlType || t}'`;
       });
       if (typeConditions.length === 1) {
-        conditions.push(typeConditions[0]);
+        conditions.push(typeConditions[0]!);
       } else {
         conditions.push(`(${typeConditions.join(' OR ')})`);
       }
@@ -1492,7 +1492,7 @@ export class QueryTranslator {
     }
 
     if (conditions.length === 1) {
-      return conditions[0];
+      return conditions[0]!;
     }
 
     return `(${conditions.join(' AND ')})`;

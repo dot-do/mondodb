@@ -7,7 +7,7 @@ import type { StageResult, StageContext } from './types'
 
 export function translateLimitStage(
   limit: number,
-  context: StageContext
+  _context: StageContext
 ): StageResult {
   return {
     limitClause: `LIMIT ${limit}`,

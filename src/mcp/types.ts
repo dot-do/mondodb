@@ -403,8 +403,9 @@ export const JsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
   z.object({
     type: z.string(),
     properties: z.record(
+      z.string(),
       z.union([
-        JsonSchemaSchema,
+        z.lazy(() => JsonSchemaSchema),
         z.object({
           type: z.string(),
           description: z.string().optional(),
@@ -413,9 +414,9 @@ export const JsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
     ).optional(),
     required: z.array(z.string()).optional(),
     description: z.string().optional(),
-    items: JsonSchemaSchema.optional(),
+    items: z.lazy(() => JsonSchemaSchema).optional(),
   }).passthrough()
-)
+) as z.ZodType<JsonSchema>
 
 /**
  * Zod schema for McpToolDefinition
@@ -531,7 +532,7 @@ export const McpRequestSchema = z.object({
  */
 export const McpInitializeParamsSchema = z.object({
   protocolVersion: z.string(),
-  capabilities: z.record(z.unknown()),
+  capabilities: z.record(z.string(), z.unknown()),
   clientInfo: z.object({
     name: z.string(),
     version: z.string(),
@@ -543,7 +544,7 @@ export const McpInitializeParamsSchema = z.object({
  */
 export const McpToolsCallParamsSchema = z.object({
   name: z.string(),
-  arguments: z.record(z.unknown()).optional(),
+  arguments: z.record(z.string(), z.unknown()).optional(),
 })
 
 /**
@@ -566,6 +567,6 @@ export const McpResponseSchema = z.object({
 export const FindOptionsSchema = z.object({
   limit: z.number().optional(),
   skip: z.number().optional(),
-  sort: z.record(z.union([z.literal(1), z.literal(-1)])).optional(),
-  projection: z.record(z.union([z.literal(0), z.literal(1)])).optional(),
+  sort: z.record(z.string(), z.union([z.literal(1), z.literal(-1)])).optional(),
+  projection: z.record(z.string(), z.union([z.literal(0), z.literal(1)])).optional(),
 })
