@@ -341,143 +341,160 @@ describe('CLI Option Validation', () => {
   describe('validateOptions()', () => {
     describe('port validation', () => {
       it('accepts valid port numbers', () => {
-        expect(() => validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false })).not.toThrow()
-        expect(() => validateOptions({ port: 1, host: 'localhost', dataDir: './data', verbose: false, help: false })).not.toThrow()
-        expect(() => validateOptions({ port: 65535, host: 'localhost', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 1, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 65535, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
-      it('throws error for port < 1', () => {
-        expect(() => validateOptions({ port: 0, host: 'localhost', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid port/)
+      it('returns error for port < 1', () => {
+        const result = validateOptions({ port: 0, host: 'localhost', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid port/.test(e))).toBe(true)
       })
 
-      it('throws error for port > 65535', () => {
-        expect(() => validateOptions({ port: 65536, host: 'localhost', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid port/)
+      it('returns error for port > 65535', () => {
+        const result = validateOptions({ port: 65536, host: 'localhost', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid port/.test(e))).toBe(true)
       })
 
-      it('throws error for NaN port', () => {
-        expect(() => validateOptions({ port: NaN, host: 'localhost', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid port/)
+      it('returns error for NaN port', () => {
+        const result = validateOptions({ port: NaN, host: 'localhost', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid port/.test(e))).toBe(true)
       })
 
-      it('throws error for non-integer port', () => {
-        expect(() => validateOptions({ port: 27017.5, host: 'localhost', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid port/)
+      it('returns error for non-integer port', () => {
+        const result = validateOptions({ port: 27017.5, host: 'localhost', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid port/.test(e))).toBe(true)
       })
 
-      it('throws error for negative port', () => {
-        expect(() => validateOptions({ port: -1, host: 'localhost', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid port/)
+      it('returns error for negative port', () => {
+        const result = validateOptions({ port: -1, host: 'localhost', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid port/.test(e))).toBe(true)
       })
     })
 
     describe('remote URL validation', () => {
       it('accepts valid https URLs', () => {
-        expect(() => validateOptions({
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: 'https://my-worker.workers.dev',
-        })).not.toThrow()
+        })
+        expect(result.valid).toBe(true)
       })
 
       it('accepts valid http URLs for local development', () => {
-        expect(() => validateOptions({
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: 'http://localhost:8787',
-        })).not.toThrow()
+        })
+        expect(result.valid).toBe(true)
       })
 
-      it('throws error for invalid URL format', () => {
-        expect(() => validateOptions({
+      it('returns error for invalid URL format', () => {
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: 'not-a-url',
-        })).toThrow(/Invalid remote URL/)
+        })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid remote URL/.test(e))).toBe(true)
       })
 
-      it('throws error for URL without protocol', () => {
-        expect(() => validateOptions({
+      it('returns error for URL without protocol', () => {
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: 'my-worker.workers.dev',
-        })).toThrow(/Invalid remote URL/)
+        })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid remote URL/.test(e))).toBe(true)
       })
 
-      it('throws error for non-http/https URLs', () => {
-        expect(() => validateOptions({
+      it('returns error for non-http/https URLs', () => {
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: 'ftp://example.com',
-        })).toThrow(/Invalid remote URL/)
+        })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid remote URL/.test(e))).toBe(true)
       })
 
-      it('throws error for empty remote string', () => {
-        expect(() => validateOptions({
+      it('returns error for empty remote string', () => {
+        const result = validateOptions({
           port: 27017,
           host: 'localhost',
           dataDir: './data',
           verbose: false,
           help: false,
           remote: '',
-        })).toThrow(/Invalid remote URL/)
+        })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid remote URL/.test(e))).toBe(true)
       })
     })
 
     describe('host validation', () => {
       it('accepts localhost', () => {
-        expect(() => validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
       it('accepts 0.0.0.0 for all interfaces', () => {
-        expect(() => validateOptions({ port: 27017, host: '0.0.0.0', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: '0.0.0.0', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
       it('accepts IPv4 addresses', () => {
-        expect(() => validateOptions({ port: 27017, host: '127.0.0.1', dataDir: './data', verbose: false, help: false })).not.toThrow()
-        expect(() => validateOptions({ port: 27017, host: '192.168.1.1', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: '127.0.0.1', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 27017, host: '192.168.1.1', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
       it('accepts IPv6 addresses', () => {
-        expect(() => validateOptions({ port: 27017, host: '::', dataDir: './data', verbose: false, help: false })).not.toThrow()
-        expect(() => validateOptions({ port: 27017, host: '::1', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: '::', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 27017, host: '::1', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
       it('accepts hostnames', () => {
-        expect(() => validateOptions({ port: 27017, host: 'my-server.local', dataDir: './data', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: 'my-server.local', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
       })
 
-      it('throws error for empty host', () => {
-        expect(() => validateOptions({ port: 27017, host: '', dataDir: './data', verbose: false, help: false }))
-          .toThrow(/Invalid host/)
+      it('returns error for empty host', () => {
+        const result = validateOptions({ port: 27017, host: '', dataDir: './data', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid host/.test(e))).toBe(true)
       })
     })
 
     describe('dataDir validation', () => {
       it('accepts valid paths', () => {
-        expect(() => validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false })).not.toThrow()
-        expect(() => validateOptions({ port: 27017, host: 'localhost', dataDir: '/var/lib/mondodb', verbose: false, help: false })).not.toThrow()
+        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: './data', verbose: false, help: false }).valid).toBe(true)
+        expect(validateOptions({ port: 27017, host: 'localhost', dataDir: '/var/lib/mondodb', verbose: false, help: false }).valid).toBe(true)
       })
 
-      it('throws error for empty dataDir', () => {
-        expect(() => validateOptions({ port: 27017, host: 'localhost', dataDir: '', verbose: false, help: false }))
-          .toThrow(/Invalid data directory/)
+      it('returns error for empty dataDir', () => {
+        const result = validateOptions({ port: 27017, host: 'localhost', dataDir: '', verbose: false, help: false })
+        expect(result.valid).toBe(false)
+        expect(result.errors.some(e => /Invalid data directory/.test(e))).toBe(true)
       })
     })
   })

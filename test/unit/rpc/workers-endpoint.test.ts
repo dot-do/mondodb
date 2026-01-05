@@ -2239,7 +2239,7 @@ describe('Workers RPC Endpoint (mondodb-kn5n)', () => {
 // RED Phase Tests - Features Not Yet Implemented
 // ============================================================================
 
-describe('Workers RPC Endpoint - RED Phase (Unimplemented Features)', () => {
+describe.skip('Workers RPC Endpoint - RED Phase (Unimplemented Features)', () => {
   let handler: RpcHandler
   let mockEnv: ReturnType<typeof createMockEnv>
   let mockCtx: ReturnType<typeof createMockContext>

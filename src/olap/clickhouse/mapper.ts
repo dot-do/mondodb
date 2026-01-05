@@ -57,6 +57,40 @@ export interface TypeMappingOptions {
 }
 
 // =============================================================================
+// Long (Int64) Simple Implementation
+// =============================================================================
+
+/**
+ * Simple Long wrapper for 64-bit integer values
+ */
+export class Long {
+  readonly _bsontype = 'Long' as const;
+  private readonly value: bigint;
+
+  constructor(value: string | number | bigint) {
+    if (typeof value === 'bigint') {
+      this.value = value;
+    } else if (typeof value === 'string') {
+      this.value = BigInt(value);
+    } else {
+      this.value = BigInt(value);
+    }
+  }
+
+  toString(): string {
+    return this.value.toString();
+  }
+
+  toJSON(): string {
+    return this.value.toString();
+  }
+
+  toBigInt(): bigint {
+    return this.value;
+  }
+}
+
+// =============================================================================
 // Decimal128 Simple Implementation
 // =============================================================================
 
@@ -131,7 +165,7 @@ export class Binary {
   }
 
   toString(): string {
-    return btoa(String.fromCharCode(...this.buffer));
+    return btoa(String.fromCharCode.apply(null, Array.from(this.buffer)));
   }
 
   toJSON(): string {
@@ -247,8 +281,27 @@ export class ClickHouseResultMapper {
     const typeMap = new Map(meta.map((m) => [m.name, m.type]));
 
     for (const [key, value] of Object.entries(row)) {
+      // Check if field should be excluded
+      if (this._options.excludeFields?.includes(key)) {
+        continue;
+      }
+
+      // Check if only specific fields should be included
+      if (this._options.includeFields && !this._options.includeFields.includes(key)) {
+        continue;
+      }
+
+      // Get the output key (apply field renaming if configured)
+      const outputKey = this._options.fieldRenames?.[key] ?? key;
+
+      // Check for custom mapper for this field
+      if (this._options.customMappers?.[key]) {
+        result[outputKey] = this._options.customMappers[key](value);
+        continue;
+      }
+
       const type = typeMap.get(key) || 'String';
-      result[key] = this.convertValue(value, type);
+      result[outputKey] = this.convertValue(value, type);
     }
 
     return result;
@@ -297,7 +350,28 @@ export class ClickHouseResultMapper {
 
       case 'Array':
         if (Array.isArray(value)) {
-          return value.map((item) => this.convertValue(item, inner));
+          // For mixed type arrays, process each item recursively to preserve types
+          return value.map((item) => {
+            // If item is null/undefined, preserve it
+            if (item === null || item === undefined) {
+              return item;
+            }
+            // If inner type is String but item is not a string, preserve original type
+            // This handles JSON-like mixed type arrays stored as Array(String)
+            if (inner === 'String' && typeof item !== 'string') {
+              if (typeof item === 'object') {
+                return this.processObjectRecursively(item);
+              }
+              // Preserve primitives (number, boolean) as-is
+              return item;
+            }
+            // If item is an object, process recursively
+            if (typeof item === 'object') {
+              return this.processObjectRecursively(item);
+            }
+            // Otherwise convert based on inner type
+            return this.convertValue(item, inner);
+          });
         }
         return value;
 
@@ -376,8 +450,22 @@ export class ClickHouseResultMapper {
    * Convert base types
    */
   private convertBaseType(value: unknown, type: string): unknown {
-    // Integer types
-    if (type.match(/^U?Int(8|16|32|64|128|256)$/)) {
+    // UInt8 can be treated as boolean
+    if (type === 'UInt8' && this._options.treatUInt8AsBool) {
+      return this.convertBool(value);
+    }
+
+    // Large integer types (64/128/256 bit) need special handling
+    if (type.match(/^U?Int(64|128|256)$/)) {
+      // Check if this should be treated as a timestamp (Date)
+      if (this._options.treatTimestampAsDate && typeof value === 'number') {
+        return new Date(value);
+      }
+      return this.convertLargeInteger(value, type);
+    }
+
+    // Regular integer types
+    if (type.match(/^U?Int(8|16|32)$/)) {
       return this.convertInteger(value);
     }
 
@@ -396,8 +484,8 @@ export class ClickHouseResultMapper {
       return this.convertString(value, type);
     }
 
-    // DateTime types
-    if (type === 'DateTime') {
+    // DateTime types (includes DateTime, DateTime('UTC'), DateTime64(3), etc.)
+    if (type === 'DateTime' || type.startsWith('DateTime(')) {
       return parseDateTime(value);
     }
 
@@ -454,6 +542,44 @@ export class ClickHouseResultMapper {
   }
 
   /**
+   * Convert large integer values (64/128/256 bit)
+   * Returns Long wrapper for values that exceed safe integer range
+   */
+  private convertLargeInteger(value: unknown, _type: string): number | Long | bigint {
+    // If it's already a number and within safe range, return as-is
+    if (typeof value === 'number') {
+      if (Number.isSafeInteger(value)) {
+        return value;
+      }
+      // Value is too large, wrap in Long
+      return new Long(BigInt(Math.round(value)));
+    }
+
+    // If it's a string (common for large numbers from ClickHouse JSON)
+    if (typeof value === 'string') {
+      const strValue = value.trim();
+      // Try to parse as BigInt first
+      try {
+        const bigIntValue = BigInt(strValue);
+        // Check if it fits in safe integer range
+        if (bigIntValue >= BigInt(Number.MIN_SAFE_INTEGER) && bigIntValue <= BigInt(Number.MAX_SAFE_INTEGER)) {
+          return Number(bigIntValue);
+        }
+        // For very large values (e.g., max UInt64), return BigInt directly
+        // This provides better interoperability with BigInt operations
+        // Long wrapper is still returned for BSON serialization cases
+        return bigIntValue;
+      } catch {
+        // Fallback to regular parsing
+        const parsed = parseInt(strValue, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      }
+    }
+
+    return Number(value);
+  }
+
+  /**
    * Convert float values
    */
   private convertFloat(value: unknown): number {
@@ -487,6 +613,11 @@ export class ClickHouseResultMapper {
    * Convert string values, handling ObjectId and JSON
    */
   private convertString(value: unknown, type: string): unknown {
+    // If value is already an object (e.g., nested JSON passed as object), process it directly
+    if (typeof value === 'object' && value !== null) {
+      return this.processObjectRecursively(value);
+    }
+
     const strValue = String(value);
 
     // Check for ObjectId in String or FixedString(24)
@@ -541,7 +672,11 @@ export class ClickHouseResultMapper {
   reverse(doc: BSONDocument): ClickHouseRow {
     const result: ClickHouseRow = {};
     for (const [key, value] of Object.entries(doc)) {
-      result[key] = convertBSONType(value, this._options);
+      const converted = convertBSONType(value, this._options);
+      // Skip undefined values
+      if (converted !== undefined) {
+        result[key] = converted;
+      }
     }
     return result;
   }
@@ -591,13 +726,32 @@ export function convertClickHouseType(
 }
 
 /**
+ * Format a Date to ClickHouse DateTime64 string format
+ */
+function formatClickHouseDateTime(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+  const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+/**
  * Convert a BSON value to its ClickHouse equivalent
  */
 export function convertBSONType(
   value: unknown,
   options?: TypeMappingOptions
 ): unknown {
-  if (value === null || value === undefined) {
+  // Return undefined to signal the field should be omitted
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
     return null;
   }
 
@@ -621,9 +775,14 @@ export function convertBSONType(
     return value.toString();
   }
 
-  // Handle Date
+  // Handle Long
+  if (value instanceof Long) {
+    return value.toString();
+  }
+
+  // Handle Date - format as ClickHouse DateTime64 string
   if (value instanceof Date) {
-    return value.toISOString();
+    return formatClickHouseDateTime(value);
   }
 
   // Handle arrays
@@ -635,7 +794,11 @@ export function convertBSONType(
   if (typeof value === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
-      result[key] = convertBSONType(val, options);
+      const converted = convertBSONType(val, options);
+      // Skip undefined values (don't include in result)
+      if (converted !== undefined) {
+        result[key] = converted;
+      }
     }
     return result;
   }

@@ -28,6 +28,48 @@ vi.mock('@hooks/useQueries', async (importOriginal) => {
   }
 })
 
+// Mock the JsonEditor component since CodeMirror doesn't work in jsdom
+vi.mock('../JsonEditor', () => ({
+  JsonEditor: ({ value, onChange, onValidChange, 'data-testid': testId }: {
+    value: string
+    onChange: (value: string) => void
+    onValidChange?: (valid: boolean) => void
+    'data-testid'?: string
+  }) => {
+    return (
+      <textarea
+        data-testid={testId || 'json-editor-mock'}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+          if (onValidChange) {
+            try {
+              JSON.parse(e.target.value)
+              onValidChange(true)
+            } catch {
+              onValidChange(false)
+            }
+          }
+        }}
+      />
+    )
+  },
+  formatJson: (str: string) => {
+    try {
+      return JSON.stringify(JSON.parse(str), null, 2)
+    } catch {
+      return str
+    }
+  },
+  parseJsonSafe: <T,>(str: string): { success: true; data: T } | { success: false; error: string } => {
+    try {
+      return { success: true, data: JSON.parse(str) as T }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Invalid JSON' }
+    }
+  },
+}))
+
 describe('EditDocument', () => {
   const mockDocument = {
     _id: 'doc123',
@@ -63,8 +105,10 @@ describe('EditDocument', () => {
   })
 
   afterEach(() => {
-    vi.runOnlyPendingTimers()
-    vi.useRealTimers()
+    if (vi.isFakeTimers()) {
+      vi.runOnlyPendingTimers()
+      vi.useRealTimers()
+    }
     cleanup()
     cleanupPortals()
   })

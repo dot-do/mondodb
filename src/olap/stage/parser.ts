@@ -32,6 +32,11 @@ export interface PartitionOptions {
   step?: number;
 }
 
+export interface OlapSettings {
+  max_threads?: number;
+  max_memory_usage?: number;
+}
+
 export interface OlapStageOptions {
   engine: OlapEngine;
   query: OlapQuery;
@@ -39,12 +44,16 @@ export interface OlapStageOptions {
   parameters?: Record<string, unknown>;
   timeout?: number;
   maxRows?: number;
+  outputFormat?: string;
+  settings?: OlapSettings;
 }
 
 export interface OlapStageParseResult {
   isValid: boolean;
   options?: OlapStageOptions;
   error?: string;
+  warnings?: string[];
+  originalStage?: Record<string, unknown>;
 }
 
 // ============================================================================
@@ -53,7 +62,9 @@ export interface OlapStageParseResult {
 
 const VALID_ENGINES: OlapEngine[] = ['r2sql', 'clickhouse', 'auto'];
 const VALID_INTERVALS = ['day', 'week', 'month', 'quarter', 'year'];
+const VALID_OUTPUT_FORMATS = ['documents', 'array', 'cursor'];
 const DISALLOWED_STATEMENTS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'TRUNCATE', 'ALTER', 'CREATE'];
+const KNOWN_OPTIONS = ['engine', 'query', 'partition', 'parameters', 'timeout', 'maxRows', 'outputFormat', 'settings'];
 
 // ============================================================================
 // OlapStageParser Class
@@ -74,6 +85,14 @@ export class OlapStageParser {
     }
 
     const spec = olapSpec as Record<string, unknown>;
+    const warnings: string[] = [];
+
+    // Check for unknown options and add warnings
+    for (const key of Object.keys(spec)) {
+      if (!KNOWN_OPTIONS.includes(key)) {
+        warnings.push(key);
+      }
+    }
 
     // Validate engine
     const engineResult = this._validateEngine(spec.engine);
@@ -104,19 +123,45 @@ export class OlapStageParser {
     }
 
     // Validate timeout if present
-    if (spec.timeout !== undefined && typeof spec.timeout !== 'number') {
-      return {
-        isValid: false,
-        error: 'Invalid timeout: expected number',
-      };
+    if (spec.timeout !== undefined) {
+      if (typeof spec.timeout !== 'number') {
+        return {
+          isValid: false,
+          error: 'Invalid timeout: expected number',
+        };
+      }
+      if (spec.timeout < 0) {
+        return {
+          isValid: false,
+          error: 'Invalid timeout: must be a positive number',
+        };
+      }
     }
 
     // Validate maxRows if present
-    if (spec.maxRows !== undefined && typeof spec.maxRows !== 'number') {
-      return {
-        isValid: false,
-        error: 'Invalid maxRows: expected number',
-      };
+    if (spec.maxRows !== undefined) {
+      if (typeof spec.maxRows !== 'number') {
+        return {
+          isValid: false,
+          error: 'Invalid maxRows: expected number',
+        };
+      }
+      if (spec.maxRows > 10000000) {
+        return {
+          isValid: false,
+          error: 'Invalid maxRows: exceeds system limit of 10000000',
+        };
+      }
+    }
+
+    // Validate outputFormat if present
+    if (spec.outputFormat !== undefined) {
+      if (typeof spec.outputFormat !== 'string' || !VALID_OUTPUT_FORMATS.includes(spec.outputFormat)) {
+        return {
+          isValid: false,
+          error: `Invalid outputFormat: must be one of ${VALID_OUTPUT_FORMATS.join(', ')}`,
+        };
+      }
     }
 
     // Build valid options
@@ -141,10 +186,25 @@ export class OlapStageParser {
       options.maxRows = spec.maxRows as number;
     }
 
-    return {
+    if (spec.outputFormat !== undefined) {
+      options.outputFormat = spec.outputFormat as string;
+    }
+
+    if (spec.settings !== undefined) {
+      options.settings = spec.settings as OlapSettings;
+    }
+
+    const result: OlapStageParseResult = {
       isValid: true,
       options,
+      originalStage: stage,
     };
+
+    if (warnings.length > 0) {
+      result.warnings = warnings;
+    }
+
+    return result;
   }
 
   private _validateEngine(engine: unknown): OlapStageParseResult {
@@ -187,6 +247,15 @@ export class OlapStageParser {
         };
       }
 
+      // Check for multiple statements first
+      const statements = query.split(';').filter((s) => s.trim().length > 0);
+      if (statements.length > 1) {
+        return {
+          isValid: false,
+          error: 'Invalid query: multiple statements not allowed',
+        };
+      }
+
       // Check for disallowed statements
       const upperQuery = query.toUpperCase();
       for (const stmt of DISALLOWED_STATEMENTS) {
@@ -196,15 +265,6 @@ export class OlapStageParser {
             error: `Disallowed statement: ${stmt} is not permitted in OLAP queries`,
           };
         }
-      }
-
-      // Check for multiple statements
-      const statements = query.split(';').filter((s) => s.trim().length > 0);
-      if (statements.length > 1) {
-        return {
-          isValid: false,
-          error: 'Invalid query: multiple statements not allowed',
-        };
       }
 
       return { isValid: true };
@@ -268,6 +328,18 @@ export class OlapStageParser {
         isValid: false,
         error: 'Invalid partition step: expected number',
       };
+    }
+
+    // Validate that end is after start
+    if (p.start !== undefined && p.end !== undefined) {
+      const start = typeof p.start === 'string' ? new Date(p.start).getTime() : (p.start as number);
+      const end = typeof p.end === 'string' ? new Date(p.end).getTime() : (p.end as number);
+      if (end < start) {
+        return {
+          isValid: false,
+          error: 'Invalid partition: end must be after start',
+        };
+      }
     }
 
     return { isValid: true };

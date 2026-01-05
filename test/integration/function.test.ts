@@ -448,7 +448,9 @@ describe('$function Integration Tests', () => {
               $addFields: {
                 result: {
                   $function: {
-                    body: '(x) => x !== undefined ? x * 2 : -1',
+                    // Note: undefined becomes null during JSON serialization,
+                    // so we check for both null and undefined (nullish)
+                    body: '(x) => x != null ? x * 2 : -1',
                     args: ['$nonexistent'],
                     lang: 'js'
                   }
@@ -462,7 +464,7 @@ describe('$function Integration Tests', () => {
       const result = await response.json() as { documents: Array<{ name: string; result: number }> }
 
       expect(result.documents).toHaveLength(1)
-      // The function should handle undefined input
+      // The function should handle null/undefined input (undefined becomes null via JSON)
       expect(result.documents[0].result).toBe(-1)
     })
 

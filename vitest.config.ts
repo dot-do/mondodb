@@ -1,4 +1,5 @@
 import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import path from 'path';
 
 export default defineWorkersConfig({
   test: {
@@ -41,6 +42,8 @@ export default defineWorkersConfig({
   resolve: {
     alias: {
       '@': '/src',
+      // Mock bun:sqlite for Vitest - the actual module is only available in Bun runtime
+      'bun:sqlite': path.resolve(__dirname, 'test/mocks/bun-sqlite.ts'),
     },
   },
 });

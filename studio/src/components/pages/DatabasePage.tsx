@@ -7,6 +7,7 @@ import Card from '@leafygreen-ui/card'
 import Icon from '@leafygreen-ui/icon'
 import { useCollectionsQuery } from '@hooks/useQueries'
 import { SkeletonLoader } from '../SkeletonLoader'
+import { getClickableProps } from '@/utils/keyboard'
 
 const pageStyles = css`
   max-width: 1200px;
@@ -109,25 +110,29 @@ export function DatabasePage() {
         </div>
       ) : (
         <div className={gridStyles}>
-          {collections?.map((coll) => (
-            <Card
-              key={coll.name}
-              className={cardStyles}
-              onClick={() => navigate(`/db/${database}/${coll.name}`)}
-            >
-              <div className={cardContentStyles}>
-                <div className={iconContainerStyles}>
-                  <Icon glyph="Folder" />
+          {collections?.map((coll) => {
+            const handleCardClick = () => navigate(`/db/${database}/${coll.name}`)
+            return (
+              <Card
+                key={coll.name}
+                className={cardStyles}
+                onClick={handleCardClick}
+                {...getClickableProps(handleCardClick)}
+              >
+                <div className={cardContentStyles}>
+                  <div className={iconContainerStyles}>
+                    <Icon glyph="Folder" />
+                  </div>
+                  <div>
+                    <Subtitle>{coll.name}</Subtitle>
+                    <Body style={{ color: palette.gray.dark1 }}>
+                      {coll.type === 'view' ? 'View' : 'Collection'}
+                    </Body>
+                  </div>
                 </div>
-                <div>
-                  <Subtitle>{coll.name}</Subtitle>
-                  <Body style={{ color: palette.gray.dark1 }}>
-                    {coll.type === 'view' ? 'View' : 'Collection'}
-                  </Body>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>

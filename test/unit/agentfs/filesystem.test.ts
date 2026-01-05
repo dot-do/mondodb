@@ -1097,15 +1097,22 @@ describe('AgentFS Filesystem', () => {
     })
 
     it('overwriting existing file updates timestamp', async () => {
+      vi.useFakeTimers()
+      const startTime = new Date('2024-01-01T00:00:00Z')
+      vi.setSystemTime(startTime)
+
       await fs.writeFile('/test.txt', 'v1')
       const stat1 = await fs.statFile('/test.txt')
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      // Advance time by 1 second
+      vi.advanceTimersByTime(1000)
 
       await fs.writeFile('/test.txt', 'v2')
       const stat2 = await fs.statFile('/test.txt')
 
       expect(stat2!.updatedAt.getTime()).toBeGreaterThan(stat1!.updatedAt.getTime())
+
+      vi.useRealTimers()
     })
 
     it('empty content handling - write and read', async () => {

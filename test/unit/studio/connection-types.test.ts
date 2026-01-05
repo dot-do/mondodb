@@ -204,16 +204,11 @@ describe('Connection Types', () => {
       expect(id).toMatch(/^conn_/)
     })
 
-    it('generates IDs with timestamp', () => {
-      const before = Date.now()
+    it('generates IDs with UUID format', () => {
       const id = generateConnectionId()
-      const after = Date.now()
-
-      const timestampPart = id.split('_')[1]
-      const timestamp = parseInt(timestampPart!, 10)
-
-      expect(timestamp).toBeGreaterThanOrEqual(before)
-      expect(timestamp).toBeLessThanOrEqual(after)
+      // UUID format after conn_ prefix: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      const uuidPart = id.slice('conn_'.length)
+      expect(uuidPart).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     })
   })
 

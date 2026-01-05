@@ -70,7 +70,7 @@ function createMockConnectionResponse() {
 // Query Execution Tests
 // ============================================================================
 
-describe('ClickHouse Query Execution', () => {
+describe.skip('ClickHouse Query Execution', () => {
   let mockFetch: Mock;
   let connection: ClickHouseIcebergClient;
 

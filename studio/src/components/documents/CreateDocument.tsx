@@ -112,6 +112,13 @@ export function CreateDocument({
     setError(null)
   }, [])
 
+  const handleClose = useCallback(() => {
+    setValue(DEFAULT_DOCUMENT)
+    setError(null)
+    setIsValid(true)
+    onClose()
+  }, [onClose])
+
   const handleSubmit = useCallback(async () => {
     setError(null)
 
@@ -138,14 +145,7 @@ export function CreateDocument({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to insert document')
     }
-  }, [value, insertMutation, onSuccess])
-
-  const handleClose = useCallback(() => {
-    setValue(DEFAULT_DOCUMENT)
-    setError(null)
-    setIsValid(true)
-    onClose()
-  }, [onClose])
+  }, [value, insertMutation, onSuccess, handleClose])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

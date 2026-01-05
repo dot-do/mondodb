@@ -31,10 +31,12 @@ describe('Miniflare Fallback Evaluator', () => {
       expect(typeof result).toBe('boolean')
     })
 
-    it('should return true when miniflare is installed', async () => {
-      // In test environment, miniflare should be available
+    it('should return false in vitest-pool-workers environment (miniflare uses Node.js APIs)', async () => {
+      // In vitest-pool-workers, miniflare cannot be imported because it requires
+      // Node.js APIs (like node:os) that are not available in the Workers environment.
+      // This test validates that isMiniflareAvailable correctly detects this limitation.
       const result = await isMiniflareAvailable()
-      expect(result).toBe(true)
+      expect(result).toBe(false)
     })
   })
 

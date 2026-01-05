@@ -9,7 +9,7 @@
  * implemented.
  */
 
-import type { VectorizeIndex, Ai, VectorizeMetadataValue } from '../types/vectorize'
+import type { VectorizeIndex, Ai, VectorizeMetadataValue, EmbeddingResult } from '../types/vectorize'
 
 /**
  * Options for configuring the VectorTranslator
@@ -42,6 +42,10 @@ export interface VectorSearchStage {
   limit: number
   /** Optional filter for pre-filtering documents */
   filter?: Record<string, VectorizeMetadataValue>
+  /** Optional field name to store the similarity score in results */
+  scoreField?: string
+  /** Whether to perform exact (brute-force) search instead of approximate */
+  exact?: boolean
 }
 
 /**
@@ -55,10 +59,7 @@ export interface VectorSearchResult {
 }
 
 /**
- * VectorTranslator class stub - RED phase
- *
- * This class is intentionally not implemented. Tests should compile
- * but fail because methods throw "Not implemented" errors.
+ * VectorTranslator class for translating MongoDB $vectorSearch to Cloudflare Vectorize
  */
 export class VectorTranslator {
   /** The embedding model to use for text-to-vector conversion */
@@ -87,30 +88,57 @@ export class VectorTranslator {
   }
 
   /**
-   * Translate a MongoDB $vectorSearch stage (sync version for CTE-based pipelines)
-   */
-  translateVectorSearch(
-    _stage: VectorSearchStage,
-    _collectionName: string
-  ): VectorSearchResult {
-    // Return empty result for sync translation - actual vector search happens at execution time
-    return { docIds: [], scores: [] }
-  }
-
-  /**
-   * Translate a MongoDB $vectorSearch stage to Cloudflare Vectorize query (async)
+   * Translate a MongoDB $vectorSearch stage to Cloudflare Vectorize query
    *
    * @param stage - The $vectorSearch stage from the aggregation pipeline
    * @param collectionName - The name of the collection being searched
    * @returns Promise resolving to document IDs and scores
    * @throws Error if queryVector not provided and AI binding not configured
    */
-  async translateVectorSearchAsync(
-    _stage: VectorSearchStage,
+  async translateVectorSearch(
+    stage: VectorSearchStage,
     _collectionName: string
   ): Promise<VectorSearchResult> {
-    // RED phase stub - not implemented
-    throw new Error('VectorTranslator.translateVectorSearchAsync not implemented')
+    // Get the query vector - either from stage or by generating embedding
+    let queryVector: number[]
+
+    if (stage.queryVector) {
+      queryVector = stage.queryVector
+    } else if (stage.queryText) {
+      if (!this.ai) {
+        throw new Error('AI binding is required to generate embeddings from queryText')
+      }
+      queryVector = await this.embedText(stage.queryText)
+    } else {
+      throw new Error('queryVector is required when AI binding is not configured')
+    }
+
+    // Build query options for Vectorize
+    const queryOptions: { topK: number; filter?: Record<string, VectorizeMetadataValue> } = {
+      topK: stage.limit,
+    }
+
+    if (stage.filter) {
+      queryOptions.filter = stage.filter
+    }
+
+    // Execute vector search
+    const result = await this.vectorize.query(queryVector, queryOptions)
+
+    // Extract doc IDs (strip collection prefix) and scores
+    const docIds: string[] = []
+    const scores: number[] = []
+
+    for (const match of result.matches) {
+      // Vector IDs are stored as "collection:docId"
+      const id = match.id
+      const colonIdx = id.indexOf(':')
+      const docId = colonIdx >= 0 ? id.slice(colonIdx + 1) : id
+      docIds.push(docId)
+      scores.push(match.score)
+    }
+
+    return { docIds, scores }
   }
 
   /**
@@ -120,8 +148,23 @@ export class VectorTranslator {
    * @returns Promise resolving to the embedding vector
    * @throws Error if AI binding not configured
    */
-  async embedText(_text: string): Promise<number[]> {
-    // RED phase stub - not implemented
-    throw new Error('VectorTranslator.embedText not implemented')
+  async embedText(text: string): Promise<number[]> {
+    if (!this.ai) {
+      throw new Error('AI binding is not configured')
+    }
+
+    try {
+      const result = await this.ai.run<EmbeddingResult>(this.embeddingModel, { text })
+      // AI returns { data: [[embedding values]] }
+      if (result.data && Array.isArray(result.data) && result.data.length > 0) {
+        return result.data[0]
+      }
+      throw new Error('Unexpected embedding result format')
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('AI binding')) {
+        throw err
+      }
+      throw err
+    }
   }
 }

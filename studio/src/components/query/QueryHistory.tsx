@@ -399,13 +399,17 @@ export function QueryHistory({
                 >
                   <span>{entry.isFavorite ? 'Remove from favorites' : 'Add to favorites'}</span>
                 </Tooltip>
-                <Tooltip trigger={<span>Delete</span>}>
-                  <IconButton
-                    aria-label="Delete from history"
-                    onClick={(e) => handleDelete(e, entry.id)}
-                  >
-                    <Icon glyph="X" />
-                  </IconButton>
+                <Tooltip
+                  trigger={
+                    <IconButton
+                      aria-label="Delete from history"
+                      onClick={(e) => handleDelete(e, entry.id)}
+                    >
+                      <Icon glyph="X" />
+                    </IconButton>
+                  }
+                >
+                  <span>Delete</span>
                 </Tooltip>
               </div>
             </div>

@@ -8,7 +8,14 @@
  */
 
 export * from './iceberg';
-export * from './query';
+export {
+  executeQuery,
+  executeQueryWithParams,
+  createQueryBuilder,
+  cancelQuery,
+  type QueryOptions,
+  type ClickHouseQueryBuilder,
+} from './query';
 export * from './query-executor';
 export * from './mapper';
 export * from './olap-backend';

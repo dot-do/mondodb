@@ -7,6 +7,7 @@ import IconButton from '@leafygreen-ui/icon-button'
 import { useConnectionStore } from '@stores/connection'
 import { useDatabasesQuery, useCollectionsQuery } from '@hooks/useQueries'
 import { SkeletonLoader } from './SkeletonLoader'
+import { getClickableProps } from '@/utils/keyboard'
 
 const sidebarHeaderStyles = css`
   padding: 16px;
@@ -121,12 +122,15 @@ function DatabaseNavItem({
     isExpanded
   )
 
+  const handleDbClick = () => navigate(`/db/${name}`)
+
   return (
     <div>
       <div
         className={navItemStyles}
         data-active={isActive}
-        onClick={() => navigate(`/db/${name}`)}
+        onClick={handleDbClick}
+        {...getClickableProps(handleDbClick)}
       >
         <Icon glyph="Database" />
         <Body>{name}</Body>
@@ -137,17 +141,21 @@ function DatabaseNavItem({
           {isLoading ? (
             <SkeletonLoader count={2} />
           ) : (
-            collections?.map((coll) => (
-              <div
-                key={coll.name}
-                className={navItemStyles}
-                data-active={coll.name === activeCollection}
-                onClick={() => navigate(`/db/${name}/${coll.name}`)}
-              >
-                <Icon glyph="Folder" />
-                <Body>{coll.name}</Body>
-              </div>
-            ))
+            collections?.map((coll) => {
+              const handleCollClick = () => navigate(`/db/${name}/${coll.name}`)
+              return (
+                <div
+                  key={coll.name}
+                  className={navItemStyles}
+                  data-active={coll.name === activeCollection}
+                  onClick={handleCollClick}
+                  {...getClickableProps(handleCollClick)}
+                >
+                  <Icon glyph="Folder" />
+                  <Body>{coll.name}</Body>
+                </div>
+              )
+            })
           )}
         </div>
       )}

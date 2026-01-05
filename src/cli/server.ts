@@ -211,27 +211,38 @@ export function parseArgs(args: string[]): CLIOptions {
 // ============================================================================
 
 /**
- * Validate CLI options and throw descriptive errors if invalid.
+ * Validation result returned by validateOptions.
+ */
+export interface ValidationResult {
+  /** Whether all options are valid */
+  valid: boolean
+  /** Array of error messages (empty if valid) */
+  errors: string[]
+}
+
+/**
+ * Validate CLI options and return a result with all validation errors.
  *
  * Validates:
  * - Port is a valid integer between 1 and 65535
  * - Host is a non-empty string
- * - Data directory is a non-empty string
+ * - Data directory is a non-empty string (unless in remote mode)
  * - Remote URL (if provided) is a valid HTTP/HTTPS URL
  *
  * @param options - CLI options to validate
- * @throws {Error} If any option is invalid with a descriptive message
+ * @returns ValidationResult with valid boolean and errors array
  *
  * @example
  * ```typescript
- * try {
- *   validateOptions({ port: 0, host: 'localhost', ... })
- * } catch (error) {
- *   // "Invalid port: 0. Port must be an integer between 1 and 65535."
+ * const result = validateOptions({ port: 0, host: 'localhost', ... })
+ * if (!result.valid) {
+ *   console.error(result.errors.join('\n'))
  * }
  * ```
  */
-export function validateOptions(options: CLIOptions): void {
+export function validateOptions(options: CLIOptions): ValidationResult {
+  const errors: string[] = []
+
   // Validate port
   if (
     typeof options.port !== 'number' ||
@@ -240,36 +251,40 @@ export function validateOptions(options: CLIOptions): void {
     options.port < 1 ||
     options.port > 65535
   ) {
-    throw new Error(`Invalid port: ${options.port}. Port must be an integer between 1 and 65535.`)
+    errors.push(`Invalid port: ${options.port}. Port must be an integer between 1 and 65535.`)
   }
 
   // Validate host
-  if (!options.host || typeof options.host !== 'string') {
-    throw new Error('Invalid host: host cannot be empty')
+  if (!options.host || typeof options.host !== 'string' || options.host.trim() === '') {
+    errors.push('Invalid host: host cannot be empty')
   }
 
-  // Validate dataDir
-  if (!options.dataDir || typeof options.dataDir !== 'string') {
-    throw new Error('Invalid data directory: path cannot be empty')
+  // Validate dataDir only if not in remote mode
+  if (!options.remote) {
+    if (!options.dataDir || typeof options.dataDir !== 'string' || options.dataDir.trim() === '') {
+      errors.push('Invalid data directory: path cannot be empty')
+    }
   }
 
   // Validate remote URL if provided
   if (options.remote !== undefined) {
-    if (!options.remote || typeof options.remote !== 'string') {
-      throw new Error('Invalid remote URL: URL cannot be empty')
+    if (!options.remote || typeof options.remote !== 'string' || options.remote.trim() === '') {
+      errors.push('Invalid remote URL: URL cannot be empty. Use https://your-worker.workers.dev')
+    } else {
+      try {
+        const url = new URL(options.remote)
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+          errors.push(`Invalid remote URL: protocol must be http or https, got "${url.protocol.slice(0, -1)}"`)
+        }
+      } catch {
+        errors.push(`Invalid remote URL: "${options.remote}" is not a valid URL. Use https://your-worker.workers.dev`)
+      }
     }
+  }
 
-    try {
-      const url = new URL(options.remote)
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        throw new Error(`Invalid remote URL: unsupported protocol "${url.protocol}"`)
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('unsupported protocol')) {
-        throw e
-      }
-      throw new Error(`Invalid remote URL: "${options.remote}" is not a valid URL`)
-    }
+  return {
+    valid: errors.length === 0,
+    errors,
   }
 }
 
@@ -421,7 +436,10 @@ export async function runServer(
   backend?: MondoBackend
 ): Promise<ServerController> {
   // Validate options first
-  validateOptions(options)
+  const validationResult = validateOptions(options)
+  if (!validationResult.valid) {
+    throw new Error(validationResult.errors[0])
+  }
 
   // Create backend if not provided
   const serverBackend = backend ?? await createBackend(options)

@@ -67,8 +67,9 @@ export const useConnectionStore = create<ConnectionState>()(
         set({ isConnecting: true, error: null })
 
         try {
-          // Test connection by fetching health endpoint
-          const response = await fetch('/api/health')
+          // Test connection by fetching health endpoint using the connection's URL
+          const healthUrl = new URL('/api/health', connection.url).toString()
+          const response = await fetch(healthUrl)
           if (!response.ok) {
             throw new Error('Failed to connect to mondodb')
           }

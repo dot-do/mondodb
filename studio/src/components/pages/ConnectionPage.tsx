@@ -92,10 +92,16 @@ export function ConnectionPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const id = addConnection({ name: name || 'New Connection', url })
-    setShowForm(false)
-    setName('')
-    await connect(id)
-    navigate('/db/default')
+    try {
+      await connect(id)
+      // Only reset form and navigate after successful connection
+      setShowForm(false)
+      setName('')
+      navigate('/db/default')
+    } catch {
+      // Connection failed - keep form visible with user's input preserved
+      // The error will be displayed via the error state from useConnectionStore
+    }
   }
 
   const handleConnect = async (id: string) => {

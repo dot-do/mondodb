@@ -14,6 +14,48 @@ vi.mock('@hooks/useQueries', async (importOriginal) => {
   }
 })
 
+// Mock the JsonEditor component since CodeMirror doesn't work in jsdom
+vi.mock('../JsonEditor', () => ({
+  JsonEditor: ({ value, onChange, onValidChange, 'data-testid': testId }: {
+    value: string
+    onChange: (value: string) => void
+    onValidChange?: (valid: boolean) => void
+    'data-testid'?: string
+  }) => {
+    return (
+      <textarea
+        data-testid={testId || 'json-editor-mock'}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+          if (onValidChange) {
+            try {
+              JSON.parse(e.target.value)
+              onValidChange(true)
+            } catch {
+              onValidChange(false)
+            }
+          }
+        }}
+      />
+    )
+  },
+  formatJson: (str: string) => {
+    try {
+      return JSON.stringify(JSON.parse(str), null, 2)
+    } catch {
+      return str
+    }
+  },
+  parseJsonSafe: <T,>(str: string): { success: true; data: T } | { success: false; error: string } => {
+    try {
+      return { success: true, data: JSON.parse(str) as T }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Invalid JSON' }
+    }
+  },
+}))
+
 describe('CreateDocument', () => {
   const defaultProps = {
     database: 'testdb',
@@ -36,8 +78,11 @@ describe('CreateDocument', () => {
   })
 
   afterEach(() => {
-    vi.runOnlyPendingTimers()
-    vi.useRealTimers()
+    // Only run pending timers if fake timers are active
+    if (vi.isFakeTimers()) {
+      vi.runOnlyPendingTimers()
+      vi.useRealTimers()
+    }
   })
 
   describe('rendering', () => {
@@ -113,9 +158,37 @@ describe('CreateDocument', () => {
       })
     })
 
-    it('shows error message on mutation failure', async () => {
-      mockMutateAsync.mockRejectedValue(new Error('Insert failed'))
+    it('uses latest onClose callback after prop change (stale closure test)', async () => {
+      // This test verifies that handleSubmit uses the current handleClose,
+      // not a stale version captured at initial render.
+      // If handleClose is missing from useCallback deps, this would fail.
+      const firstOnClose = vi.fn()
+      const secondOnClose = vi.fn()
+      mockMutateAsync.mockResolvedValue({ insertedId: 'new-id' })
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+      const { rerender } = render(
+        <CreateDocument {...defaultProps} onClose={firstOnClose} />
+      )
+
+      // Update onClose prop before submitting
+      rerender(<CreateDocument {...defaultProps} onClose={secondOnClose} />)
+
+      // Submit the form - should use the updated onClose (via handleClose)
+      await user.click(screen.getByTestId('create-document-submit'))
+
+      await waitFor(() => {
+        // The second (updated) onClose should be called, not the first
+        expect(secondOnClose).toHaveBeenCalled()
+        expect(firstOnClose).not.toHaveBeenCalled()
+      })
+    })
+
+    it('shows error message on mutation failure', async () => {
+      // Use real timers for this test
+      vi.useRealTimers()
+      mockMutateAsync.mockRejectedValue(new Error('Insert failed'))
+      const user = userEvent.setup()
 
       render(<CreateDocument {...defaultProps} />)
       await user.click(screen.getByTestId('create-document-submit'))
@@ -125,6 +198,9 @@ describe('CreateDocument', () => {
           'Insert failed'
         )
       })
+
+      // Restore fake timers for other tests
+      vi.useFakeTimers({ shouldAdvanceTime: true })
     })
 
     it('shows loading state during insert', async () => {
@@ -138,7 +214,8 @@ describe('CreateDocument', () => {
       expect(screen.getByTestId('create-document-submit')).toHaveTextContent(
         'Inserting...'
       )
-      expect(screen.getByTestId('create-document-submit')).toBeDisabled()
+      // LeafyGreen buttons use aria-disabled instead of native disabled attribute
+      expect(screen.getByTestId('create-document-submit')).toHaveAttribute('aria-disabled', 'true')
     })
   })
 

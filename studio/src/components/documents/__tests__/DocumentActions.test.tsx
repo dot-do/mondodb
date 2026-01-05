@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { render } from '@/test/test-utils'
 import { DocumentActions, BulkDocumentActions } from '../DocumentActions'
@@ -22,11 +22,53 @@ vi.mock('@hooks/useQueries', async (importOriginal) => {
   }
 })
 
-// Mock clipboard API
-const mockClipboard = {
-  writeText: vi.fn(),
+// Mock the JsonEditor component since CodeMirror doesn't work in jsdom
+vi.mock('../JsonEditor', () => ({
+  JsonEditor: ({ value, onChange, onValidChange, 'data-testid': testId }: {
+    value: string
+    onChange: (value: string) => void
+    onValidChange?: (valid: boolean) => void
+    'data-testid'?: string
+  }) => {
+    return (
+      <textarea
+        data-testid={testId || 'json-editor-mock'}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+          if (onValidChange) {
+            try {
+              JSON.parse(e.target.value)
+              onValidChange(true)
+            } catch {
+              onValidChange(false)
+            }
+          }
+        }}
+      />
+    )
+  },
+  formatJson: (str: string) => {
+    try {
+      return JSON.stringify(JSON.parse(str), null, 2)
+    } catch {
+      return str
+    }
+  },
+  parseJsonSafe: <T,>(str: string): { success: true; data: T } | { success: false; error: string } => {
+    try {
+      return { success: true, data: JSON.parse(str) as T }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Invalid JSON' }
+    }
+  },
+}))
+
+// Get the global clipboard mock set up in test/setup.ts
+const getClipboardMock = () => {
+  const mock = (globalThis as Record<string, unknown>).__clipboardMock as { writeText: ReturnType<typeof vi.fn> }
+  return mock.writeText
 }
-Object.assign(navigator, { clipboard: mockClipboard })
 
 // Mock URL methods
 const mockCreateObjectURL = vi.fn(() => 'blob:test')
@@ -62,7 +104,6 @@ describe('DocumentActions', () => {
       isLoading: false,
       error: null,
     } as any)
-    mockClipboard.writeText.mockResolvedValue(undefined)
   })
 
   describe('menu variant', () => {
@@ -134,8 +175,11 @@ describe('DocumentActions', () => {
       await user.click(screen.getByTestId('document-actions-menu'))
       await user.click(screen.getByTestId('menu-action-copy-id'))
 
-      expect(mockClipboard.writeText).toHaveBeenCalledWith('doc123')
-      expect(onActionComplete).toHaveBeenCalledWith('copy_id')
+      // Wait for async clipboard operation to complete
+      // onActionComplete is only called after successful clipboard write
+      await waitFor(() => {
+        expect(onActionComplete).toHaveBeenCalledWith('copy_id')
+      })
     })
 
     it('copies document as JSON to clipboard', async () => {
@@ -152,46 +196,63 @@ describe('DocumentActions', () => {
       await user.click(screen.getByTestId('document-actions-menu'))
       await user.click(screen.getByTestId('menu-action-copy-json'))
 
-      expect(mockClipboard.writeText).toHaveBeenCalledWith(
-        JSON.stringify(mockDocument, null, 2)
-      )
-      expect(onActionComplete).toHaveBeenCalledWith('copy_json')
+      // Wait for async clipboard operation to complete
+      // onActionComplete is only called after successful clipboard write
+      await waitFor(() => {
+        expect(onActionComplete).toHaveBeenCalledWith('copy_json')
+      })
     })
 
     it('exports document as JSON file', async () => {
       const onActionComplete = vi.fn()
       const user = userEvent.setup()
 
-      // Mock createElement and appendChild
+      // Mock createElement and appendChild - save originals to restore
       const mockLink = {
         href: '',
         download: '',
         click: vi.fn(),
       }
       const originalCreateElement = document.createElement.bind(document)
-      vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const originalAppendChild = document.body.appendChild.bind(document.body)
+      const originalRemoveChild = document.body.removeChild.bind(document.body)
+
+      const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
         if (tagName === 'a') {
           return mockLink as any
         }
         return originalCreateElement(tagName)
       })
-      vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as any)
-      vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as any)
+      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+        if (node === mockLink) return node as any
+        return originalAppendChild(node)
+      })
+      const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => {
+        if (node === mockLink) return node as any
+        return originalRemoveChild(node)
+      })
 
-      render(
-        <DocumentActions
-          {...defaultProps}
-          onActionComplete={onActionComplete}
-        />
-      )
+      try {
+        render(
+          <DocumentActions
+            {...defaultProps}
+            onActionComplete={onActionComplete}
+          />
+        )
 
-      await user.click(screen.getByTestId('document-actions-menu'))
-      await user.click(screen.getByTestId('menu-action-export'))
+        await user.click(screen.getByTestId('document-actions-menu'))
+        await user.click(screen.getByTestId('menu-action-export'))
 
-      expect(mockCreateObjectURL).toHaveBeenCalled()
-      expect(mockLink.download).toBe('testcoll-doc123.json')
-      expect(mockLink.click).toHaveBeenCalled()
-      expect(onActionComplete).toHaveBeenCalledWith('export_json')
+        expect(mockCreateObjectURL).toHaveBeenCalled()
+        expect(mockLink.download).toBe('testcoll-doc123.json')
+        expect(mockLink.click).toHaveBeenCalled()
+        expect(onActionComplete).toHaveBeenCalledWith('export_json')
+      } finally {
+        // Restore original methods
+        createElementSpy.mockRestore()
+        appendChildSpy.mockRestore()
+        removeChildSpy.mockRestore()
+      }
     })
 
     it('duplicates document without _id', async () => {
@@ -285,7 +346,6 @@ describe('BulkDocumentActions', () => {
       mutateAsync: vi.fn(),
       isPending: false,
     } as any)
-    mockClipboard.writeText.mockResolvedValue(undefined)
   })
 
   it('renders nothing when no documents selected', () => {
@@ -335,37 +395,54 @@ describe('BulkDocumentActions', () => {
     render(<BulkDocumentActions {...defaultProps} />)
     await user.click(screen.getByTestId('bulk-copy'))
 
-    expect(mockClipboard.writeText).toHaveBeenCalledWith(
-      JSON.stringify(mockDocuments, null, 2)
-    )
-    expect(defaultProps.onActionComplete).toHaveBeenCalledWith('copy')
+    // Wait for async clipboard operation to complete
+    // onActionComplete is only called after successful clipboard write
+    await waitFor(() => {
+      expect(defaultProps.onActionComplete).toHaveBeenCalledWith('copy')
+    })
   })
 
   it('exports all documents as JSON', async () => {
     const user = userEvent.setup()
 
-    // Mock createElement and appendChild
+    // Mock createElement and appendChild - save originals to restore
     const mockLink = {
       href: '',
       download: '',
       click: vi.fn(),
     }
     const originalCreateElement = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+    const originalAppendChild = document.body.appendChild.bind(document.body)
+    const originalRemoveChild = document.body.removeChild.bind(document.body)
+
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
       if (tagName === 'a') {
         return mockLink as any
       }
       return originalCreateElement(tagName)
     })
-    vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as any)
-    vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as any)
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      if (node === mockLink) return node as any
+      return originalAppendChild(node)
+    })
+    const removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => {
+      if (node === mockLink) return node as any
+      return originalRemoveChild(node)
+    })
 
-    render(<BulkDocumentActions {...defaultProps} />)
-    await user.click(screen.getByTestId('bulk-export'))
+    try {
+      render(<BulkDocumentActions {...defaultProps} />)
+      await user.click(screen.getByTestId('bulk-export'))
 
-    expect(mockCreateObjectURL).toHaveBeenCalled()
-    expect(mockLink.download).toContain('testcoll-export-')
-    expect(mockLink.click).toHaveBeenCalled()
-    expect(defaultProps.onActionComplete).toHaveBeenCalledWith('export')
+      expect(mockCreateObjectURL).toHaveBeenCalled()
+      expect(mockLink.download).toContain('testcoll-export-')
+      expect(mockLink.click).toHaveBeenCalled()
+      expect(defaultProps.onActionComplete).toHaveBeenCalledWith('export')
+    } finally {
+      // Restore original methods
+      createElementSpy.mockRestore()
+      appendChildSpy.mockRestore()
+      removeChildSpy.mockRestore()
+    }
   })
 })

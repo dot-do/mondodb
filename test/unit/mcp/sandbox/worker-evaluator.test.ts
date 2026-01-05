@@ -104,7 +104,8 @@ describe('Worker Loader Evaluator', () => {
 
       const ids = getCapturedIds()
       expect(ids.length).toBe(1)
-      expect(ids[0]).toMatch(/^sandbox-\d+-[a-z0-9]+$/)
+      // UUID format: sandbox-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+      expect(ids[0]).toMatch(/^sandbox-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     })
   })
 
