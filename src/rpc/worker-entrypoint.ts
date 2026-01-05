@@ -189,8 +189,8 @@ export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // Health check endpoint
-    if (url.pathname === '/health') {
+    // Health check endpoint (support both /health and /api/health)
+    if (url.pathname === '/health' || url.pathname === '/api/health') {
       return new Response(JSON.stringify({ status: 'healthy' }), {
         headers: { 'Content-Type': 'application/json' },
       });

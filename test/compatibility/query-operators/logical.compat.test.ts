@@ -4,17 +4,17 @@ import { TestProvider } from '../providers/types'
 
 describe('Logical Query Operators Compatibility', () => {
   let mongodb: TestProvider
-  let mongo.do: TestProvider
+  let mondodo: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mongo.do = providers.mongo.do
+    mondodo = providers.mondodo
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mongo.do)
+    await cleanupProviders(mongodb, mondodo)
   })
 
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('Logical Query Operators Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_logical_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mongo.do.database(dbName).collection('items')
+    const mondoCol = mondodo.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', x: 1, y: 10, active: true },

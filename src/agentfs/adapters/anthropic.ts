@@ -131,6 +131,22 @@ export interface StreamingConfig {
 }
 
 /**
+ * Tool call event data for logging
+ */
+export interface ToolCallEvent {
+  /** Tool name that was called */
+  tool: string
+  /** Arguments passed to the tool */
+  args: Record<string, unknown>
+  /** Result from the tool execution */
+  result: McpToolResponse
+  /** Duration of the tool call in milliseconds */
+  durationMs: number
+  /** Timestamp when the call started */
+  startedAt: Date
+}
+
+/**
  * Options for creating the adapter
  */
 export interface AdapterOptions {
@@ -140,6 +156,18 @@ export interface AdapterOptions {
   version?: string
   /** Enable audit logging (default: false) */
   enableAudit?: boolean
+  /** Enable filesystem search tools: glob, grep (default: true) */
+  enableSearch?: boolean
+  /** Enable file fetch tools: read (default: true) */
+  enableFetch?: boolean
+  /** Enable mutation tools: write, edit (default: true) */
+  enableDo?: boolean
+  /** Enable key-value store tools: kv_get, kv_set (default: true) */
+  enableKv?: boolean
+  /** Prefix for tool names (e.g., 'mondodb_' -> 'mondodb_glob') */
+  toolPrefix?: string
+  /** Callback for tool call logging/monitoring */
+  onToolCall?: (event: ToolCallEvent) => void
   /** Retry configuration */
   retry?: RetryConfig
   /** Timeout configuration */
@@ -165,6 +193,10 @@ export interface AgentFSMcpServer {
     args: Record<string, unknown>
   ): AsyncGenerator<McpToolResponse, void, undefined>
   registerTool(tool: McpRegisteredTool): void
+  /**
+   * Get server metadata and capabilities
+   */
+  getServerInfo(): ServerInfo
 }
 
 // =============================================================================
@@ -272,6 +304,40 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Wrap a tool handler with standardized error handling
+ *
+ * Ensures all errors are caught and returned as proper MCP error responses.
+ * This provides a consistent error handling pattern for all tool implementations.
+ *
+ * @example
+ * ```typescript
+ * const handler = wrapToolHandler(async (args) => {
+ *   const result = await someOperation(args.input)
+ *   return successResponse(JSON.stringify(result))
+ * })
+ * ```
+ */
+export function wrapToolHandler<T extends Record<string, unknown>>(
+  handler: (args: T) => Promise<McpToolResponse>
+): (args: T) => Promise<McpToolResponse> {
+  return async (args: T): Promise<McpToolResponse> => {
+    try {
+      return await handler(args)
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            error: error instanceof Error ? error.message : 'Unknown error',
+          }),
+        }],
+        isError: true,
+      }
+    }
+  }
+}
+
+/**
  * Calculate retry delay with exponential backoff and optional jitter
  */
 function calculateRetryDelay(
@@ -294,12 +360,48 @@ function calculateRetryDelay(
 // =============================================================================
 
 /**
+ * Server capabilities information
+ */
+export interface ServerCapabilities {
+  /** Filesystem search tools enabled */
+  search: boolean
+  /** File fetch/read tools enabled */
+  fetch: boolean
+  /** File mutation tools enabled */
+  do: boolean
+  /** Key-value store tools enabled */
+  kv: boolean
+  /** Audit logging enabled */
+  audit: boolean
+}
+
+/**
+ * Server information resource
+ */
+export interface ServerInfo {
+  /** Server name */
+  name: string
+  /** Server version */
+  version: string
+  /** Server capabilities */
+  capabilities: ServerCapabilities
+  /** List of registered tool names */
+  tools: string[]
+}
+
+/**
  * Full configuration with all defaults applied
  */
 interface ResolvedAdapterOptions {
   name: string
   version: string
   enableAudit: boolean
+  enableSearch: boolean
+  enableFetch: boolean
+  enableDo: boolean
+  enableKv: boolean
+  toolPrefix: string
+  onToolCall?: (event: ToolCallEvent) => void
   retry: Required<RetryConfig>
   timeout: Required<TimeoutConfig>
   streaming: Required<StreamingConfig>
@@ -327,9 +429,31 @@ export class AnthropicMCPAdapter {
       name: options.name ?? 'mongo.do-agentfs',
       version: options.version ?? '1.0.0',
       enableAudit: options.enableAudit ?? false,
+      enableSearch: options.enableSearch ?? true,
+      enableFetch: options.enableFetch ?? true,
+      enableDo: options.enableDo ?? true,
+      enableKv: options.enableKv ?? true,
+      toolPrefix: options.toolPrefix ?? '',
+      onToolCall: options.onToolCall,
       retry: { ...DEFAULT_RETRY_CONFIG, ...options.retry },
       timeout: { ...DEFAULT_TIMEOUT_CONFIG, ...options.timeout },
       streaming: { ...DEFAULT_STREAMING_CONFIG, ...options.streaming },
+    }
+  }
+
+  /**
+   * Apply tool prefix to a tool definition
+   */
+  private applyToolPrefix(tool: McpRegisteredTool): McpRegisteredTool {
+    if (!this.options.toolPrefix) {
+      return tool
+    }
+    return {
+      definition: {
+        ...tool.definition,
+        name: `${this.options.toolPrefix}${tool.definition.name}`,
+      },
+      handler: tool.handler,
     }
   }
 
@@ -340,20 +464,41 @@ export class AnthropicMCPAdapter {
     const tools = new Map<string, McpRegisteredTool>()
     const options = this.options
 
-    // Register all tools
-    const toolDefinitions = [
-      this.createGlobTool(),
-      this.createGrepTool(),
-      this.createReadTool(),
-      this.createWriteTool(),
-      this.createEditTool(),
-      this.createKvGetTool(),
-      this.createKvSetTool(),
-      this.createAuditListTool(),
-    ]
+    // Build tool list based on enabled capabilities
+    const toolDefinitions: McpRegisteredTool[] = []
 
+    // Search tools (glob, grep)
+    if (options.enableSearch) {
+      toolDefinitions.push(this.createGlobTool())
+      toolDefinitions.push(this.createGrepTool())
+    }
+
+    // Fetch/read tools
+    if (options.enableFetch) {
+      toolDefinitions.push(this.createReadTool())
+    }
+
+    // Mutation tools (write, edit)
+    if (options.enableDo) {
+      toolDefinitions.push(this.createWriteTool())
+      toolDefinitions.push(this.createEditTool())
+    }
+
+    // Key-value store tools
+    if (options.enableKv) {
+      toolDefinitions.push(this.createKvGetTool())
+      toolDefinitions.push(this.createKvSetTool())
+    }
+
+    // Audit tools (always available if audit provider exists)
+    if (this.provider.audit) {
+      toolDefinitions.push(this.createAuditListTool())
+    }
+
+    // Apply prefix and register tools
     for (const tool of toolDefinitions) {
-      tools.set(tool.definition.name, tool)
+      const prefixedTool = this.applyToolPrefix(tool)
+      tools.set(prefixedTool.definition.name, prefixedTool)
     }
 
     /**
@@ -413,6 +558,9 @@ export class AnthropicMCPAdapter {
       })
     }
 
+    // Capture adapter reference for closures
+    const adapterOptions = this.options
+
     const server: AgentFSMcpServer = {
       name: this.options.name,
       version: this.options.version,
@@ -427,9 +575,11 @@ export class AnthropicMCPAdapter {
           return errorResponse(new ToolNotFoundError(name))
         }
 
+        const startedAt = new Date()
+
         try {
           // Execute with retry and timeout
-          return await withRetry(
+          const result = await withRetry(
             () => withTimeout(
               () => tool.handler(args),
               options.timeout.requestTimeoutMs,
@@ -437,13 +587,56 @@ export class AnthropicMCPAdapter {
             ),
             name
           )
+
+          // Invoke logging callback if provided
+          if (adapterOptions.onToolCall) {
+            const durationMs = Date.now() - startedAt.getTime()
+            adapterOptions.onToolCall({
+              tool: name,
+              args,
+              result,
+              durationMs,
+              startedAt,
+            })
+          }
+
+          return result
         } catch (error) {
-          return errorResponse(error, name)
+          const errorResult = errorResponse(error, name)
+
+          // Invoke logging callback for errors too
+          if (adapterOptions.onToolCall) {
+            const durationMs = Date.now() - startedAt.getTime()
+            adapterOptions.onToolCall({
+              tool: name,
+              args,
+              result: errorResult,
+              durationMs,
+              startedAt,
+            })
+          }
+
+          return errorResult
         }
       },
 
       registerTool(tool: McpRegisteredTool): void {
         tools.set(tool.definition.name, tool)
+      },
+
+      getServerInfo(): ServerInfo {
+        return {
+          name: adapterOptions.name,
+          version: adapterOptions.version,
+          capabilities: {
+            search: adapterOptions.enableSearch,
+            fetch: adapterOptions.enableFetch,
+            do: adapterOptions.enableDo,
+            kv: adapterOptions.enableKv,
+            audit: adapterOptions.enableAudit,
+          },
+          tools: Array.from(tools.keys()),
+        }
       },
     }
 

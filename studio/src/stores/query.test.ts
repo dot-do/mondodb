@@ -149,6 +149,92 @@ describe('useQueryStore', () => {
       expect(result.current.validationErrors).toHaveLength(0)
       expect(result.current.isValid).toBe(true)
     })
+
+    it('isValid reflects validity across all tabs, not just the active one', () => {
+      const { result } = renderHook(() => useQueryStore())
+
+      // Set valid filter
+      act(() => {
+        result.current.setCurrentFilter('{ "name": "test" }')
+      })
+      expect(result.current.isValid).toBe(true)
+
+      // Set INVALID projection
+      act(() => {
+        result.current.setCurrentProjection('{ invalid json }')
+      })
+      expect(result.current.isValid).toBe(false)
+
+      // Now set a valid filter again - isValid should STILL be false
+      // because projection is invalid
+      act(() => {
+        result.current.setCurrentFilter('{ "status": "active" }')
+      })
+      // BUG: This currently returns true because only filter was validated
+      expect(result.current.isValid).toBe(false)
+    })
+
+    it('tracks validation errors per field', () => {
+      const { result } = renderHook(() => useQueryStore())
+
+      // Set invalid filter
+      act(() => {
+        result.current.setCurrentFilter('{ invalid filter }')
+      })
+
+      // Set invalid projection
+      act(() => {
+        result.current.setCurrentProjection('{ invalid projection }')
+      })
+
+      // Set valid sort
+      act(() => {
+        result.current.setCurrentSort('{ "createdAt": -1 }')
+      })
+
+      // isValid should be false because filter and projection are invalid
+      expect(result.current.isValid).toBe(false)
+
+      // Should have errors for filter and projection
+      expect(result.current.filterErrors?.length).toBeGreaterThan(0)
+      expect(result.current.projectionErrors?.length).toBeGreaterThan(0)
+      expect(result.current.sortErrors).toHaveLength(0)
+    })
+
+    it('becomes valid when all fields are fixed', () => {
+      const { result } = renderHook(() => useQueryStore())
+
+      // Set invalid values for all fields
+      act(() => {
+        result.current.setCurrentFilter('{ bad }')
+      })
+      act(() => {
+        result.current.setCurrentProjection('{ bad }')
+      })
+      act(() => {
+        result.current.setCurrentSort('{ bad }')
+      })
+
+      expect(result.current.isValid).toBe(false)
+
+      // Fix filter
+      act(() => {
+        result.current.setCurrentFilter('{}')
+      })
+      expect(result.current.isValid).toBe(false) // still invalid
+
+      // Fix projection
+      act(() => {
+        result.current.setCurrentProjection('')
+      })
+      expect(result.current.isValid).toBe(false) // still invalid
+
+      // Fix sort
+      act(() => {
+        result.current.setCurrentSort('')
+      })
+      expect(result.current.isValid).toBe(true) // now all valid
+    })
   })
 
   describe('execution state', () => {

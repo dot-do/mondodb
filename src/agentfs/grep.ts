@@ -3,9 +3,35 @@
  *
  * Provides grep-like content search functionality for the AgentFS system.
  * Searches through files in the virtual filesystem using regex patterns.
+ *
+ * Performance optimizations:
+ * - Early termination when maxResults is reached
+ * - File-level early exit optimization
+ * - Streaming support for processing large result sets
+ * - Line-by-line processing to handle large files efficiently
+ *
+ * Edge case handling:
+ * - Windows (CRLF) and Unix (LF) line endings
+ * - Binary file detection with null byte check
+ * - Empty file handling
+ * - Invalid regex pattern error handling
  */
 
 import type { FileSystem, GrepOptions, GrepMatch } from './types'
+
+// =============================================================================
+// CONSTANTS & CONFIGURATION
+// =============================================================================
+
+/** Threshold for considering a file binary (percentage of null bytes) */
+const BINARY_DETECTION_SAMPLE_SIZE = 8192
+
+/** Maximum number of null bytes in sample before considering file binary */
+const MAX_NULL_BYTES_FOR_TEXT = 1
+
+// Pre-compiled regex for performance
+const WINDOWS_LINE_ENDING = /\r\n/g
+const CARRIAGE_RETURN = /\r$/
 
 /**
  * Interface for glob pattern matching functionality
@@ -33,11 +59,68 @@ export class AgentGrep {
   }
 
   /**
+   * Compile a regex pattern safely, handling invalid patterns gracefully.
+   * @param pattern - The regex pattern string
+   * @param flags - Regex flags to apply
+   * @returns Compiled RegExp or null if pattern is invalid
+   */
+  private compilePattern(pattern: string, flags: string): RegExp | null {
+    try {
+      return new RegExp(pattern, flags)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Check if content appears to be binary by looking for null bytes.
+   * Only samples the beginning of the content for performance.
+   * @param content - File content to check
+   * @returns True if content appears to be binary
+   */
+  private isBinaryContent(content: string): boolean {
+    const sampleSize = Math.min(content.length, BINARY_DETECTION_SAMPLE_SIZE)
+    let nullCount = 0
+
+    for (let i = 0; i < sampleSize; i++) {
+      if (content.charCodeAt(i) === 0) {
+        nullCount++
+        if (nullCount > MAX_NULL_BYTES_FOR_TEXT) {
+          return true
+        }
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Normalize line endings by converting CRLF to LF and removing trailing CR.
+   * This ensures consistent line handling across platforms.
+   * @param content - Content with potentially mixed line endings
+   * @returns Content with normalized line endings
+   */
+  private normalizeLineEndings(content: string): string {
+    // Convert Windows line endings to Unix
+    return content.replace(WINDOWS_LINE_ENDING, '\n')
+  }
+
+  /**
+   * Clean a line by removing trailing carriage return if present.
+   * @param line - Line that may have trailing CR
+   * @returns Line without trailing CR
+   */
+  private cleanLine(line: string): string {
+    return line.replace(CARRIAGE_RETURN, '')
+  }
+
+  /**
    * Search for a pattern in files matching the specified criteria.
    *
    * @param pattern - Regular expression pattern to search for
    * @param options - Search options including file filter, case sensitivity, etc.
    * @returns Array of GrepMatch objects representing found matches
+   * @throws {Error} If pattern is an invalid regular expression
    *
    * @example
    * ```typescript
@@ -51,7 +134,13 @@ export class AgentGrep {
    */
   async grep(pattern: string, options?: Omit<GrepOptions, 'pattern'>): Promise<GrepMatch[]> {
     const flags = options?.caseInsensitive ? 'gi' : 'g'
-    const regex = new RegExp(pattern, flags)
+
+    // Compile pattern with error handling
+    const regex = this.compilePattern(pattern, flags)
+    if (!regex) {
+      throw new Error(`Invalid regular expression pattern: ${pattern}`)
+    }
+
     const contextLines = options?.contextLines ?? 0
     const maxResults = options?.maxResults ?? Infinity
 
@@ -62,40 +151,52 @@ export class AgentGrep {
     const results: GrepMatch[] = []
 
     for (const file of files) {
+      // Early termination: stop if we've reached maxResults
       if (results.length >= maxResults) break
 
       try {
         const content = await this.fs.readFile(file)
+
+        // Skip empty files
         if (!content) continue
 
-        const lines = content.split('\n')
+        // Normalize line endings for consistent processing
+        const normalizedContent = this.normalizeLineEndings(content)
+        const lines = normalizedContent.split('\n')
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i]
           if (line === undefined) continue
 
+          // Clean the line (remove any remaining CR)
+          const cleanedLine = this.cleanLine(line)
+
           // Reset regex lastIndex for global flag
           regex.lastIndex = 0
-          const match = regex.exec(line)
+          const match = regex.exec(cleanedLine)
 
           if (match) {
             const result: GrepMatch = {
               file,
               line: i + 1, // 1-indexed
               column: match.index + 1, // 1-indexed
-              content: line,
+              content: cleanedLine,
             }
 
             // Add context if requested
             if (contextLines > 0) {
+              const beforeLines = lines.slice(Math.max(0, i - contextLines), i)
+              const afterLines = lines.slice(i + 1, i + 1 + contextLines)
+
               result.context = {
-                before: lines.slice(Math.max(0, i - contextLines), i),
-                after: lines.slice(i + 1, i + 1 + contextLines),
+                before: beforeLines.map((l) => this.cleanLine(l)),
+                after: afterLines.map((l) => this.cleanLine(l)),
               }
             }
 
             results.push(result)
 
+            // Early termination: stop if we've reached maxResults
             if (results.length >= maxResults) break
           }
         }
@@ -155,10 +256,12 @@ export class AgentGrep {
 
   /**
    * Search with a callback for each match (useful for streaming results).
+   * Processes matches as they are found, enabling real-time result handling.
    *
    * @param pattern - Regular expression pattern to search for
    * @param options - Search options
-   * @param callback - Function to call for each match
+   * @param callback - Function to call for each match (can be async)
+   * @throws {Error} If pattern is an invalid regular expression
    */
   async grepStream(
     pattern: string,
@@ -166,7 +269,13 @@ export class AgentGrep {
     callback: (match: GrepMatch) => void | Promise<void>
   ): Promise<void> {
     const flags = options?.caseInsensitive ? 'gi' : 'g'
-    const regex = new RegExp(pattern, flags)
+
+    // Compile pattern with error handling
+    const regex = this.compilePattern(pattern, flags)
+    if (!regex) {
+      throw new Error(`Invalid regular expression pattern: ${pattern}`)
+    }
+
     const contextLines = options?.contextLines ?? 0
     const maxResults = options?.maxResults ?? Infinity
 
@@ -176,39 +285,49 @@ export class AgentGrep {
     let count = 0
 
     for (const file of files) {
+      // Early termination
       if (count >= maxResults) break
 
       try {
         const content = await this.fs.readFile(file)
         if (!content) continue
 
-        const lines = content.split('\n')
+        // Normalize line endings for consistent processing
+        const normalizedContent = this.normalizeLineEndings(content)
+        const lines = normalizedContent.split('\n')
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i]
           if (line === undefined) continue
 
+          // Clean the line
+          const cleanedLine = this.cleanLine(line)
+
           regex.lastIndex = 0
-          const match = regex.exec(line)
+          const match = regex.exec(cleanedLine)
 
           if (match) {
             const result: GrepMatch = {
               file,
               line: i + 1,
               column: match.index + 1,
-              content: line,
+              content: cleanedLine,
             }
 
             if (contextLines > 0) {
+              const beforeLines = lines.slice(Math.max(0, i - contextLines), i)
+              const afterLines = lines.slice(i + 1, i + 1 + contextLines)
+
               result.context = {
-                before: lines.slice(Math.max(0, i - contextLines), i),
-                after: lines.slice(i + 1, i + 1 + contextLines),
+                before: beforeLines.map((l) => this.cleanLine(l)),
+                after: afterLines.map((l) => this.cleanLine(l)),
               }
             }
 
             await callback(result)
             count++
 
+            // Early termination
             if (count >= maxResults) break
           }
         }

@@ -5,17 +5,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('deleteOne Compatibility', () => {
   let mongodb: TestProvider
-  let mongo.do: TestProvider
+  let mondodo: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mongo.do = providers.mongo.do
+    mondodo = providers.mondodo
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mongo.do)
+    await cleanupProviders(mongodb, mondodo)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('deleteOne Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_delete_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mongo.do.database(dbName).collection('items')
+    const mondoCol = mondodo.database(dbName).collection('items')
 
     const docs = [
       { name: 'Alice', group: 'A' },
@@ -80,7 +80,7 @@ describe('deleteOne Compatibility', () => {
   it('deletes by _id', async () => {
     const dbName = `test_delete_id_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mongo.do.database(dbName).collection('items')
+    const mondoCol = mondodo.database(dbName).collection('items')
 
     const id = new ObjectId()
     await mongoCol.insertOne({ _id: new ObjectId(id.toHexString()), name: 'Test' })
@@ -112,17 +112,17 @@ describe('deleteOne Compatibility', () => {
 
 describe('deleteMany Compatibility', () => {
   let mongodb: TestProvider
-  let mongo.do: TestProvider
+  let mondodo: TestProvider
   let testNum = 100
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mongo.do = providers.mongo.do
+    mondodo = providers.mondodo
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mongo.do)
+    await cleanupProviders(mongodb, mondodo)
   })
 
   beforeEach(() => {
@@ -132,7 +132,7 @@ describe('deleteMany Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_delete_many_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mongo.do.database(dbName).collection('items')
+    const mondoCol = mondodo.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', status: 'active' },
@@ -195,7 +195,7 @@ describe('deleteMany Compatibility', () => {
   it('delete from empty collection', async () => {
     const dbName = `test_delete_empty_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('empty')
-    const mondoCol = mongo.do.database(dbName).collection('empty')
+    const mondoCol = mondodo.database(dbName).collection('empty')
 
     const mongoResult = await mongoCol.deleteMany({})
     const mondoResult = await mondoCol.deleteMany({})

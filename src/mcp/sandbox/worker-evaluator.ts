@@ -7,11 +7,51 @@
  * - Database access through DB_PROXY binding
  * - Console.log capture
  * - Timeout enforcement
+ * - Content-based worker caching
+ * - Execution metrics tracking
+ * - TypeScript/JSX preprocessing
  */
 
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { generateSandboxCode } from './template'
 import type { WorkerLoader, WorkerCode, WorkerStub, WorkerEntrypoint } from '../../types/function'
+
+// =============================================================================
+// Worker Caching Strategy
+// =============================================================================
+
+/**
+ * Generate a content-based worker ID using SHA-256 hash.
+ * This enables efficient caching of workers with identical code.
+ *
+ * @param code - The user code to hash
+ * @returns A unique worker ID based on the code content
+ */
+export function getWorkerId(code: string): string {
+  const hash = createHash('sha256').update(code).digest('hex').slice(0, 16)
+  return `sandbox-${hash}`
+}
+
+// Track active workers for cleanup
+const activeWorkers = new Map<string, { createdAt: number; lastUsed: number }>()
+
+// =============================================================================
+// Execution Metrics
+// =============================================================================
+
+/**
+ * Execution metrics captured during sandbox code execution
+ */
+export interface ExecutionMetrics {
+  /** Total execution duration in milliseconds */
+  duration: number
+  /** Memory usage in bytes (if available) */
+  memoryUsage?: number
+  /** CPU time in milliseconds (if available) */
+  cpuTime?: number
+  /** Whether result was served from cache */
+  cached?: boolean
+}
 
 /**
  * Result returned from sandbox code execution
@@ -25,6 +65,8 @@ export interface EvaluatorResult {
   logs: string[]
   /** Error message (if !success) */
   error?: string
+  /** Execution metrics */
+  metrics?: ExecutionMetrics
 }
 
 /**

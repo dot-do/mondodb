@@ -4,6 +4,7 @@ import { Body } from '@leafygreen-ui/typography'
 import Badge from '@leafygreen-ui/badge'
 import Icon from '@leafygreen-ui/icon'
 import IconButton from '@leafygreen-ui/icon-button'
+import Tooltip from '@leafygreen-ui/tooltip'
 import { useConnectionStore } from '@stores/connection'
 
 const headerStyles = css`
@@ -62,9 +63,13 @@ export function Header() {
             <Icon glyph="Disconnect" />
           </IconButton>
         )}
-        <IconButton aria-label="Settings">
-          <Icon glyph="Settings" />
-        </IconButton>
+        <Tooltip trigger={
+          <IconButton aria-label="Settings" disabled>
+            <Icon glyph="Settings" />
+          </IconButton>
+        }>
+          Coming soon
+        </Tooltip>
       </div>
     </header>
   )

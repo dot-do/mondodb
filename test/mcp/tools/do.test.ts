@@ -220,7 +220,7 @@ describe('doTool', () => {
 
       expect(result.isError).toBe(true)
       expect(doResult.success).toBe(false)
-      expect(doResult.error).toContain('code')
+      expect(doResult.error).toContain('non-empty string')
     })
 
     it('should return error for whitespace-only code', async () => {

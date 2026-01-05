@@ -63,6 +63,7 @@ export {
   AnthropicMCPAdapter,
   createMonDoMcpServer,
   createAgentFSVercelTools,
+  wrapToolHandler,
 } from './adapters'
 export type {
   AgentFSProvider,
@@ -73,4 +74,7 @@ export type {
   AgentFSToolContext,
   VercelToolDefinition,
   AgentFSVercelTools,
+  ToolCallEvent,
+  ServerCapabilities,
+  ServerInfo,
 } from './adapters'

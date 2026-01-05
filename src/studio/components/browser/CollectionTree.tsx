@@ -8,7 +8,7 @@
  * - Empty states when no data
  */
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { CollectionItem } from './CollectionItem'
 import type { DatabaseInfo, CollectionInfo, CollectionStats, DatabaseStats } from './types'
 
@@ -43,6 +43,30 @@ export interface CollectionTreeProps {
   onDropCollection?: (database: string, collection: string) => void
   /** Called when create collection is requested */
   onCreateCollection?: (database: string) => void
+  /** Called when a collection is double-clicked to open */
+  onCollectionOpen?: (database: string, collection: string) => void
+  /** Called when multiple collections are selected (multi-select mode) */
+  onMultiSelect?: (selections: Array<{ database: string; collection: string }>) => void
+  /** Whether multi-select mode is enabled */
+  multiSelectEnabled?: boolean
+  /** Whether to show breadcrumb for current selection */
+  showBreadcrumb?: boolean
+  /** Called when collapse all is triggered */
+  onCollapseAll?: () => void
+}
+
+/** Format bytes to human-readable size */
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(0))} ${sizes[i]}`
+}
+
+/** Format number with commas */
+function formatNumber(num: number): string {
+  return num.toLocaleString()
 }
 
 const styles = {
@@ -72,6 +96,7 @@ const styles = {
     cursor: 'pointer',
     borderRadius: '4px',
     transition: 'background-color 0.15s ease',
+    outline: 'none',
   },
   databaseHeaderHover: {
     backgroundColor: '#f5f6f7',
@@ -79,6 +104,16 @@ const styles = {
   databaseHeaderSelected: {
     backgroundColor: '#e8f4f8',
     color: '#016bf8',
+  },
+  expandChevron: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '16px',
+    height: '16px',
+    marginRight: '4px',
+    flexShrink: 0,
+    transition: 'transform 0.15s ease',
   },
   expandIcon: {
     width: '16px',

@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
 import { Body } from '@leafygreen-ui/typography'
@@ -43,6 +44,7 @@ const tableStyles = css`
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 
   th, td {
     padding: 8px 12px;
@@ -55,6 +57,7 @@ const tableStyles = css`
     font-weight: 600;
     position: sticky;
     top: 0;
+    z-index: 1;
     cursor: pointer;
     user-select: none;
 
@@ -62,9 +65,30 @@ const tableStyles = css`
       background: ${palette.gray.light2};
     }
   }
+`
 
-  tr:hover td {
+const ROW_HEIGHT = 37 // Height of each row in pixels
+
+const virtualTableBodyStyles = css`
+  position: relative;
+`
+
+const virtualRowStyles = css`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: table;
+  table-layout: fixed;
+
+  &:hover td {
     background: ${palette.blue.light3};
+  }
+
+  td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid ${palette.gray.light2};
   }
 `
 
@@ -98,6 +122,7 @@ export function ResultsViewer({ data, onExport }: ResultsViewerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sortField, setSortField] = useState<string | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
+  const parentRef = useRef<HTMLDivElement>(null)
 
   const columns = useMemo(() => {
     if (data.length === 0) return []
@@ -121,6 +146,13 @@ export function ResultsViewer({ data, onExport }: ResultsViewerProps) {
       return sortDirection === 'asc' ? comparison : -comparison
     })
   }, [data, sortField, sortDirection])
+
+  const rowVirtualizer = useVirtualizer({
+    count: sortedData.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10, // Render 10 extra rows above/below visible area
+  })
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -180,7 +212,7 @@ export function ResultsViewer({ data, onExport }: ResultsViewerProps) {
         </div>
       </div>
 
-      <div className={contentStyles}>
+      <div className={contentStyles} ref={parentRef}>
         {viewMode === 'table' ? (
           <table className={tableStyles} data-testid="results-table">
             <thead>
@@ -202,16 +234,31 @@ export function ResultsViewer({ data, onExport }: ResultsViewerProps) {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {sortedData.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {columns.map(col => (
-                    <td key={col}>
-                      {formatValue(row[col])}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+            <tbody
+              className={virtualTableBodyStyles}
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = sortedData[virtualRow.index]
+                if (!row) return null
+                return (
+                  <tr
+                    key={virtualRow.index}
+                    className={virtualRowStyles}
+                    style={{
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    data-index={virtualRow.index}
+                  >
+                    {columns.map(col => (
+                      <td key={col}>
+                        {formatValue(row[col])}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         ) : (

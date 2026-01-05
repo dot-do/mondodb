@@ -10,9 +10,29 @@
  * - [a-z] : matches any character in the range
  * - [!abc] or [^abc] : matches any character NOT in the set
  * - {a,b,c} : matches any of the alternatives
+ *
+ * Performance optimizations:
+ * - LRU cache for compiled patterns (configurable size)
+ * - Pre-compiled regex constants
+ * - Early bailout for literal patterns
  */
 
 import type { GlobOptions } from './types'
+
+// =============================================================================
+// CONSTANTS & CONFIGURATION
+// =============================================================================
+
+/** Default cache size for compiled glob patterns */
+const DEFAULT_CACHE_SIZE = 1000
+
+/** Maximum pattern length to cache (longer patterns are unlikely to repeat) */
+const MAX_CACHEABLE_PATTERN_LENGTH = 500
+
+// Pre-compiled regex for performance
+const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
+const MULTIPLE_SLASHES = /\/+/g
+const GLOB_SPECIAL_CHARS = /[*?[\]{}!]/
 
 /**
  * Result of glob pattern matching
@@ -38,11 +58,116 @@ export interface CompiledGlob {
   match(path: string): boolean
 }
 
+// =============================================================================
+// LRU CACHE IMPLEMENTATION
+// =============================================================================
+
+/**
+ * Simple LRU (Least Recently Used) cache for compiled glob patterns.
+ * Provides O(1) get/set operations with automatic eviction of least used items.
+ */
+class GlobPatternCache {
+  private cache: Map<string, CompiledGlob> = new Map()
+  private readonly maxSize: number
+
+  constructor(maxSize: number = DEFAULT_CACHE_SIZE) {
+    this.maxSize = maxSize
+  }
+
+  /**
+   * Generate a cache key from pattern and options
+   */
+  private getCacheKey(pattern: string, options: Pick<GlobOptions, 'nocase' | 'dot'>): string {
+    const nocase = options.nocase ? '1' : '0'
+    const dot = options.dot ? '1' : '0'
+    return `${pattern}|${nocase}|${dot}`
+  }
+
+  /**
+   * Get a compiled pattern from the cache.
+   * Moves the item to the end (most recently used).
+   */
+  get(pattern: string, options: Pick<GlobOptions, 'nocase' | 'dot'>): CompiledGlob | undefined {
+    const key = this.getCacheKey(pattern, options)
+    const compiled = this.cache.get(key)
+
+    if (compiled) {
+      // Move to end (most recently used) by deleting and re-adding
+      this.cache.delete(key)
+      this.cache.set(key, compiled)
+    }
+
+    return compiled
+  }
+
+  /**
+   * Store a compiled pattern in the cache.
+   * Evicts least recently used items if cache is full.
+   */
+  set(pattern: string, options: Pick<GlobOptions, 'nocase' | 'dot'>, compiled: CompiledGlob): void {
+    // Don't cache very long patterns (unlikely to repeat)
+    if (pattern.length > MAX_CACHEABLE_PATTERN_LENGTH) {
+      return
+    }
+
+    const key = this.getCacheKey(pattern, options)
+
+    // If already exists, delete first to update position
+    if (this.cache.has(key)) {
+      this.cache.delete(key)
+    } else if (this.cache.size >= this.maxSize) {
+      // Evict oldest (first) entry
+      const firstKey = this.cache.keys().next().value
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey)
+      }
+    }
+
+    this.cache.set(key, compiled)
+  }
+
+  /**
+   * Clear all cached patterns
+   */
+  clear(): void {
+    this.cache.clear()
+  }
+
+  /**
+   * Get current cache size
+   */
+  get size(): number {
+    return this.cache.size
+  }
+}
+
+/** Global cache instance for compiled patterns */
+const globalPatternCache = new GlobPatternCache()
+
+/**
+ * Clear the global pattern cache.
+ * Useful for testing or when memory needs to be freed.
+ */
+export function clearGlobCache(): void {
+  globalPatternCache.clear()
+}
+
+/**
+ * Get the current size of the global pattern cache.
+ */
+export function getGlobCacheSize(): number {
+  return globalPatternCache.size
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
 /**
  * Escape special regex characters in a string
  */
 function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return str.replace(REGEX_SPECIAL_CHARS, '\\$&')
 }
 
 /**
@@ -163,19 +288,36 @@ export function globToRegex(
 }
 
 /**
- * Compile a glob pattern for efficient repeated matching
+ * Compile a glob pattern for efficient repeated matching.
+ * Uses LRU caching for frequently used patterns.
  *
  * @param pattern - Glob pattern to compile
  * @param options - Glob options
+ * @param useCache - Whether to use the global cache (default: true)
  * @returns Compiled glob object
  */
 export function compileGlob(
   pattern: string,
-  options: Pick<GlobOptions, 'nocase' | 'dot'> = {}
+  options: Pick<GlobOptions, 'nocase' | 'dot'> = {},
+  useCache: boolean = true
 ): CompiledGlob {
-  const { regex, negated } = globToRegex(pattern, options)
+  // Normalize options for consistent caching
+  const normalizedOptions = {
+    nocase: options.nocase ?? false,
+    dot: options.dot ?? false,
+  }
 
-  return {
+  // Check cache first
+  if (useCache) {
+    const cached = globalPatternCache.get(pattern, normalizedOptions)
+    if (cached) {
+      return cached
+    }
+  }
+
+  const { regex, negated } = globToRegex(pattern, normalizedOptions)
+
+  const compiled: CompiledGlob = {
     pattern,
     regex,
     negated,
@@ -184,6 +326,13 @@ export function compileGlob(
       return negated ? !matches : matches
     },
   }
+
+  // Store in cache
+  if (useCache) {
+    globalPatternCache.set(pattern, normalizedOptions, compiled)
+  }
+
+  return compiled
 }
 
 /**
@@ -291,8 +440,8 @@ export class GlobMatcher {
  * - Handles relative paths with cwd
  */
 export function normalizePath(path: string, cwd?: string): string {
-  // Normalize multiple slashes
-  let normalized = path.replace(/\/+/g, '/')
+  // Normalize multiple slashes using pre-compiled regex
+  let normalized = path.replace(MULTIPLE_SLASHES, '/')
 
   // Remove trailing slash unless root
   if (normalized.length > 1 && normalized.endsWith('/')) {
@@ -327,8 +476,9 @@ export function getGlobBase(pattern: string): string {
 }
 
 /**
- * Check if a pattern contains glob special characters
+ * Check if a pattern contains glob special characters.
+ * Uses pre-compiled regex for performance.
  */
 export function isGlobPattern(pattern: string): boolean {
-  return /[*?[\]{}!]/.test(pattern)
+  return GLOB_SPECIAL_CHARS.test(pattern)
 }

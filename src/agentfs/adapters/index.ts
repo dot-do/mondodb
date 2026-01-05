@@ -21,6 +21,7 @@
 export {
   AnthropicMCPAdapter,
   createMonDoMcpServer,
+  wrapToolHandler,
   type AgentFSProvider,
   type GrepProvider,
   type AuditProvider,
@@ -29,6 +30,9 @@ export {
   type RetryConfig,
   type TimeoutConfig,
   type StreamingConfig,
+  type ToolCallEvent,
+  type ServerCapabilities,
+  type ServerInfo,
 } from './anthropic'
 
 // Vercel AI SDK Adapter

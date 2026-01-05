@@ -55,6 +55,10 @@ export interface DocumentListProps {
   multiSelect?: boolean
   expandable?: boolean
   defaultViewMode?: ViewMode
+  // Cursor-based pagination props
+  hasMore?: boolean
+  isFetchingMore?: boolean
+  onLoadMore?: () => void
 }
 
 // Styles
@@ -299,6 +303,18 @@ const filterInputContainerStyles = css`
   gap: 8px;
 `
 
+const loadMoreContainerStyles = css`
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  border-top: 1px solid ${palette.gray.light2};
+  flex-shrink: 0;
+`
+
+const loadMoreButtonStyles = css`
+  min-width: 200px;
+`
+
 const columnFilterStyles = css`
   position: absolute;
   top: 100%;
@@ -365,6 +381,10 @@ export function DocumentList({
   multiSelect = false,
   expandable = true,
   defaultViewMode = 'table',
+  // Cursor-based pagination props
+  hasMore = false,
+  isFetchingMore = false,
+  onLoadMore,
 }: DocumentListProps) {
   // State
   const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode)
@@ -766,7 +786,7 @@ export function DocumentList({
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Pagination (offset-based) */}
       {onPageChange && totalPages > 1 && (
         <Pagination
           page={page}
@@ -776,6 +796,21 @@ export function DocumentList({
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
+      )}
+
+      {/* Load More Button (cursor-based pagination) */}
+      {onLoadMore && hasMore && (
+        <div className={loadMoreContainerStyles} data-testid="load-more-container">
+          <Button
+            className={loadMoreButtonStyles}
+            onClick={onLoadMore}
+            disabled={isFetchingMore}
+            leftGlyph={isFetchingMore ? undefined : <Icon glyph="ChevronDown" />}
+            data-testid="load-more-button"
+          >
+            {isFetchingMore ? 'Loading...' : 'Load More'}
+          </Button>
+        </div>
       )}
     </div>
   )

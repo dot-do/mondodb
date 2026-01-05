@@ -83,7 +83,7 @@ describe('doTool', () => {
 
       await doTool(mockLoader, 'const x = 1; return x;')
 
-      expect(mockLoader.execute).toHaveBeenCalledWith('const x = 1; return x;', { description: undefined })
+      expect(mockLoader.execute).toHaveBeenCalledWith('const x = 1; return x;', expect.objectContaining({ description: undefined }))
     })
 
     it('should pass description in context', async () => {
@@ -91,7 +91,15 @@ describe('doTool', () => {
 
       await doTool(mockLoader, 'return 1', 'Returns the number 1')
 
-      expect(mockLoader.execute).toHaveBeenCalledWith('return 1', { description: 'Returns the number 1' })
+      expect(mockLoader.execute).toHaveBeenCalledWith('return 1', expect.objectContaining({ description: 'Returns the number 1' }))
+    })
+
+    it('should pass timeout in context', async () => {
+      const mockLoader = createMockCodeLoader()
+
+      await doTool(mockLoader, 'return 1', undefined, { timeout: 5000 })
+
+      expect(mockLoader.execute).toHaveBeenCalledWith('return 1', expect.objectContaining({ timeout: 5000 }))
     })
 
     it('should not set isError for successful execution', async () => {
@@ -200,7 +208,7 @@ describe('doTool', () => {
 
       expect(response.isError).toBe(true)
       expect(parsed.success).toBe(false)
-      expect(parsed.error).toBe('Missing required field: code')
+      expect(parsed.error).toContain('non-empty string')
     })
 
     it('should return error for whitespace-only code', async () => {
@@ -211,7 +219,7 @@ describe('doTool', () => {
 
       expect(response.isError).toBe(true)
       expect(parsed.success).toBe(false)
-      expect(parsed.error).toBe('Missing required field: code')
+      expect(parsed.error).toContain('empty')
     })
 
     it('should return error for undefined code', async () => {
@@ -223,7 +231,7 @@ describe('doTool', () => {
 
       expect(response.isError).toBe(true)
       expect(parsed.success).toBe(false)
-      expect(parsed.error).toBe('Missing required field: code')
+      expect(parsed.error).toContain('non-empty string')
     })
 
     it('should return error for null code', async () => {
@@ -235,7 +243,7 @@ describe('doTool', () => {
 
       expect(response.isError).toBe(true)
       expect(parsed.success).toBe(false)
-      expect(parsed.error).toBe('Missing required field: code')
+      expect(parsed.error).toContain('non-empty string')
     })
 
     it('should not call codeLoader.execute for missing code', async () => {
@@ -244,6 +252,16 @@ describe('doTool', () => {
       await doTool(mockLoader, '')
 
       expect(mockLoader.execute).not.toHaveBeenCalled()
+    })
+
+    it('should include helpful hints in validation errors', async () => {
+      const mockLoader = createMockCodeLoader()
+
+      const response = await doTool(mockLoader, '')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.hints).toBeDefined()
+      expect(parsed.hints).toContain('Use console.log() to debug intermediate values')
     })
   })
 
@@ -314,6 +332,169 @@ describe('doTool', () => {
       expect(parsed).toHaveProperty('success')
       expect(parsed).toHaveProperty('result')
       expect(parsed).toHaveProperty('duration')
+    })
+  })
+
+  describe('Code Validation', () => {
+    it('should return error for code exceeding max length', async () => {
+      const mockLoader = createMockCodeLoader()
+      const longCode = 'a'.repeat(100_001) // > 100KB
+
+      const response = await doTool(mockLoader, longCode)
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(response.isError).toBe(true)
+      expect(parsed.success).toBe(false)
+      expect(parsed.error).toContain('exceeds maximum length')
+    })
+
+    it('should include warnings for potentially dangerous patterns', async () => {
+      const results = new Map([['eval', { success: true, result: 'done' }]])
+      const mockLoader = createMockCodeLoader(results)
+
+      const response = await doTool(mockLoader, 'eval("code")')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.warnings).toBeDefined()
+      expect(parsed.warnings).toContainEqual(expect.stringContaining('eval'))
+    })
+
+    it('should include warnings for dynamic imports', async () => {
+      const results = new Map([['import(', { success: true, result: 'done' }]])
+      const mockLoader = createMockCodeLoader(results)
+
+      const response = await doTool(mockLoader, 'const mod = await import("module")')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.warnings).toBeDefined()
+      expect(parsed.warnings).toContainEqual(expect.stringContaining('import'))
+    })
+  })
+
+  describe('Error Response Formatting', () => {
+    it('should include code metadata on errors', async () => {
+      const results = new Map([
+        ['throw', { success: false, error: 'Error at line 5: test error' }],
+      ])
+      const mockLoader = createMockCodeLoader(results)
+
+      const response = await doTool(mockLoader, 'throw new Error("test")')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.code).toBeDefined()
+      expect(parsed.code?.source).toBe('throw new Error("test")')
+      expect(parsed.code?.language).toBe('javascript')
+    })
+
+    it('should detect TypeScript language', async () => {
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({ success: false, error: 'Type error' }),
+      }
+
+      const tsCode = 'const x: string = 42'
+      const response = await doTool(mockLoader, tsCode)
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.code?.language).toBe('typescript')
+    })
+
+    it('should extract error line numbers', async () => {
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'SyntaxError at line 3: Unexpected token'
+        }),
+      }
+
+      const response = await doTool(mockLoader, 'const x = 1;\nconst y = 2;\nconst z = {{{')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.code?.errorLines).toContain(3)
+    })
+  })
+
+  describe('Options', () => {
+    it('should pass custom timeout to code loader', async () => {
+      const mockLoader = createMockCodeLoader()
+
+      await doTool(mockLoader, 'return 1', undefined, { timeout: 5000 })
+
+      expect(mockLoader.execute).toHaveBeenCalledWith(
+        'return 1',
+        expect.objectContaining({ timeout: 5000 })
+      )
+    })
+
+    it('should truncate logs when exceeding maxLogs', async () => {
+      const lotsOfLogs = Array.from({ length: 150 }, (_, i) => `Log ${i}`)
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({ success: true, result: 'done', logs: lotsOfLogs }),
+      }
+
+      const response = await doTool(mockLoader, 'console.log("test")', undefined, { maxLogs: 10 })
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.logs).toHaveLength(11) // 10 + truncation message
+      expect(parsed.logs?.[10]).toContain('truncated')
+    })
+
+    it('should pass custom context to code loader', async () => {
+      const mockLoader = createMockCodeLoader()
+
+      await doTool(mockLoader, 'return 1', undefined, { context: { customKey: 'customValue' } })
+
+      expect(mockLoader.execute).toHaveBeenCalledWith(
+        'return 1',
+        expect.objectContaining({ customKey: 'customValue' })
+      )
+    })
+  })
+
+  describe('Result Formatting', () => {
+    it('should format Date objects as ISO strings', async () => {
+      const dateResult = new Date('2024-01-15T10:30:00Z')
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({ success: true, result: dateResult }),
+      }
+
+      const response = await doTool(mockLoader, 'return new Date()')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(parsed.result).toBe('2024-01-15T10:30:00.000Z')
+    })
+
+    it('should handle nested objects with special types', async () => {
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          result: {
+            name: 'test',
+            date: new Date('2024-01-15T10:30:00Z'),
+            nested: { value: 42 }
+          }
+        }),
+      }
+
+      const response = await doTool(mockLoader, 'return obj')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect((parsed.result as Record<string, unknown>).name).toBe('test')
+      expect((parsed.result as Record<string, unknown>).date).toBe('2024-01-15T10:30:00.000Z')
+    })
+
+    it('should format arrays with special types', async () => {
+      const mockLoader: CodeLoader = {
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          result: [1, new Date('2024-01-15'), 'string']
+        }),
+      }
+
+      const response = await doTool(mockLoader, 'return arr')
+      const parsed: DoResult = JSON.parse(response.content[0].text)
+
+      expect(Array.isArray(parsed.result)).toBe(true)
+      expect((parsed.result as unknown[])[1]).toBe('2024-01-15T00:00:00.000Z')
     })
   })
 })

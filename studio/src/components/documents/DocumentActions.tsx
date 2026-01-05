@@ -10,7 +10,7 @@ import Tooltip from '@leafygreen-ui/tooltip'
 import { useToast } from '@leafygreen-ui/toast'
 import { CreateDocument } from './CreateDocument'
 import { EditDocument } from './EditDocument'
-import { DeleteDocument } from './DeleteDocument'
+import { DeleteDocument, DeleteDocumentsBulk } from './DeleteDocument'
 import { useInsertDocumentMutation } from '@hooks/useQueries'
 import type { Document } from '@lib/rpc-client'
 
@@ -466,11 +466,10 @@ export function BulkDocumentActions({
         </Button>
       </div>
 
-      {/* Bulk delete uses a custom dialog since ConfirmationModal doesn't support bulk */}
-      <DeleteDocument
+      <DeleteDocumentsBulk
         database={database}
         collection={collection}
-        documentId={documentIds[0] ?? ''}
+        documentIds={documentIds}
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onSuccess={handleDeleteSuccess}

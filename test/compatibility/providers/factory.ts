@@ -23,13 +23,13 @@ export async function createProvider(name: ProviderName): Promise<TestProvider> 
 
 export async function createBothProviders(): Promise<{
   mongodb: TestProvider
-  mongo.do: TestProvider
+  mondodo: TestProvider
 }> {
-  const [mongodb, mongo.do] = await Promise.all([
+  const [mongodb, mondodo] = await Promise.all([
     createProvider('mongodb'),
     createProvider('mongo.do')
   ])
-  return { mongodb, mongo.do }
+  return { mongodb, mondodo }
 }
 
 // Cleanup helper

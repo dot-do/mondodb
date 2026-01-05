@@ -3,9 +3,49 @@
  *
  * Implements document search functionality following OpenAI Deep Research format.
  * Supports JSON filters, collection-prefixed queries, and natural language search.
+ *
+ * ## Supported Query Formats
+ *
+ * 1. **JSON Filter** - MongoDB-style query objects
+ *    ```
+ *    {"name": "Alice", "age": {"$gt": 21}}
+ *    {"status": {"$in": ["active", "pending"]}}
+ *    ```
+ *
+ * 2. **Collection-Prefixed** - Simple field = value queries with collection prefix
+ *    ```
+ *    users: name = Alice
+ *    products: price = 99.99
+ *    ```
+ *
+ * 3. **Database.Collection-Prefixed** - Include database name
+ *    ```
+ *    mydb.users: status = active
+ *    ```
+ *
+ * 4. **Natural Language** - Full-text search across common fields
+ *    ```
+ *    find all users named Alice
+ *    software engineer with Python experience
+ *    ```
+ *
+ * 5. **With Pagination** - Append LIMIT and OFFSET to any query
+ *    ```
+ *    users: status = active LIMIT 10 OFFSET 20
+ *    {"type": "article"} LIMIT 5
+ *    ```
+ *
+ * ## Search Options
+ *
+ * - `limit` - Maximum results to return (default: 100)
+ * - `offset` - Number of results to skip for pagination
+ * - `sortBy` - Field to sort by
+ * - `sortOrder` - 'asc' or 'desc' (default: 'desc')
+ * - `collection` - Specific collection to search
+ * - `database` - Database name (default: 'default')
  */
 
-import type { DatabaseAccess, McpToolResponse, SearchResult } from '../types'
+import type { DatabaseAccess, McpToolResponse, SearchResult, FindOptions } from '../types'
 
 /** Maximum number of results to return */
 const MAX_RESULTS = 100
@@ -15,6 +55,12 @@ const MAX_PREVIEW_LENGTH = 500
 
 /** Default database name if not specified */
 const DEFAULT_DATABASE = 'default'
+
+/** Maximum collections to search when no collection specified */
+const MAX_COLLECTIONS_TO_SEARCH = 10
+
+/** Common text fields for relevance scoring */
+const TEXT_FIELDS = ['name', 'title', 'description', 'content', 'body', 'summary', 'text'] as const
 
 /** Document type from database */
 interface Document {
@@ -26,11 +72,36 @@ interface Document {
   [key: string]: unknown
 }
 
+/** Extended search result with relevance score */
+interface ScoredDocument extends Document {
+  _relevanceScore?: number
+}
+
 /** Options for search */
 export interface SearchOptions {
+  /** Maximum number of results to return */
   limit?: number
+  /** Number of results to skip (for pagination) */
+  offset?: number
+  /** Field to sort results by */
+  sortBy?: string
+  /** Sort order: 'asc' for ascending, 'desc' for descending */
+  sortOrder?: 'asc' | 'desc'
+  /** Specific collection to search in */
   collection?: string
+  /** Database name */
   database?: string
+}
+
+/** Parsed query result with filter and pagination */
+interface ParsedQuery {
+  collection?: string
+  filter: object
+  database: string
+  paginationOptions: {
+    limit?: number
+    offset?: number
+  }
 }
 
 /**
@@ -40,26 +111,84 @@ export interface SearchOptions {
  * @param query - Search query (JSON filter, collection:query, or natural language)
  * @param options - Optional search options
  * @returns MCP tool response with search results
+ *
+ * @example
+ * // JSON filter search
+ * await searchTool(db, '{"status": "active"}')
+ *
+ * @example
+ * // Collection-prefixed search
+ * await searchTool(db, 'users: name = Alice')
+ *
+ * @example
+ * // With pagination
+ * await searchTool(db, 'products: category = electronics LIMIT 10 OFFSET 20')
+ *
+ * @example
+ * // Natural language search
+ * await searchTool(db, 'find software engineers')
  */
 export async function searchTool(
   dbAccess: DatabaseAccess,
   query: string,
   options: SearchOptions = {}
 ): Promise<McpToolResponse> {
-  try {
-    const { collection, filter, database } = parseQuery(query, options)
-    const limit = options.limit ?? MAX_RESULTS
+  // Validate inputs early
+  if (!query || typeof query !== 'string') {
+    return createErrorResponse('Query is required and must be a string')
+  }
 
-    // Execute search
+  const trimmedQuery = query.trim()
+  if (!trimmedQuery) {
+    return createErrorResponse('Query cannot be empty')
+  }
+
+  try {
+    const parsed = parseQuery(trimmedQuery, options)
+    const { collection, filter, database, paginationOptions } = parsed
+
+    // Merge pagination from query string with options (query string takes precedence)
+    const limit = Math.min(
+      paginationOptions.limit ?? options.limit ?? MAX_RESULTS,
+      MAX_RESULTS
+    )
+    const offset = paginationOptions.offset ?? options.offset ?? 0
+
+    // Validate pagination parameters
+    if (limit < 0) {
+      return createErrorResponse('Limit must be a non-negative number')
+    }
+    if (offset < 0) {
+      return createErrorResponse('Offset must be a non-negative number')
+    }
+
+    // Build find options
+    const findOptions: FindOptions = {
+      limit: limit + offset, // Fetch extra for offset handling
+    }
+
+    // Add sorting if specified
+    if (options.sortBy) {
+      findOptions.sort = {
+        [options.sortBy]: options.sortOrder === 'asc' ? 1 : -1,
+      }
+    }
+
+    // Execute search with the search term for relevance scoring
+    const searchTerm = extractSearchTerm(filter)
     const documents = await executeSearch(
       dbAccess,
       collection ?? options.collection,
       filter,
-      limit
+      findOptions,
+      searchTerm
     )
 
+    // Apply offset and limit after fetching
+    const paginatedDocs = documents.slice(offset, offset + limit)
+
     // Format results to OpenAI Deep Research standard
-    const results: SearchResult[] = documents.slice(0, limit).map((doc) =>
+    const results: SearchResult[] = paginatedDocs.map((doc) =>
       formatSearchResult(
         doc,
         doc._collection ?? collection ?? options.collection ?? 'unknown',
@@ -67,49 +196,116 @@ export async function searchTool(
       )
     )
 
+    // Include metadata about pagination
+    const response: {
+      results: SearchResult[]
+      pagination?: {
+        limit: number
+        offset: number
+        total: number
+        hasMore: boolean
+      }
+    } = { results }
+
+    // Add pagination info if using pagination
+    if (offset > 0 || limit < documents.length) {
+      response.pagination = {
+        limit,
+        offset,
+        total: documents.length,
+        hasMore: documents.length > offset + limit,
+      }
+    }
+
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ results }),
+          text: JSON.stringify(response),
         },
       ],
     }
   } catch (error) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            error: error instanceof Error ? error.message : 'Search failed',
-          }),
-        },
-      ],
-      isError: true,
-    }
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Search failed',
+      error
+    )
   }
 }
 
 /**
- * Parse a search query into collection, filter, and database
+ * Create a standardized error response
+ */
+function createErrorResponse(
+  message: string,
+  originalError?: unknown
+): McpToolResponse {
+  const errorDetails: { error: string; details?: string } = { error: message }
+
+  // Add additional context for debugging if available
+  if (originalError instanceof Error && originalError.message !== message) {
+    errorDetails.details = originalError.message
+  }
+
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(errorDetails),
+      },
+    ],
+    isError: true,
+  }
+}
+
+/**
+ * Extract search term from filter for relevance scoring
+ */
+function extractSearchTerm(filter: object): string | undefined {
+  const textFilter = filter as { $text?: { $search?: string } }
+  if (textFilter.$text?.$search) {
+    return textFilter.$text.$search
+  }
+
+  // Check for $or regex patterns (fallback search)
+  const orFilter = filter as { $or?: Array<Record<string, { $regex?: string }>> }
+  if (orFilter.$or?.[0]) {
+    const firstCondition = orFilter.$or[0]
+    const firstField = Object.keys(firstCondition)[0]
+    if (firstField && firstCondition[firstField]?.$regex) {
+      return firstCondition[firstField].$regex
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Parse a search query into collection, filter, database, and pagination options
+ *
+ * Supports the following query formats:
+ * - JSON filter: {"name": "Alice"}
+ * - Collection-prefixed: users: name = Alice
+ * - Database.collection-prefixed: mydb.users: name = Alice
+ * - Natural language: find users named Alice
+ * - With pagination: any of above + LIMIT n OFFSET m
  */
 function parseQuery(
   query: string,
   options: SearchOptions = {}
-): {
-  collection?: string
-  filter: object
-  database: string
-} {
-  const trimmedQuery = query.trim()
+): ParsedQuery {
+  // Extract pagination from the end of the query first
+  const { queryWithoutPagination, paginationOptions } = extractPagination(query)
+  const trimmedQuery = queryWithoutPagination.trim()
 
   // Try to parse as JSON filter first
   if (trimmedQuery.startsWith('{')) {
     try {
       const filter = JSON.parse(trimmedQuery) as object
-      const result: { collection?: string; filter: object; database: string } = {
+      const result: ParsedQuery = {
         filter,
         database: options.database ?? DEFAULT_DATABASE,
+        paginationOptions,
       }
       if (options.collection) {
         result.collection = options.collection
@@ -130,6 +326,7 @@ function parseQuery(
       database: dbName,
       collection: collName,
       filter: parseSimpleQuery(queryPart),
+      paginationOptions,
     }
   }
 
@@ -142,18 +339,57 @@ function parseQuery(
       collection: collName,
       filter: parseSimpleQuery(queryPart),
       database: options.database ?? DEFAULT_DATABASE,
+      paginationOptions,
     }
   }
 
   // Treat as natural language - search all text fields
-  const result: { collection?: string; filter: object; database: string } = {
+  const result: ParsedQuery = {
     filter: { $text: { $search: trimmedQuery } },
     database: options.database ?? DEFAULT_DATABASE,
+    paginationOptions,
   }
   if (options.collection) {
     result.collection = options.collection
   }
   return result
+}
+
+/**
+ * Extract LIMIT and OFFSET from the end of a query string
+ *
+ * @example
+ * extractPagination('users: status = active LIMIT 10 OFFSET 20')
+ * // Returns: { queryWithoutPagination: 'users: status = active', paginationOptions: { limit: 10, offset: 20 } }
+ */
+function extractPagination(query: string): {
+  queryWithoutPagination: string
+  paginationOptions: { limit?: number; offset?: number }
+} {
+  const paginationOptions: { limit?: number; offset?: number } = {}
+
+  // Match LIMIT and OFFSET (case-insensitive)
+  // Pattern: LIMIT n [OFFSET m] or just OFFSET m
+  const limitMatch = query.match(/\s+LIMIT\s+(\d+)/i)
+  const offsetMatch = query.match(/\s+OFFSET\s+(\d+)/i)
+
+  if (limitMatch) {
+    paginationOptions.limit = parseInt(limitMatch[1], 10)
+  }
+  if (offsetMatch) {
+    paginationOptions.offset = parseInt(offsetMatch[1], 10)
+  }
+
+  // Remove pagination clauses from query
+  let cleanQuery = query
+    .replace(/\s+LIMIT\s+\d+/gi, '')
+    .replace(/\s+OFFSET\s+\d+/gi, '')
+    .trim()
+
+  return {
+    queryWithoutPagination: cleanQuery,
+    paginationOptions,
+  }
 }
 
 /**

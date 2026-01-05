@@ -5,17 +5,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('Comparison Query Operators Compatibility', () => {
   let mongodb: TestProvider
-  let mongo.do: TestProvider
+  let mondodo: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mongo.do = providers.mongo.do
+    mondodo = providers.mondodo
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mongo.do)
+    await cleanupProviders(mongodb, mondodo)
   })
 
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('Comparison Query Operators Compatibility', () => {
   const setupCollections = async () => {
     const dbName = `test_comparison_${testNum}`
     const mongoCol = mongodb.database(dbName).collection('items')
-    const mondoCol = mongo.do.database(dbName).collection('items')
+    const mondoCol = mondodo.database(dbName).collection('items')
 
     const docs = [
       { name: 'A', value: 10, status: 'active' },

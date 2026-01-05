@@ -209,6 +209,32 @@ export function AnalyticsDashboard({ database, collection }: AnalyticsDashboardP
   )
 }
 
+/**
+ * Escape a value for CSV format according to RFC 4180.
+ * - If the value contains commas, double quotes, or newlines, wrap it in double quotes
+ * - Double quotes within the value are escaped by doubling them ("" instead of ")
+ */
+function escapeCSVValue(val: unknown): string {
+  if (val === null || val === undefined) return ''
+
+  let str: string
+  if (typeof val === 'object') {
+    str = JSON.stringify(val)
+  } else {
+    str = String(val)
+  }
+
+  // Check if the value needs to be quoted (contains comma, double quote, or newline)
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    // Escape double quotes by doubling them
+    str = str.replace(/"/g, '""')
+    // Wrap in double quotes
+    return `"${str}"`
+  }
+
+  return str
+}
+
 function convertToCSV(data: Record<string, unknown>[]): string {
   if (data.length === 0) return ''
 
@@ -216,16 +242,12 @@ function convertToCSV(data: Record<string, unknown>[]): string {
   if (!firstRow) return ''
 
   const headers = Object.keys(firstRow)
+  const headerRow = headers.map(h => escapeCSVValue(h)).join(',')
   const rows = data.map(row =>
-    headers.map(h => {
-      const val = row[h]
-      if (val === null || val === undefined) return ''
-      if (typeof val === 'object') return JSON.stringify(val)
-      return String(val)
-    }).join(',')
+    headers.map(h => escapeCSVValue(row[h])).join(',')
   )
 
-  return [headers.join(','), ...rows].join('\n')
+  return [headerRow, ...rows].join('\n')
 }
 
 /**

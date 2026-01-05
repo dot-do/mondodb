@@ -2,7 +2,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
 import { H2, Body, Subtitle } from '@leafygreen-ui/typography'
-import Button from '@leafygreen-ui/button'
 import Card from '@leafygreen-ui/card'
 import Icon from '@leafygreen-ui/icon'
 import { useCollectionsQuery } from '@hooks/useQueries'
@@ -78,9 +77,6 @@ export function DatabasePage() {
             {collections?.length !== 1 ? 's' : ''}
           </Body>
         </div>
-        <Button variant="primary" leftGlyph={<Icon glyph="Plus" />}>
-          Create Collection
-        </Button>
       </div>
 
       {isLoading ? (
@@ -101,12 +97,9 @@ export function DatabasePage() {
         <div className={emptyStateStyles}>
           <Icon glyph="Folder" size={48} />
           <Subtitle style={{ marginTop: 16 }}>No collections yet</Subtitle>
-          <Body style={{ marginBottom: 24 }}>
-            Create your first collection to start storing documents
+          <Body>
+            Collections will appear here once created
           </Body>
-          <Button variant="primary" leftGlyph={<Icon glyph="Plus" />}>
-            Create Collection
-          </Button>
         </div>
       ) : (
         <div className={gridStyles}>

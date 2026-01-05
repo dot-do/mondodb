@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import rpcClient, {
   Document,
   CollectionInfo,
@@ -14,6 +14,12 @@ export const queryKeys = {
   collections: (database: string) => ['collections', database] as const,
   documents: (database: string, collection: string, options?: FindOptions) =>
     ['documents', database, collection, options] as const,
+  infiniteDocuments: (
+    database: string,
+    collection: string,
+    filter?: Record<string, unknown>,
+    sort?: Record<string, 1 | -1>
+  ) => ['infiniteDocuments', database, collection, filter, sort] as const,
   document: (database: string, collection: string, id: string) =>
     ['document', database, collection, id] as const,
   count: (database: string, collection: string, filter?: Record<string, unknown>) =>
@@ -54,6 +60,68 @@ export function useDocumentsQuery(
   return useQuery({
     queryKey: queryKeys.documents(database, collection, options),
     queryFn: () => rpcClient.find(database, collection, options),
+    enabled: isConnected && !!database && !!collection,
+  })
+}
+
+export interface InfiniteDocumentsOptions {
+  filter?: Record<string, unknown>
+  sort?: Record<string, 1 | -1>
+  pageSize?: number
+}
+
+export interface InfiniteDocumentsPage {
+  documents: Document[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+/**
+ * Hook for cursor-based pagination of documents.
+ * Uses the last document's _id as the cursor for efficient pagination.
+ */
+export function useInfiniteDocumentsQuery(
+  database: string,
+  collection: string,
+  options: InfiniteDocumentsOptions = {}
+) {
+  const { isConnected } = useConnectionStore()
+  const { filter = {}, sort = { _id: 1 }, pageSize = 20 } = options
+
+  return useInfiniteQuery({
+    queryKey: queryKeys.infiniteDocuments(database, collection, filter, sort),
+    queryFn: async ({ pageParam }): Promise<InfiniteDocumentsPage> => {
+      // Build the filter with cursor for pagination
+      // For cursor-based pagination, we use _id as the cursor
+      const cursorFilter = pageParam
+        ? {
+            ...filter,
+            _id: sort._id === -1 ? { $lt: pageParam } : { $gt: pageParam },
+          }
+        : filter
+
+      const documents = await rpcClient.find(database, collection, {
+        filter: cursorFilter,
+        sort,
+        limit: pageSize + 1, // Fetch one extra to check if there's more
+      })
+
+      // Check if there are more documents
+      const hasMore = documents.length > pageSize
+      const resultDocs = hasMore ? documents.slice(0, pageSize) : documents
+
+      // Get the next cursor from the last document
+      const lastDoc = resultDocs[resultDocs.length - 1]
+      const nextCursor = hasMore && lastDoc ? lastDoc._id : null
+
+      return {
+        documents: resultDocs,
+        nextCursor,
+        hasMore,
+      }
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: isConnected && !!database && !!collection,
   })
 }
@@ -110,6 +178,29 @@ export function useInsertDocumentMutation(
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.documents(database, collection),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.count(database, collection),
+      })
+    },
+  })
+}
+
+export function useInsertManyDocumentsMutation(
+  database: string,
+  collection: string
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (documents: Record<string, unknown>[]) =>
+      rpcClient.insertMany(database, collection, documents),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.documents(database, collection),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.infiniteDocuments(database, collection),
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.count(database, collection),

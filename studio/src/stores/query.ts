@@ -27,8 +27,13 @@ interface QueryState {
   currentSort: string
   currentLimit: number
 
-  // Validation
+  // Validation - per-field errors
+  filterErrors: QueryValidationError[]
+  projectionErrors: QueryValidationError[]
+  sortErrors: QueryValidationError[]
+  // Combined validation errors (for backward compatibility)
   validationErrors: QueryValidationError[]
+  // Overall validity (all fields must be valid)
   isValid: boolean
 
   // Execution state
@@ -124,8 +129,13 @@ export const useQueryStore = create<QueryState>()(
       currentSort: '',
       currentLimit: 20,
 
-      // Validation
+      // Validation - per-field errors
+      filterErrors: [],
+      projectionErrors: [],
+      sortErrors: [],
+      // Combined validation errors (for backward compatibility)
       validationErrors: [],
+      // Overall validity
       isValid: true,
 
       // Execution state
@@ -149,29 +159,38 @@ export const useQueryStore = create<QueryState>()(
       },
 
       setCurrentFilter: (filter: string) => {
-        const errors = validateQueryObject(filter)
+        const filterErrors = validateQueryObject(filter)
+        const { projectionErrors, sortErrors } = get()
+        const allErrors = [...filterErrors, ...projectionErrors, ...sortErrors]
         set({
           currentFilter: filter,
-          validationErrors: errors,
-          isValid: errors.length === 0,
+          filterErrors,
+          validationErrors: allErrors,
+          isValid: allErrors.length === 0,
         })
       },
 
       setCurrentProjection: (projection: string) => {
-        const errors = validateQueryObject(projection)
+        const projectionErrors = validateQueryObject(projection)
+        const { filterErrors, sortErrors } = get()
+        const allErrors = [...filterErrors, ...projectionErrors, ...sortErrors]
         set({
           currentProjection: projection,
-          validationErrors: errors,
-          isValid: errors.length === 0,
+          projectionErrors,
+          validationErrors: allErrors,
+          isValid: allErrors.length === 0,
         })
       },
 
       setCurrentSort: (sort: string) => {
-        const errors = validateQueryObject(sort)
+        const sortErrors = validateQueryObject(sort)
+        const { filterErrors, projectionErrors } = get()
+        const allErrors = [...filterErrors, ...projectionErrors, ...sortErrors]
         set({
           currentSort: sort,
-          validationErrors: errors,
-          isValid: errors.length === 0,
+          sortErrors,
+          validationErrors: allErrors,
+          isValid: allErrors.length === 0,
         })
       },
 
@@ -261,7 +280,13 @@ export const useQueryStore = create<QueryState>()(
       },
 
       clearValidationErrors: () => {
-        set({ validationErrors: [], isValid: true })
+        set({
+          filterErrors: [],
+          projectionErrors: [],
+          sortErrors: [],
+          validationErrors: [],
+          isValid: true,
+        })
       },
     }),
     {

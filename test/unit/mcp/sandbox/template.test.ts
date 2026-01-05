@@ -30,7 +30,7 @@ describe('Sandbox Code Template', () => {
       const userCode = 'return await db.collection("users").find()'
       const code = generateSandboxCode(userCode)
 
-      expect(code).toContain('await (async function()')
+      expect(code).toContain('(async () => {')
       expect(code).toContain(userCode)
     })
 
@@ -38,14 +38,14 @@ describe('Sandbox Code Template', () => {
       const code = generateSandboxCode('console.log("test")')
 
       expect(code).toContain('const logs = []')
-      expect(code).toContain('const originalLog = console.log')
+      expect(code).toContain('const originalConsole = {')
       expect(code).toContain('logs.push')
     })
 
     it('restores console.log after execution', () => {
       const code = generateSandboxCode('return 1')
 
-      expect(code).toContain('console.log = originalLog')
+      expect(code).toContain('console.log = originalConsole.log')
     })
 
     it('exposes db API with collection method', () => {
@@ -88,7 +88,7 @@ describe('Sandbox Code Template', () => {
 
       expect(code).toContain('catch (error)')
       expect(code).toContain('success: false')
-      expect(code).toContain('error: error.message || String(error)')
+      expect(code).toContain('error: formatError(error)')
     })
 
     it('preserves user code exactly as provided', () => {

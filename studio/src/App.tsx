@@ -1,12 +1,32 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from '@components/Layout'
-import { ConnectionPage } from '@components/pages/ConnectionPage'
-import { DatabasePage } from '@components/pages/DatabasePage'
-import { CollectionPage } from '@components/pages/CollectionPage'
+import { SkeletonLoader } from '@components/SkeletonLoader'
 import { useConnectionStore } from '@stores/connection'
 
+// Lazy load page components for better performance
+const ConnectionPage = lazy(() => import('@components/pages/ConnectionPage').then(m => ({ default: m.ConnectionPage })))
+const DatabasePage = lazy(() => import('@components/pages/DatabasePage').then(m => ({ default: m.DatabasePage })))
+const CollectionPage = lazy(() => import('@components/pages/CollectionPage').then(m => ({ default: m.CollectionPage })))
+
+// Loading fallback component for Suspense and hydration
+function PageLoader() {
+  return (
+    <div style={{ padding: '24px' }}>
+      <SkeletonLoader count={5} height={32} />
+    </div>
+  )
+}
+
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isConnected } = useConnectionStore()
+  const { isConnected, isHydrated } = useConnectionStore()
+
+  // Wait for store hydration before checking connection status
+  // This prevents UI flash where user is redirected before persisted state loads
+  if (!isHydrated) {
+    return <PageLoader />
+  }
+
   if (!isConnected) {
     return <Navigate to="/" replace />
   }
@@ -18,12 +38,21 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<ConnectionPage />} />
+          <Route
+            index
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <ConnectionPage />
+              </Suspense>
+            }
+          />
           <Route
             path="db/:database"
             element={
               <ProtectedRoute>
-                <DatabasePage />
+                <Suspense fallback={<PageLoader />}>
+                  <DatabasePage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
@@ -31,7 +60,9 @@ export function App() {
             path="db/:database/:collection"
             element={
               <ProtectedRoute>
-                <CollectionPage />
+                <Suspense fallback={<PageLoader />}>
+                  <CollectionPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />

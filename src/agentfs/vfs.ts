@@ -4,6 +4,21 @@
  * Virtual filesystem stored in mongo.do collections.
  * Provides a file-system-like interface backed by MongoDB/mongo.do.
  *
+ * Features:
+ * - POSIX-like file system semantics
+ * - Implicit parent directory creation
+ * - Path normalization with . and .. resolution
+ * - Glob pattern matching for file discovery
+ *
+ * Performance optimizations:
+ * - Pre-compiled regex patterns for path operations
+ * - Efficient path normalization
+ * - Batch operations for directory creation
+ *
+ * Error handling:
+ * - POSIX-compliant error codes (ENOENT, EISDIR, ENOTDIR, etc.)
+ * - Descriptive error messages
+ *
  * @module agentfs/vfs
  *
  * @example
@@ -26,6 +41,19 @@
  */
 
 import type { FileSystem, FileStat, FileType } from './types'
+
+// =============================================================================
+// CONSTANTS & PRE-COMPILED PATTERNS
+// =============================================================================
+
+/** Pre-compiled regex for path normalization */
+const MULTIPLE_SLASHES = /\/+/g
+
+/** Pre-compiled regex for escaping regex special characters */
+const REGEX_SPECIAL_CHARS = /[.+^${}()|[\]\\]/g
+
+/** Pre-compiled regex for glob wildcard replacement */
+const DOUBLE_STAR_PLACEHOLDER = '<<DOUBLE_STAR>>'
 
 /**
  * Database interface for AgentFilesystem operations.
@@ -123,6 +151,8 @@ export class AgentFilesystem implements FileSystem {
    * - Resolves . (current directory) components
    * - Resolves .. (parent directory) components
    *
+   * Performance: Uses pre-compiled regex patterns for efficiency.
+   *
    * @param path - Path to normalize
    * @returns Normalized absolute path
    * @internal
@@ -134,20 +164,21 @@ export class AgentFilesystem implements FileSystem {
     }
 
     // Add leading slash if missing (normalize relative paths)
-    if (!path.startsWith('/')) {
-      path = '/' + path
+    let normalizedPath = path
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = '/' + normalizedPath
     }
 
-    // Replace multiple slashes with single slash
-    path = path.replace(/\/+/g, '/')
+    // Replace multiple slashes with single slash (using pre-compiled regex)
+    normalizedPath = normalizedPath.replace(MULTIPLE_SLASHES, '/')
 
     // Remove trailing slash (unless it's the root)
-    if (path.length > 1 && path.endsWith('/')) {
-      path = path.slice(0, -1)
+    if (normalizedPath.length > 1 && normalizedPath.endsWith('/')) {
+      normalizedPath = normalizedPath.slice(0, -1)
     }
 
     // Resolve . and .. components
-    const parts = path.split('/')
+    const parts = normalizedPath.split('/')
     const resolved: string[] = []
 
     for (const part of parts) {
@@ -167,13 +198,14 @@ export class AgentFilesystem implements FileSystem {
 
   /**
    * Escape special regex characters in a string.
+   * Uses pre-compiled regex pattern for performance.
    *
    * @param str - String to escape
    * @returns String with regex special characters escaped
    * @internal
    */
   private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return str.replace(REGEX_SPECIAL_CHARS, '\\$&')
   }
 
   /**
@@ -544,7 +576,17 @@ export class AgentFilesystem implements FileSystem {
   }
 
   /**
-   * Convert a glob pattern to a regex string
+   * Convert a glob pattern to a regex string.
+   * Uses pre-compiled patterns for performance.
+   *
+   * Supported patterns:
+   * - * : matches any characters except /
+   * - ** : matches any path segments (including /)
+   * - ? : matches single character except /
+   *
+   * @param pattern - Glob pattern to convert
+   * @returns Regex pattern string
+   * @internal
    */
   private globToRegex(pattern: string): string {
     // Normalize the pattern
@@ -553,15 +595,15 @@ export class AgentFilesystem implements FileSystem {
       normalized = '/' + normalized
     }
 
-    // Escape regex special characters except glob wildcards
+    // Escape regex special characters except glob wildcards (using pre-compiled regex)
     let regex = normalized
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      // ** matches any path segments
-      .replace(/\*\*/g, '<<DOUBLE_STAR>>')
+      .replace(REGEX_SPECIAL_CHARS, '\\$&')
+      // ** matches any path segments - use placeholder to avoid double processing
+      .replace(/\*\*/g, DOUBLE_STAR_PLACEHOLDER)
       // * matches any characters except /
       .replace(/\*/g, '[^/]*')
       // Restore ** as .*
-      .replace(/<<DOUBLE_STAR>>/g, '.*')
+      .replace(new RegExp(DOUBLE_STAR_PLACEHOLDER, 'g'), '.*')
       // ? matches single character except /
       .replace(/\?/g, '[^/]')
 

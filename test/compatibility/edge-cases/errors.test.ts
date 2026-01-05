@@ -18,17 +18,17 @@ import { ObjectId } from '../../../src/types/objectid'
 
 describe('Error Codes and Messages Compatibility', () => {
   let mongodb: TestProvider
-  let mongo.do: TestProvider
+  let mondodo: TestProvider
   let testNum = 0
 
   beforeAll(async () => {
     const providers = await createBothProviders()
     mongodb = providers.mongodb
-    mongo.do = providers.mongo.do
+    mondodo = providers.mondodo
   })
 
   afterAll(async () => {
-    await cleanupProviders(mongodb, mongo.do)
+    await cleanupProviders(mongodb, mondodo)
   })
 
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe('Error Codes and Messages Compatibility', () => {
     const dbName = `test_errors_${testNum}`
     return {
       mongoCol: mongodb.database(dbName).collection('items'),
-      mondoCol: mongo.do.database(dbName).collection('items'),
+      mondoCol: mondodo.database(dbName).collection('items'),
     }
   }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
@@ -7,13 +7,14 @@ import Button from '@leafygreen-ui/button'
 import { Tabs, Tab } from '@leafygreen-ui/tabs'
 import Icon from '@leafygreen-ui/icon'
 import Badge from '@leafygreen-ui/badge'
-import { useDocumentsQuery, useDocumentCountQuery } from '@hooks/useQueries'
+import { useInfiniteDocumentsQuery, useDocumentCountQuery } from '@hooks/useQueries'
 import { DocumentList } from '../documents/DocumentList'
-import { QueryBar, type QueryOptions } from '../query/QueryBar'
+import { QueryBar, QueryHistory, type QueryOptions } from '../query'
 import { SkeletonLoader } from '../SkeletonLoader'
 import { CreateDocument } from '../documents/CreateDocument'
 import { DeleteDocument } from '../documents/DeleteDocument'
 import { AnalyticsDashboard } from '../olap'
+import { SchemaAnalyzer } from '../schema'
 import { ErrorBoundary } from '../ErrorBoundary'
 import type { Document } from '@lib/rpc-client'
 
@@ -54,6 +55,24 @@ const tabContentStyles = css`
   padding-top: 16px;
 `
 
+const queryContainerStyles = css`
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+`
+
+const queryBarContainerStyles = css`
+  flex: 1;
+  min-width: 0;
+`
+
+const historyPanelStyles = css`
+  width: 400px;
+  min-height: 300px;
+  max-height: 500px;
+  flex-shrink: 0;
+`
+
 export function CollectionPage() {
   const { database, collection } = useParams<{
     database: string
@@ -61,23 +80,38 @@ export function CollectionPage() {
   }>()
   const [activeTab, setActiveTab] = useState(0)
   const [filter, setFilter] = useState<Record<string, unknown>>({})
-  const [projection, setProjection] = useState<Record<string, 0 | 1> | undefined>(undefined)
-  const [sort, setSort] = useState<Record<string, 1 | -1>>({})
-  const [limit, setLimit] = useState(20)
-  const [skip, setSkip] = useState(0)
+  const [sort, setSort] = useState<Record<string, 1 | -1>>({ _id: 1 })
+  const [pageSize, setPageSize] = useState(20)
 
   // Dialog states
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null)
 
-  // Use empty string fallbacks for hooks (they'll be no-ops when undefined)
-  // This avoids non-null assertions while maintaining hook call order
-  const { data: documents, isLoading, error, refetch } = useDocumentsQuery(
+  // Query history panel state
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Use cursor-based infinite query for documents
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteDocumentsQuery(
     database ?? '',
     collection ?? '',
-    { filter, projection, sort, limit, skip }
+    { filter, sort, pageSize }
   )
+
+  // Flatten all pages of documents into a single array
+  const documents = useMemo(() => {
+    if (!data?.pages) return []
+    return data.pages.flatMap((page) => page.documents)
+  }, [data?.pages])
+
   const { data: count } = useDocumentCountQuery(database ?? '', collection ?? '', filter)
 
   // Early return after hooks - TypeScript narrows types below
@@ -88,19 +122,19 @@ export function CollectionPage() {
   const handleQueryExecute = useCallback(async (query: QueryOptions): Promise<{ count: number; time: number }> => {
     const startTime = performance.now()
     setFilter(query.filter)
-    if (query.projection) {
-      setProjection(query.projection as Record<string, 0 | 1>)
-    } else {
-      setProjection(undefined)
-    }
     if (query.sort) setSort(query.sort as Record<string, 1 | -1>)
-    if (query.limit !== undefined) setLimit(query.limit)
-    // Reset skip when executing a new query
-    setSkip(0)
+    if (query.limit !== undefined) setPageSize(query.limit)
+    // Refetch will reset cursor pagination automatically
     await refetch()
     const endTime = performance.now()
     return { count: count ?? 0, time: endTime - startTime }
   }, [refetch, count])
+
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const handleDocumentDelete = useCallback((document: Document) => {
     setDeleteTarget(document)
@@ -148,11 +182,25 @@ export function CollectionPage() {
         >
           <Tab name="Documents">
             <div className={tabContentStyles}>
-              <QueryBar
-                database={database}
-                collection={collection}
-                onExecute={handleQueryExecute}
-              />
+              <div className={queryContainerStyles}>
+                <div className={queryBarContainerStyles}>
+                  <QueryBar
+                    database={database}
+                    collection={collection}
+                    onExecute={handleQueryExecute}
+                    showHistory={showHistory}
+                    onHistoryToggle={() => setShowHistory(!showHistory)}
+                  />
+                </div>
+                {showHistory && (
+                  <div className={historyPanelStyles}>
+                    <QueryHistory
+                      database={database}
+                      collection={collection}
+                    />
+                  </div>
+                )}
+              </div>
               {isLoading ? (
                 <SkeletonLoader count={5} height={40} />
               ) : error ? (
@@ -184,7 +232,9 @@ export function CollectionPage() {
           </Tab>
           <Tab name="Schema">
             <div className={tabContentStyles}>
-              <Body>Schema analysis coming soon...</Body>
+              <ErrorBoundary>
+                <SchemaAnalyzer database={database} collection={collection} />
+              </ErrorBoundary>
             </div>
           </Tab>
           <Tab name="Analytics">

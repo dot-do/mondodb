@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
@@ -79,6 +79,7 @@ export function ConnectionPage() {
   const navigate = useNavigate()
   const {
     connections,
+    isConnected,
     isConnecting,
     error,
     addConnection,
@@ -88,6 +89,13 @@ export function ConnectionPage() {
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('mongodo://localhost')
+
+  // Auto-navigate to database when already connected (e.g., from auto-connect)
+  useEffect(() => {
+    if (isConnected) {
+      navigate('/db/default')
+    }
+  }, [isConnected, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

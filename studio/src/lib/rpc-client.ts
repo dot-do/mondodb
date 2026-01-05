@@ -5,6 +5,37 @@
  * via the RPC endpoint.
  */
 
+/**
+ * Error thrown when an RPC request is aborted via AbortController.
+ */
+export class RpcAbortError extends Error {
+  readonly name = 'RpcAbortError'
+
+  constructor(message = 'RPC request was aborted') {
+    super(message)
+  }
+}
+
+/**
+ * Options for RPC calls that support cancellation.
+ */
+export interface RpcCallOptions {
+  /** AbortSignal to cancel the request */
+  signal?: AbortSignal
+}
+
+/**
+ * A cancellable request that provides both the promise and abort controller.
+ */
+export interface CancellableRequest<T> {
+  /** The promise that resolves with the result */
+  promise: Promise<T>
+  /** The AbortController to cancel the request */
+  controller: AbortController
+  /** Convenience method to abort the request */
+  cancel: () => void
+}
+
 export interface RpcRequest {
   id?: string
   method: string
@@ -87,62 +118,170 @@ class RpcClient {
     this.baseUrl = baseUrl
   }
 
+  /**
+   * Set the base URL for RPC calls.
+   * This should be called when establishing a connection.
+   */
+  setBaseUrl(url: string): void {
+    // Remove trailing slash if present for consistency
+    this.baseUrl = url.endsWith('/') ? url.slice(0, -1) : url
+  }
+
+  /**
+   * Get the current base URL.
+   */
+  getBaseUrl(): string {
+    return this.baseUrl
+  }
+
   private nextId(): string {
     return String(++this.requestId)
   }
 
-  async call<T>(method: string, params: unknown[] = []): Promise<T> {
-    const response = await fetch(`${this.baseUrl}/rpc`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        id: this.nextId(),
-        method,
-        params,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`RPC request failed: ${response.statusText}`)
+  /**
+   * Make an RPC call with optional cancellation support.
+   *
+   * @param method - The RPC method to call
+   * @param params - Parameters to pass to the method
+   * @param options - Optional settings including AbortSignal for cancellation
+   * @throws RpcAbortError if the request is aborted
+   */
+  async call<T>(
+    method: string,
+    params: unknown[] = [],
+    options?: RpcCallOptions
+  ): Promise<T> {
+    // Check if already aborted before making the request
+    if (options?.signal?.aborted) {
+      throw new RpcAbortError()
     }
 
-    const data: RpcResponse<T> = await response.json()
+    try {
+      const response = await fetch(`${this.baseUrl}/rpc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: this.nextId(),
+          method,
+          params,
+        }),
+        signal: options?.signal,
+      })
 
-    if (data.error) {
-      throw new Error(data.error.message)
+      if (!response.ok) {
+        throw new Error(`RPC request failed: ${response.statusText}`)
+      }
+
+      const data: RpcResponse<T> = await response.json()
+
+      if (data.error) {
+        throw new Error(data.error.message)
+      }
+
+      return data.result as T
+    } catch (error) {
+      // Convert AbortError to RpcAbortError for consistent error handling
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new RpcAbortError()
+      }
+      throw error
     }
-
-    return data.result as T
   }
 
-  async batch<T>(requests: RpcRequest[]): Promise<T[]> {
-    const response = await fetch(`${this.baseUrl}/rpc/batch`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(
-        requests.map((req, i) => ({
-          ...req,
-          id: req.id ?? this.nextId(),
-        }))
-      ),
-    })
+  /**
+   * Create a cancellable RPC call that returns both the promise and a cancel function.
+   *
+   * @example
+   * const { promise, cancel } = rpcClient.callCancellable('find', [db, collection, options])
+   * // Later, if needed:
+   * cancel()
+   */
+  callCancellable<T>(
+    method: string,
+    params: unknown[] = []
+  ): CancellableRequest<T> {
+    const controller = new AbortController()
+    const promise = this.call<T>(method, params, { signal: controller.signal })
+    return {
+      promise,
+      controller,
+      cancel: () => controller.abort(),
+    }
+  }
 
-    if (!response.ok) {
-      throw new Error(`RPC batch request failed: ${response.statusText}`)
+  /**
+   * Make a batch RPC call with optional cancellation support.
+   *
+   * @param requests - Array of RPC requests to execute
+   * @param options - Optional settings including AbortSignal for cancellation
+   * @throws RpcAbortError if the request is aborted
+   */
+  async batch<T>(
+    requests: RpcRequest[],
+    options?: RpcCallOptions
+  ): Promise<T[]> {
+    // Check if already aborted before making the request
+    if (options?.signal?.aborted) {
+      throw new RpcAbortError()
     }
 
-    const data: RpcBatchResponse<T> = await response.json()
+    try {
+      const response = await fetch(`${this.baseUrl}/rpc/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(
+          requests.map((req) => ({
+            ...req,
+            id: req.id ?? this.nextId(),
+          }))
+        ),
+        signal: options?.signal,
+      })
 
-    return data.results.map((r) => {
-      if (r.error) {
-        throw new Error(r.error.message)
+      if (!response.ok) {
+        throw new Error(`RPC batch request failed: ${response.statusText}`)
       }
-      return r.result as T
-    })
+
+      const data: RpcBatchResponse<T> = await response.json()
+
+      return data.results.map((r) => {
+        if (r.error) {
+          throw new Error(r.error.message)
+        }
+        return r.result as T
+      })
+    } catch (error) {
+      // Convert AbortError to RpcAbortError for consistent error handling
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new RpcAbortError()
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Create a cancellable batch RPC call.
+   *
+   * @example
+   * const { promise, cancel } = rpcClient.batchCancellable([
+   *   { method: 'find', params: [db, 'users', {}] },
+   *   { method: 'countDocuments', params: [db, 'users', {}] }
+   * ])
+   * // Later, if needed:
+   * cancel()
+   */
+  batchCancellable<T>(requests: RpcRequest[]): CancellableRequest<T[]> {
+    const controller = new AbortController()
+    const promise = this.batch<T>(requests, { signal: controller.signal })
+    return {
+      promise,
+      controller,
+      cancel: () => controller.abort(),
+    }
   }
 
   // Database operations
@@ -167,112 +306,181 @@ class RpcClient {
   }
 
   // Document operations
+
+  /**
+   * Find documents matching the query.
+   * Supports cancellation via AbortSignal.
+   */
   async find(
     database: string,
     collection: string,
-    options: FindOptions = {}
+    options: FindOptions = {},
+    callOptions?: RpcCallOptions
   ): Promise<Document[]> {
-    return this.call<Document[]>('find', [database, collection, options])
+    return this.call<Document[]>(
+      'find',
+      [database, collection, options],
+      callOptions
+    )
+  }
+
+  /**
+   * Create a cancellable find operation.
+   * Returns both the promise and a cancel function.
+   */
+  findCancellable(
+    database: string,
+    collection: string,
+    options: FindOptions = {}
+  ): CancellableRequest<Document[]> {
+    return this.callCancellable<Document[]>('find', [
+      database,
+      collection,
+      options,
+    ])
   }
 
   async findOne(
     database: string,
     collection: string,
-    filter: Record<string, unknown> = {}
+    filter: Record<string, unknown> = {},
+    callOptions?: RpcCallOptions
   ): Promise<Document | null> {
-    return this.call<Document | null>('findOne', [
-      database,
-      collection,
-      filter,
-    ])
+    return this.call<Document | null>(
+      'findOne',
+      [database, collection, filter],
+      callOptions
+    )
   }
 
   async insertOne(
     database: string,
     collection: string,
-    document: Record<string, unknown>
+    document: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<InsertOneResult> {
-    return this.call<InsertOneResult>('insertOne', [
-      database,
-      collection,
-      document,
-    ])
+    return this.call<InsertOneResult>(
+      'insertOne',
+      [database, collection, document],
+      callOptions
+    )
   }
 
   async insertMany(
     database: string,
     collection: string,
-    documents: Record<string, unknown>[]
+    documents: Record<string, unknown>[],
+    callOptions?: RpcCallOptions
   ): Promise<InsertManyResult> {
-    return this.call<InsertManyResult>('insertMany', [
-      database,
-      collection,
-      documents,
-    ])
+    return this.call<InsertManyResult>(
+      'insertMany',
+      [database, collection, documents],
+      callOptions
+    )
   }
 
   async updateOne(
     database: string,
     collection: string,
     filter: Record<string, unknown>,
-    update: Record<string, unknown>
+    update: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<UpdateResult> {
-    return this.call<UpdateResult>('updateOne', [
-      database,
-      collection,
-      filter,
-      update,
-    ])
+    return this.call<UpdateResult>(
+      'updateOne',
+      [database, collection, filter, update],
+      callOptions
+    )
   }
 
   async updateMany(
     database: string,
     collection: string,
     filter: Record<string, unknown>,
-    update: Record<string, unknown>
+    update: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<UpdateResult> {
-    return this.call<UpdateResult>('updateMany', [
-      database,
-      collection,
-      filter,
-      update,
-    ])
+    return this.call<UpdateResult>(
+      'updateMany',
+      [database, collection, filter, update],
+      callOptions
+    )
   }
 
   async deleteOne(
     database: string,
     collection: string,
-    filter: Record<string, unknown>
+    filter: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<DeleteResult> {
-    return this.call<DeleteResult>('deleteOne', [database, collection, filter])
+    return this.call<DeleteResult>(
+      'deleteOne',
+      [database, collection, filter],
+      callOptions
+    )
   }
 
   async deleteMany(
     database: string,
     collection: string,
-    filter: Record<string, unknown>
+    filter: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<DeleteResult> {
-    return this.call<DeleteResult>('deleteMany', [
-      database,
-      collection,
-      filter,
-    ])
+    return this.call<DeleteResult>(
+      'deleteMany',
+      [database, collection, filter],
+      callOptions
+    )
   }
 
+  /**
+   * Count documents matching the filter.
+   * Supports cancellation via AbortSignal.
+   */
   async countDocuments(
     database: string,
     collection: string,
-    filter: Record<string, unknown> = {}
+    filter: Record<string, unknown> = {},
+    callOptions?: RpcCallOptions
   ): Promise<number> {
-    return this.call<number>('countDocuments', [database, collection, filter])
+    return this.call<number>(
+      'countDocuments',
+      [database, collection, filter],
+      callOptions
+    )
   }
 
+  /**
+   * Run an aggregation pipeline.
+   * Supports cancellation via AbortSignal.
+   */
   async aggregate(
     database: string,
     collection: string,
-    pipeline: Record<string, unknown>[]
+    pipeline: Record<string, unknown>[],
+    callOptions?: RpcCallOptions
   ): Promise<Document[]> {
-    return this.call<Document[]>('aggregate', [database, collection, pipeline])
+    return this.call<Document[]>(
+      'aggregate',
+      [database, collection, pipeline],
+      callOptions
+    )
+  }
+
+  /**
+   * Create a cancellable aggregation operation.
+   * Returns both the promise and a cancel function.
+   */
+  aggregateCancellable(
+    database: string,
+    collection: string,
+    pipeline: Record<string, unknown>[]
+  ): CancellableRequest<Document[]> {
+    return this.callCancellable<Document[]>('aggregate', [
+      database,
+      collection,
+      pipeline,
+    ])
   }
 
   // Index operations

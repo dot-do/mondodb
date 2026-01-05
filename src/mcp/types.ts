@@ -6,27 +6,63 @@
  * - Tool definitions and annotations
  * - OpenAI Deep Research compatible response formats (SearchResult, FetchResult, DoResult)
  * - Zod schemas for runtime validation
+ * - Utility type guards for runtime type checking
+ * - Response builder functions for creating MCP responses
+ *
+ * @packageDocumentation
+ * @module mcp/types
  */
 
 import { z } from 'zod'
 
 // =============================================================================
-// Tool Annotations (MCP Spec 2024-11-05)
+// Tool Annotations (MCP Spec 2025-11-25)
 // =============================================================================
 
 /**
- * Annotations providing hints about tool behavior
+ * Tool annotations provide hints about tool behavior.
+ * These are advisory only - clients should not rely on them for security.
+ *
+ * @remarks
+ * Annotations help AI agents and clients understand tool characteristics
+ * without needing to execute them. They follow the MCP specification's
+ * tool annotation guidelines.
+ *
+ * @see https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+ *
+ * @example
+ * ```typescript
+ * const searchAnnotations: ToolAnnotations = {
+ *   title: 'Search Documents',
+ *   readOnlyHint: true,      // Safe to call - no side effects
+ *   destructiveHint: false,  // Won't delete or modify data
+ *   idempotentHint: true,    // Same input = same output
+ *   openWorldHint: false,    // Only interacts with local database
+ * }
+ * ```
  */
 export interface ToolAnnotations {
-  /** Human-readable title for the tool */
+  /** Human-readable title for UI display */
   title?: string
-  /** If true, the tool only reads data and has no side effects */
+  /**
+   * Tool does not modify state (like HTTP GET).
+   * When true, the tool is safe to call repeatedly without side effects.
+   */
   readOnlyHint?: boolean
-  /** If true, the tool may perform destructive operations */
+  /**
+   * Tool may make irreversible changes.
+   * When true, clients should confirm with users before executing.
+   */
   destructiveHint?: boolean
-  /** If true, calling with same args produces same result */
+  /**
+   * Repeated calls have same effect as single call.
+   * When true, the tool is safe to retry on failure.
+   */
   idempotentHint?: boolean
-  /** If true, tool interacts with external world */
+  /**
+   * Interacts with external systems (network, APIs, etc.).
+   * When true, results may vary based on external state.
+   */
   openWorldHint?: boolean
 }
 
@@ -35,28 +71,81 @@ export interface ToolAnnotations {
 // =============================================================================
 
 /**
- * JSON Schema type for tool input validation
+ * JSON Schema type for tool input validation.
+ *
+ * @remarks
+ * This is a simplified JSON Schema representation used for defining
+ * tool input parameters. It supports the most common JSON Schema features
+ * needed for MCP tool definitions.
+ *
+ * @see https://json-schema.org/
+ *
+ * @example
+ * ```typescript
+ * const schema: JsonSchema = {
+ *   type: 'object',
+ *   properties: {
+ *     query: { type: 'string', description: 'Search query' },
+ *     limit: { type: 'number', description: 'Max results' },
+ *   },
+ *   required: ['query'],
+ * }
+ * ```
  */
 export interface JsonSchema {
+  /** JSON Schema type (object, string, number, array, boolean, etc.) */
   type: string
+  /** Property definitions for object types */
   properties?: Record<string, JsonSchema | { type: string; description?: string }>
+  /** List of required property names */
   required?: string[]
+  /** Human-readable description of this schema */
   description?: string
+  /** Schema for array items */
   items?: JsonSchema
+  /** Allow additional JSON Schema properties */
   [key: string]: unknown
 }
 
 /**
- * MCP Tool Definition - describes a tool that can be called by AI agents
+ * MCP Tool Definition - describes a tool that can be called by AI agents.
+ *
+ * @remarks
+ * Tool definitions follow the MCP specification and include:
+ * - A unique name for tool invocation
+ * - A description for AI agent understanding
+ * - An input schema for parameter validation
+ * - Optional annotations for behavior hints
+ *
+ * @see https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+ *
+ * @example
+ * ```typescript
+ * const searchTool: McpToolDefinition = {
+ *   name: 'search',
+ *   description: 'Search for documents in the database',
+ *   inputSchema: {
+ *     type: 'object',
+ *     properties: {
+ *       query: { type: 'string', description: 'Search query' },
+ *     },
+ *     required: ['query'],
+ *   },
+ *   annotations: {
+ *     readOnlyHint: true,
+ *     idempotentHint: true,
+ *   },
+ * }
+ * ```
  */
 export interface McpToolDefinition {
-  /** Unique tool name */
+  /** Unique tool name used for invocation */
   name: string
-  /** Human-readable description */
+  /** Human-readable description explaining what the tool does */
   description: string
-  /** JSON Schema for input validation */
+  /** JSON Schema defining the tool's input parameters */
   inputSchema: JsonSchema
-  /** Optional behavior hints */
+  /** Optional annotations providing hints about tool behavior */
   annotations?: ToolAnnotations
 }
 
@@ -65,23 +154,48 @@ export interface McpToolDefinition {
 // =============================================================================
 
 /**
- * Search result - returned by search operations
- * Compatible with OpenAI Deep Research format
+ * Search result returned by search operations.
+ * Compatible with OpenAI Deep Research format.
+ *
+ * @remarks
+ * SearchResult provides a standardized format for search results that works
+ * with AI agents expecting the OpenAI Deep Research response format.
+ * The id format is `database.collection.ObjectId` and url is `mongodb://database/collection/ObjectId`.
+ *
+ * @example
+ * ```typescript
+ * const result: SearchResult = {
+ *   id: 'mydb.users.507f1f77bcf86cd799439011',
+ *   title: 'John Doe',
+ *   url: 'mongodb://mydb/users/507f1f77bcf86cd799439011',
+ *   text: '{"name": "John Doe", "email": "john@example.com"}',
+ * }
+ * ```
  */
 export interface SearchResult {
-  /** Unique identifier: database.collection.ObjectId */
+  /** Unique identifier in format: database.collection.ObjectId */
   id: string
-  /** Document title or summary */
+  /** Document title or summary for display */
   title: string
-  /** Resource URL: mongodb://database/collection/ObjectId */
+  /** Resource URL in format: mongodb://database/collection/ObjectId */
   url: string
-  /** Preview text snippet */
+  /** Preview text snippet (typically JSON) */
   text: string
 }
 
 /**
- * Search response - contains an array of search results
- * Compatible with OpenAI Deep Research format
+ * Search response containing an array of search results.
+ * Compatible with OpenAI Deep Research format.
+ *
+ * @example
+ * ```typescript
+ * const response: SearchResponse = {
+ *   results: [
+ *     { id: 'db.coll.123', title: 'Doc 1', url: 'mongodb://db/coll/123', text: '...' },
+ *     { id: 'db.coll.456', title: 'Doc 2', url: 'mongodb://db/coll/456', text: '...' },
+ *   ],
+ * }
+ * ```
  */
 export interface SearchResponse {
   /** Array of search results */
@@ -89,40 +203,105 @@ export interface SearchResponse {
 }
 
 /**
- * Fetch result - returned when fetching full document
- * Compatible with OpenAI Deep Research format
+ * Fetch result returned when fetching a full document.
+ * Compatible with OpenAI Deep Research format.
+ *
+ * @remarks
+ * FetchResult extends SearchResult with full document content and metadata.
+ * The text field contains the complete JSON-stringified document.
+ *
+ * @example
+ * ```typescript
+ * const result: FetchResult = {
+ *   id: 'mydb.users.507f1f77bcf86cd799439011',
+ *   title: 'John Doe',
+ *   url: 'mongodb://mydb/users/507f1f77bcf86cd799439011',
+ *   text: JSON.stringify({ _id: '507f1f77bcf86cd799439011', name: 'John Doe' }),
+ *   metadata: {
+ *     database: 'mydb',
+ *     collection: 'users',
+ *     _id: '507f1f77bcf86cd799439011',
+ *   },
+ * }
+ * ```
  */
 export interface FetchResult {
-  /** Unique identifier: database.collection.ObjectId */
+  /** Unique identifier in format: database.collection.ObjectId */
   id: string
-  /** Document title or summary */
+  /** Document title or summary for display */
   title: string
-  /** Resource URL: mongodb://database/collection/ObjectId */
+  /** Resource URL in format: mongodb://database/collection/ObjectId */
   url: string
-  /** Full document text (JSON stringified) */
+  /** Full document content (JSON stringified) */
   text: string
-  /** Document metadata */
+  /** Document location metadata */
   metadata: {
+    /** Database name */
     database: string
+    /** Collection name */
     collection: string
+    /** Document ObjectId */
     _id: string
   }
 }
 
 /**
- * Do result - returned by mutation operations
+ * Result returned by the "do" tool after executing code.
+ *
+ * @remarks
+ * DoResult represents the outcome of executing arbitrary JavaScript code
+ * in a sandboxed environment. It includes success status, result data,
+ * execution logs, and error information when applicable.
+ *
+ * @example Success case
+ * ```typescript
+ * const success: DoResult = {
+ *   success: true,
+ *   result: { count: 42, documents: [...] },
+ *   logs: ['Processing started', 'Found 42 documents'],
+ *   duration: 150,
+ * }
+ * ```
+ *
+ * @example Error case
+ * ```typescript
+ * const error: DoResult = {
+ *   success: false,
+ *   error: 'ReferenceError: undefined variable',
+ *   hints: ['Check variable spelling', 'Ensure all imports are correct'],
+ *   code: {
+ *     source: 'return unknownVar',
+ *     language: 'javascript',
+ *     errorLines: [1],
+ *   },
+ *   duration: 5,
+ * }
+ * ```
  */
 export interface DoResult {
-  /** Whether the operation succeeded */
+  /** Whether the code execution succeeded */
   success: boolean
-  /** Operation result data */
+  /** The return value from code execution */
   result?: unknown
-  /** Operation logs */
+  /** Console output and execution logs */
   logs?: string[]
-  /** Error message if failed */
+  /** Error message if execution failed */
   error?: string
-  /** Duration in milliseconds */
+  /** Execution duration in milliseconds */
   duration?: number
+  /** Debugging hints when errors occur */
+  hints?: string[]
+  /** Source code metadata for display and debugging */
+  code?: {
+    /** Original source code that was executed */
+    source: string
+    /** Detected programming language */
+    language: 'javascript' | 'typescript'
+    /** Line numbers where errors occurred (for highlighting) */
+    errorLines?: number[]
+  }
+  /** Non-fatal warnings generated during execution */
+  warnings?: string[]
 }
 
 // =============================================================================
@@ -469,6 +648,13 @@ export const DoResultSchema = z.object({
   logs: z.array(z.string()).optional(),
   error: z.string().optional(),
   duration: z.number().optional(),
+  hints: z.array(z.string()).optional(),
+  code: z.object({
+    source: z.string(),
+    language: z.enum(['javascript', 'typescript']),
+    errorLines: z.array(z.number()).optional(),
+  }).optional(),
+  warnings: z.array(z.string()).optional(),
 })
 
 /**

@@ -51,6 +51,18 @@ export type {
   DeleteDocumentInlineProps,
 } from './DeleteDocument'
 
+// Export Document
+export {
+  ExportDialog,
+  ExportDialogInline,
+} from './ExportDialog'
+export type {
+  ExportDialogProps,
+  ExportDialogInlineProps,
+  ExportFormat,
+  ExportState,
+} from './ExportDialog'
+
 // Document Actions
 export {
   DocumentActions,
