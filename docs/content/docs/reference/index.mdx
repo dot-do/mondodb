@@ -3,6 +3,48 @@ title: Reference
 description: Technical specifications and internals
 ---
 
-# Reference
-
 Technical documentation covering mongo.do internals, specifications, and advanced configuration.
+
+## Reference Documentation
+
+<Cards>
+  <Card title="Aggregation Operators" href="/docs/reference/aggregation-operators">
+    Complete reference for all aggregation expression operators including arithmetic, string, conditional, comparison, logical, and accumulator operators.
+  </Card>
+</Cards>
+
+## Operator Categories
+
+The [Aggregation Operators Reference](/docs/reference/aggregation-operators) covers the following categories:
+
+| Category | Description | Examples |
+|----------|-------------|----------|
+| Arithmetic | Mathematical operations | `$add`, `$subtract`, `$multiply`, `$divide`, `$mod` |
+| String | Text manipulation | `$concat`, `$substr`, `$toLower`, `$toUpper`, `$trim` |
+| Conditional | If/then/else logic | `$cond`, `$ifNull`, `$switch` |
+| Comparison | Value comparisons | `$eq`, `$ne`, `$gt`, `$lt`, `$gte`, `$lte`, `$cmp` |
+| Logical | Boolean algebra | `$and`, `$or`, `$not` |
+| Accumulator | Aggregation functions | `$sum`, `$avg`, `$min`, `$max`, `$count`, `$first`, `$last` |
+| Custom | User-defined functions | `$function` |
+
+## SQL Translation
+
+mongo.do translates MongoDB aggregation expressions to SQL operations that run on SQLite within Cloudflare Durable Objects. The reference documentation includes SQL translation details for each operator, helping you understand performance characteristics and optimization opportunities.
+
+## External Resources
+
+For additional context, these MongoDB documentation resources provide background on the standard MongoDB API that mongo.do implements:
+
+- [MongoDB Query Operators](https://www.mongodb.com/docs/manual/reference/operator/query/) - Query and projection operators
+- [MongoDB Update Operators](https://www.mongodb.com/docs/manual/reference/operator/update/) - Update operators for modifying documents
+- [MongoDB Aggregation Pipeline](https://www.mongodb.com/docs/manual/reference/operator/aggregation-pipeline/) - Aggregation pipeline stages
+- [MongoDB BSON Types](https://www.mongodb.com/docs/manual/reference/bson-types/) - BSON data types and ObjectId
+
+## Implementation Notes
+
+mongo.do implements the MongoDB API on top of SQLite, which means:
+
+- **JSON Storage**: Documents are stored as JSON in SQLite columns
+- **Index Support**: Indexes are translated to SQLite indexes for query optimization
+- **Expression Evaluation**: Aggregation expressions are compiled to SQL expressions
+- **Transactions**: Multi-document transactions use SQLite transaction isolation
