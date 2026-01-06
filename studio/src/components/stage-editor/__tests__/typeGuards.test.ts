@@ -85,6 +85,7 @@ const createProjectStage = (overrides?: Partial<ProjectStage>): ProjectStage => 
   type: '$project',
   enabled: true,
   fields: [],
+  excludeId: false,
   useRawJson: false,
   rawJson: '',
   ...overrides,

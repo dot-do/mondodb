@@ -526,16 +526,18 @@ export function PipelineCanvas({
       // Handle ArrowUp/ArrowDown for navigation
       if (event.key === 'ArrowDown' && !event.ctrlKey) {
         event.preventDefault()
-        if (selectedIndex < stages.length - 1) {
-          onStageSelect?.(stages[selectedIndex + 1]!.id)
+        const nextStageId = stages[selectedIndex + 1]?.id
+        if (selectedIndex < stages.length - 1 && nextStageId) {
+          onStageSelect?.(nextStageId)
         }
         return
       }
 
       if (event.key === 'ArrowUp' && !event.ctrlKey) {
         event.preventDefault()
-        if (selectedIndex > 0) {
-          onStageSelect?.(stages[selectedIndex - 1]!.id)
+        const prevStageId = stages[selectedIndex - 1]?.id
+        if (selectedIndex > 0 && prevStageId) {
+          onStageSelect?.(prevStageId)
         }
         return
       }

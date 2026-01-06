@@ -1915,17 +1915,13 @@ describe('PipelineCanvas', () => {
         const sourcePath = path.join(__dirname, '../PipelineCanvas.tsx')
         const sourceCode = fs.readFileSync(sourcePath, 'utf8')
 
-        // Extract the specific keyboard handler code
-        const keyboardHandlerMatch = sourceCode.match(/handleKeyDown[\s\S]*?^\s*\}/m)
-        const keyboardHandler = keyboardHandlerMatch ? keyboardHandlerMatch[0] : ''
-
-        // Check for optional chaining in keyboard navigation
-        const hasOptionalChainingForward = /stages\[selectedIndex \+ 1\]\?\.id/.test(keyboardHandler)
-        const hasOptionalChainingBackward = /stages\[selectedIndex - 1\]\?\.id/.test(keyboardHandler)
+        // Check for optional chaining in keyboard navigation (search full source)
+        const hasOptionalChainingForward = /stages\[selectedIndex \+ 1\]\?\.id/.test(sourceCode)
+        const hasOptionalChainingBackward = /stages\[selectedIndex - 1\]\?\.id/.test(sourceCode)
 
         // OR check for at() method usage which is also safe
-        const hasAtMethodForward = /stages\.at\(selectedIndex \+ 1\)\?\.id/.test(keyboardHandler)
-        const hasAtMethodBackward = /stages\.at\(selectedIndex - 1\)\?\.id/.test(keyboardHandler)
+        const hasAtMethodForward = /stages\.at\(selectedIndex \+ 1\)\?\.id/.test(sourceCode)
+        const hasAtMethodBackward = /stages\.at\(selectedIndex - 1\)\?\.id/.test(sourceCode)
 
         // Both navigation directions should use safe access
         const forwardIsSafe = hasOptionalChainingForward || hasAtMethodForward

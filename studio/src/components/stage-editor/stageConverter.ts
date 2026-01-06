@@ -24,6 +24,28 @@ import type {
 } from './types'
 
 /**
+ * Parses an expression string that may be in JSON format or JavaScript object literal format.
+ * MongoDB expressions often use unquoted keys like { $concat: [...] } which is valid JS but not JSON.
+ *
+ * @param expressionStr - The expression string to parse
+ * @returns The parsed object
+ * @throws Error if the expression cannot be parsed
+ */
+function parseExpression(expressionStr: string): unknown {
+  // First try standard JSON parsing
+  try {
+    return JSON.parse(expressionStr)
+  } catch {
+    // Try parsing as JavaScript object literal by adding quotes to unquoted keys
+    // This handles MongoDB-style expressions like { $concat: [...] }
+    const jsonified = expressionStr
+      // Match unquoted keys (including those starting with $)
+      .replace(/([{,]\s*)(\$?[a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3')
+    return JSON.parse(jsonified)
+  }
+}
+
+/**
  * Converts a string value to the appropriate JavaScript type based on valueType.
  *
  * @param value - The string value to convert
@@ -154,12 +176,13 @@ function convertProjectStage(stage: ProjectStage): Record<string, unknown> {
   }
 
   for (const field of stage.fields) {
-    if (field.isExpression && typeof field.include === 'string') {
+    if (field.isExpression) {
       // Parse expression string to object
+      const expressionStr = typeof field.include === 'string' ? field.include : String(field.include)
       try {
-        projectObj[field.field] = JSON.parse(field.include)
+        projectObj[field.field] = parseExpression(expressionStr)
       } catch {
-        projectObj[field.field] = field.include
+        projectObj[field.field] = expressionStr
       }
     } else {
       projectObj[field.field] = field.include ? 1 : 0
@@ -343,7 +366,7 @@ function convertAddFieldsStage(stage: AddFieldsStage): Record<string, unknown> {
 
   for (const field of stage.fields) {
     try {
-      addFieldsObj[field.field] = JSON.parse(field.expression)
+      addFieldsObj[field.field] = parseExpression(field.expression)
     } catch {
       addFieldsObj[field.field] = field.expression
     }
