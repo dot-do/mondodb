@@ -48,7 +48,7 @@ function createMockErrorResponse(error: string, code: number = 500) {
 // Iceberg Connection Tests
 // ============================================================================
 
-describe.skip('ClickHouse Iceberg Integration', () => {
+describe('ClickHouse Iceberg Integration', () => {
   let mockFetch: Mock;
 
   beforeEach(() => {
