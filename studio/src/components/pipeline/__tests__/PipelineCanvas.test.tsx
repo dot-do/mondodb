@@ -1320,4 +1320,693 @@ describe('PipelineCanvas', () => {
       })
     })
   })
+
+  // ============================================================================
+  // RED PHASE: Tests for Safe Array Access (Issue mondodb-bvh5)
+  // These tests verify that array access is safe without non-null assertions
+  // Lines 530, 538 currently use non-null assertions that can cause runtime errors
+  // ============================================================================
+
+  describe('safe array access without non-null assertions (RED - Issue mondodb-bvh5)', () => {
+    describe('keyboard navigation boundary conditions', () => {
+      it('handles ArrowDown navigation at last stage without crashing', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-3"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // This should not crash even though stages[selectedIndex + 1] would be undefined
+        await user.keyboard('{ArrowDown}')
+
+        // Should not call onStageSelect with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+
+      it('handles ArrowUp navigation at first stage without crashing', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-1"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // This should not crash even though stages[selectedIndex - 1] would be undefined
+        await user.keyboard('{ArrowUp}')
+
+        // Should not call onStageSelect with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+
+      it('returns undefined instead of crashing when accessing beyond array bounds', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Single stage scenario - boundary is very close
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[createMatchStage('only-stage')]}
+            onStageSelect={onStageSelect}
+            selectedStageId="only-stage"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Try to navigate down from the only stage
+        await user.keyboard('{ArrowDown}')
+
+        // Should safely handle the undefined access
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('handles empty array safely when navigating', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Start with stages, then imagine they get removed
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-1"
+          />
+        )
+
+        // Now rerender with empty stages
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[]}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-1"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Should not crash when trying to navigate in empty array
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowUp}')
+
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+    })
+
+    describe('negative index handling', () => {
+      it('handles negative selectedIndex gracefully', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Select a stage that doesn't exist (will result in findIndex returning -1)
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="non-existent-stage"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Should not crash when selectedIndex is -1
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowUp}')
+
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('does not navigate when selected stage is not found', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="invalid-id"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // Should not attempt to select anything when current selection is invalid
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('concurrent modifications', () => {
+      it('handles stage deletion during navigation without crashing', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+        const onChange = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            onChange={onChange}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Delete the last stage while stage-2 is selected
+        const updatedStages = [createMatchStage('stage-1'), createProjectStage('stage-2')]
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={updatedStages}
+            onStageSelect={onStageSelect}
+            onChange={onChange}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Now try to navigate down - there's no next stage
+        await user.keyboard('{ArrowDown}')
+
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('handles array shrinking between render and navigation', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-3"
+          />
+        )
+
+        // Shrink the array to just one stage
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[createMatchStage('stage-1')]}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-1"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // Should not crash or call with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('handles rapid stage additions and navigation', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Start with stages
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Add more stages
+        const extendedStages = [
+          ...mockStages,
+          createLimitStage('stage-4'),
+          createSortStage('stage-5'),
+        ]
+
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={extendedStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Navigate multiple times rapidly
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowDown}')
+
+        // Should handle all navigation safely
+        const calls = onStageSelect.mock.calls
+        expect(calls.every(call => call[0] !== undefined)).toBe(true)
+      })
+    })
+
+    describe('out-of-bounds access protection', () => {
+      it('protects against accessing stages beyond array length', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Single stage - trying to go beyond should be safe
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[createMatchStage('only-stage')]}
+            onStageSelect={onStageSelect}
+            selectedStageId="only-stage"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Try multiple down arrows (would go beyond bounds)
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowDown}')
+
+        // Should never be called with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+
+      it('protects against accessing stages at negative indices', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[createMatchStage('only-stage')]}
+            onStageSelect={onStageSelect}
+            selectedStageId="only-stage"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Try multiple up arrows (would go to negative indices)
+        await user.keyboard('{ArrowUp}')
+        await user.keyboard('{ArrowUp}')
+        await user.keyboard('{ArrowUp}')
+
+        // Should never be called with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+
+      it('safely handles navigation in two-stage pipeline', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const twoStages = [createMatchStage('stage-1'), createProjectStage('stage-2')]
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={twoStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Navigate down from last stage - should not crash
+        await user.keyboard('{ArrowDown}')
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+
+        // Navigate up - should work
+        await user.keyboard('{ArrowUp}')
+        expect(onStageSelect).toHaveBeenCalledWith('stage-1')
+      })
+    })
+
+    describe('undefined vs null handling', () => {
+      it('does not confuse undefined array access with null selectedStageId', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Start with null selectedStageId
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId={null}
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+
+        // Should not crash when no stage is selected
+        await user.keyboard('{ArrowDown}')
+        await user.keyboard('{ArrowUp}')
+
+        // Should not attempt navigation when nothing is selected
+        expect(onStageSelect).not.toHaveBeenCalled()
+      })
+
+      it('handles transition from valid to null selectedStageId', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Clear selection
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId={null}
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // Should not crash or call with undefined
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+    })
+
+    describe('edge cases with stage array mutations', () => {
+      it('handles all stages being removed during selection', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Remove all stages
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={[]}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('handles stage reordering during navigation', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Reorder stages - stage-2 is now at different index
+        const reorderedStages = [
+          createGroupStage('stage-3'),
+          createProjectStage('stage-2'),
+          createMatchStage('stage-1'),
+        ]
+
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={reorderedStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // Should safely find new index and navigate
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+
+      it('handles stage ID changes during navigation', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        const { rerender } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        // Replace stages with new IDs
+        const newStages = [
+          createMatchStage('new-1'),
+          createProjectStage('new-2'),
+          createGroupStage('new-3'),
+        ]
+
+        rerender(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={newStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2" // This ID no longer exists
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // Should not crash when selected ID doesn't exist
+        expect(onStageSelect).not.toHaveBeenCalledWith(undefined)
+      })
+    })
+
+    describe('type safety with undefined', () => {
+      it('ensures onStageSelect is never called with undefined id', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        // Test various boundary conditions
+        const scenarios = [
+          { stages: [], selectedStageId: null },
+          { stages: [createMatchStage('only')], selectedStageId: 'only' },
+          { stages: mockStages, selectedStageId: 'stage-3' },
+          { stages: mockStages, selectedStageId: 'non-existent' },
+        ]
+
+        for (const scenario of scenarios) {
+          onStageSelect.mockClear()
+
+          const { unmount } = render(
+            <PipelineCanvas
+              {...defaultProps}
+              stages={scenario.stages}
+              onStageSelect={onStageSelect}
+              selectedStageId={scenario.selectedStageId}
+            />
+          )
+
+          const canvas = screen.getByTestId('pipeline-canvas')
+          canvas.focus()
+
+          await user.keyboard('{ArrowDown}')
+          await user.keyboard('{ArrowUp}')
+
+          // Verify no undefined was ever passed
+          const allCalls = onStageSelect.mock.calls
+          expect(allCalls.every(call => call[0] !== undefined)).toBe(true)
+
+          unmount()
+        }
+      })
+
+      it('preserves type safety when accessing array elements', async () => {
+        const user = userEvent.setup()
+        const onStageSelect = vi.fn()
+
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-2"
+          />
+        )
+
+        const canvas = screen.getByTestId('pipeline-canvas')
+        canvas.focus()
+        await user.keyboard('{ArrowDown}')
+
+        // If called, should only be called with a string (not undefined)
+        if (onStageSelect.mock.calls.length > 0) {
+          const callArg = onStageSelect.mock.calls[0]![0]
+          expect(typeof callArg).toBe('string')
+          expect(callArg).toBeTruthy()
+        }
+      })
+
+      it('verifies array access uses optional chaining instead of non-null assertion', () => {
+        // This test checks the implementation directly
+        // Non-null assertions (!) are unsafe even with boundary checks because:
+        // 1. They can be wrong if logic changes
+        // 2. They bypass TypeScript's safety checks
+        // 3. They can cause runtime errors if array is modified concurrently
+
+        // Read the source file to check for non-null assertions in array access
+        const fs = require('fs')
+        const path = require('path')
+        const sourcePath = path.join(__dirname, '../PipelineCanvas.tsx')
+        const sourceCode = fs.readFileSync(sourcePath, 'utf8')
+
+        // Look for the specific unsafe patterns in keyboard navigation
+        const hasUnsafeArrayAccess = /stages\[selectedIndex \+ 1\]!/.test(sourceCode) ||
+                                    /stages\[selectedIndex - 1\]!/.test(sourceCode)
+
+        // This test will FAIL in RED phase because the code uses non-null assertions
+        expect(hasUnsafeArrayAccess).toBe(false)
+      })
+
+      it('code should use safe array access pattern with optional chaining', () => {
+        // Read the implementation to verify it uses safe patterns
+        const fs = require('fs')
+        const path = require('path')
+        const sourcePath = path.join(__dirname, '../PipelineCanvas.tsx')
+        const sourceCode = fs.readFileSync(sourcePath, 'utf8')
+
+        // Extract the specific keyboard handler code
+        const keyboardHandlerMatch = sourceCode.match(/handleKeyDown[\s\S]*?^\s*\}/m)
+        const keyboardHandler = keyboardHandlerMatch ? keyboardHandlerMatch[0] : ''
+
+        // Check for optional chaining in keyboard navigation
+        const hasOptionalChainingForward = /stages\[selectedIndex \+ 1\]\?\.id/.test(keyboardHandler)
+        const hasOptionalChainingBackward = /stages\[selectedIndex - 1\]\?\.id/.test(keyboardHandler)
+
+        // OR check for at() method usage which is also safe
+        const hasAtMethodForward = /stages\.at\(selectedIndex \+ 1\)\?\.id/.test(keyboardHandler)
+        const hasAtMethodBackward = /stages\.at\(selectedIndex - 1\)\?\.id/.test(keyboardHandler)
+
+        // Both navigation directions should use safe access
+        const forwardIsSafe = hasOptionalChainingForward || hasAtMethodForward
+        const backwardIsSafe = hasOptionalChainingBackward || hasAtMethodBackward
+
+        // This test will FAIL in RED phase because code doesn't use these safe patterns yet
+        expect(forwardIsSafe && backwardIsSafe).toBe(true)
+      })
+    })
+
+    describe('demonstrates runtime risk of non-null assertions', () => {
+      it('shows that non-null assertions can fail with sparse arrays', () => {
+        // Create a sparse array scenario that demonstrates the risk
+        const sparseStages = mockStages.slice()
+        // @ts-expect-error - Intentionally creating unsafe condition
+        delete (sparseStages as unknown[])[1]
+
+        const onStageSelect = vi.fn()
+
+        // This would crash if we tried to access stages[1]!.id
+        // The component should handle this gracefully
+        const { container } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={sparseStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-1"
+          />
+        )
+
+        // Component should render without crashing
+        expect(container).toBeTruthy()
+      })
+
+      it('demonstrates frozen array safety requirements', () => {
+        // Frozen arrays can't be modified but access can still return undefined
+        const frozenStages = Object.freeze([...mockStages])
+        const onStageSelect = vi.fn()
+
+        render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={frozenStages}
+            onStageSelect={onStageSelect}
+            selectedStageId="stage-3"
+          />
+        )
+
+        // Should be able to handle even when array is frozen
+        expect(screen.getByTestId('pipeline-canvas')).toBeInTheDocument()
+      })
+
+      it('shows array proxy can intercept access', () => {
+        // Use a Proxy to demonstrate that array access might not return expected value
+        const proxyStages = new Proxy([...mockStages], {
+          get(target, prop) {
+            // Simulate a race condition where array access might fail
+            if (typeof prop === 'string' && !isNaN(Number(prop))) {
+              const index = Number(prop)
+              // Return undefined for out of bounds (simulating concurrent modification)
+              if (index >= target.length) {
+                return undefined
+              }
+            }
+            return target[prop as keyof typeof target]
+          }
+        })
+
+        const onStageSelect = vi.fn()
+
+        // Component should handle proxy-wrapped arrays
+        const { container } = render(
+          <PipelineCanvas
+            {...defaultProps}
+            stages={proxyStages}
+            onStageSelect={onStageSelect}
+          />
+        )
+
+        expect(container).toBeTruthy()
+      })
+    })
+  })
 })

@@ -1178,4 +1178,720 @@ describe('StagePalette', () => {
       expect(allMatchStages).toHaveLength(1)
     })
   })
+
+  // RED PHASE: Tests for new MongoDB aggregation stages
+  // These tests will FAIL until the implementation is added
+  describe('NEW STAGES - RED PHASE', () => {
+    describe('$facet stage - Multi-faceted aggregation', () => {
+      it('renders $facet in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$facet')).toBeInTheDocument()
+      })
+
+      it('displays $facet stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$facet')).toBeInTheDocument()
+      })
+
+      it('displays Facet friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Facet')).toBeInTheDocument()
+      })
+
+      it('shows description text for $facet stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const facetStage = screen.getByTestId('palette-stage-$facet')
+        expect(within(facetStage).getByText(/multi.*facet|multiple.*pipeline|facet.*aggregation/i)).toBeInTheDocument()
+      })
+
+      it('has a drag handle icon for $facet', () => {
+        render(<StagePalette {...defaultProps} />)
+        const facetStage = screen.getByTestId('palette-stage-$facet')
+        expect(within(facetStage).getByTestId('stage-drag-icon')).toBeInTheDocument()
+      })
+
+      it('$facet stage is draggable', () => {
+        render(<StagePalette {...defaultProps} />)
+        const facetStage = screen.getByTestId('palette-stage-$facet')
+        expect(facetStage).toHaveAttribute('draggable', 'true')
+      })
+
+      it('calls onStageAdd with $facet when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$facet'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$facet')
+      })
+
+      it('groups $facet under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$facet')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $facet usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const facetStage = screen.getByTestId('palette-stage-$facet')
+        await user.hover(facetStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$facet.*:/i)
+        })
+      })
+    })
+
+    describe('$bucket stage - Group into buckets', () => {
+      it('renders $bucket in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$bucket')).toBeInTheDocument()
+      })
+
+      it('displays $bucket stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$bucket')).toBeInTheDocument()
+      })
+
+      it('displays Bucket friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Bucket')).toBeInTheDocument()
+      })
+
+      it('shows description text for $bucket stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const bucketStage = screen.getByTestId('palette-stage-$bucket')
+        expect(within(bucketStage).getByText(/bucket|categori[zs]e.*value|group.*range/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $bucket when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$bucket'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$bucket')
+      })
+
+      it('groups $bucket under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$bucket')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $bucket usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const bucketStage = screen.getByTestId('palette-stage-$bucket')
+        await user.hover(bucketStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$bucket.*:/i)
+          expect(tooltip).toHaveTextContent(/boundaries/i)
+        })
+      })
+    })
+
+    describe('$bucketAuto stage - Auto-bucketing', () => {
+      it('renders $bucketAuto in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$bucketAuto')).toBeInTheDocument()
+      })
+
+      it('displays $bucketAuto stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$bucketAuto')).toBeInTheDocument()
+      })
+
+      it('displays Bucket Auto friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Bucket Auto')).toBeInTheDocument()
+      })
+
+      it('shows description text for $bucketAuto stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const bucketAutoStage = screen.getByTestId('palette-stage-$bucketAuto')
+        expect(within(bucketAutoStage).getByText(/auto.*bucket|automatic.*bucket|bucket.*automatic/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $bucketAuto when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$bucketAuto'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$bucketAuto')
+      })
+
+      it('groups $bucketAuto under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$bucketAuto')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $bucketAuto usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const bucketAutoStage = screen.getByTestId('palette-stage-$bucketAuto')
+        await user.hover(bucketAutoStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$bucketAuto.*:/i)
+          expect(tooltip).toHaveTextContent(/buckets/i)
+        })
+      })
+    })
+
+    describe('$graphLookup stage - Recursive lookup', () => {
+      it('renders $graphLookup in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$graphLookup')).toBeInTheDocument()
+      })
+
+      it('displays $graphLookup stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$graphLookup')).toBeInTheDocument()
+      })
+
+      it('displays Graph Lookup friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Graph Lookup')).toBeInTheDocument()
+      })
+
+      it('shows description text for $graphLookup stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const graphLookupStage = screen.getByTestId('palette-stage-$graphLookup')
+        expect(within(graphLookupStage).getByText(/recursive.*search|graph.*traversal|hierarchi/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $graphLookup when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$graphLookup'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$graphLookup')
+      })
+
+      it('groups $graphLookup under Join category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const joinCategory = screen.getByTestId('category-join')
+        expect(within(joinCategory).getByTestId('palette-stage-$graphLookup')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $graphLookup usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const graphLookupStage = screen.getByTestId('palette-stage-$graphLookup')
+        await user.hover(graphLookupStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$graphLookup.*:/i)
+          expect(tooltip).toHaveTextContent(/connectFromField/i)
+        })
+      })
+    })
+
+    describe('$replaceRoot stage - Replace document root', () => {
+      it('renders $replaceRoot in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$replaceRoot')).toBeInTheDocument()
+      })
+
+      it('displays $replaceRoot stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$replaceRoot')).toBeInTheDocument()
+      })
+
+      it('displays Replace Root friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Replace Root')).toBeInTheDocument()
+      })
+
+      it('shows description text for $replaceRoot stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const replaceRootStage = screen.getByTestId('palette-stage-$replaceRoot')
+        expect(within(replaceRootStage).getByText(/replace.*root|promote.*field|nested.*document/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $replaceRoot when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$replaceRoot'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$replaceRoot')
+      })
+
+      it('groups $replaceRoot under Transformation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const transformationCategory = screen.getByTestId('category-transformation')
+        expect(within(transformationCategory).getByTestId('palette-stage-$replaceRoot')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $replaceRoot usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const replaceRootStage = screen.getByTestId('palette-stage-$replaceRoot')
+        await user.hover(replaceRootStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$replaceRoot.*:/i)
+          expect(tooltip).toHaveTextContent(/newRoot/i)
+        })
+      })
+    })
+
+    describe('$replaceWith stage - Replace document', () => {
+      it('renders $replaceWith in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$replaceWith')).toBeInTheDocument()
+      })
+
+      it('displays $replaceWith stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$replaceWith')).toBeInTheDocument()
+      })
+
+      it('displays Replace With friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Replace With')).toBeInTheDocument()
+      })
+
+      it('shows description text for $replaceWith stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const replaceWithStage = screen.getByTestId('palette-stage-$replaceWith')
+        expect(within(replaceWithStage).getByText(/replace.*document|alias.*replaceRoot/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $replaceWith when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$replaceWith'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$replaceWith')
+      })
+
+      it('groups $replaceWith under Transformation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const transformationCategory = screen.getByTestId('category-transformation')
+        expect(within(transformationCategory).getByTestId('palette-stage-$replaceWith')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $replaceWith usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const replaceWithStage = screen.getByTestId('palette-stage-$replaceWith')
+        await user.hover(replaceWithStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$replaceWith.*:/i)
+        })
+      })
+    })
+
+    describe('$merge stage - Merge results', () => {
+      it('renders $merge in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$merge')).toBeInTheDocument()
+      })
+
+      it('displays $merge stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$merge')).toBeInTheDocument()
+      })
+
+      it('displays Merge friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Merge')).toBeInTheDocument()
+      })
+
+      it('shows description text for $merge stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const mergeStage = screen.getByTestId('palette-stage-$merge')
+        expect(within(mergeStage).getByText(/merge.*result|write.*collection|output.*collection/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $merge when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$merge'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$merge')
+      })
+
+      it('groups $merge under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$merge')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $merge usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const mergeStage = screen.getByTestId('palette-stage-$merge')
+        await user.hover(mergeStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$merge.*:/i)
+          expect(tooltip).toHaveTextContent(/into/i)
+        })
+      })
+    })
+
+    describe('$out stage - Output to collection', () => {
+      it('renders $out in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$out')).toBeInTheDocument()
+      })
+
+      it('displays $out stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$out')).toBeInTheDocument()
+      })
+
+      it('displays Out friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Out')).toBeInTheDocument()
+      })
+
+      it('shows description text for $out stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const outStage = screen.getByTestId('palette-stage-$out')
+        expect(within(outStage).getByText(/write.*collection|output.*collection|replace.*collection/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $out when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$out'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$out')
+      })
+
+      it('groups $out under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$out')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $out usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const outStage = screen.getByTestId('palette-stage-$out')
+        await user.hover(outStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$out.*:/i)
+        })
+      })
+    })
+
+    describe('$sample stage - Random sample', () => {
+      it('renders $sample in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$sample')).toBeInTheDocument()
+      })
+
+      it('displays $sample stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$sample')).toBeInTheDocument()
+      })
+
+      it('displays Sample friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Sample')).toBeInTheDocument()
+      })
+
+      it('shows description text for $sample stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const sampleStage = screen.getByTestId('palette-stage-$sample')
+        expect(within(sampleStage).getByText(/random.*sample|randomly.*select/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $sample when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$sample'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$sample')
+      })
+
+      it('groups $sample under Aggregation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$sample')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $sample usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const sampleStage = screen.getByTestId('palette-stage-$sample')
+        await user.hover(sampleStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$sample.*:/i)
+          expect(tooltip).toHaveTextContent(/size/i)
+        })
+      })
+    })
+
+    describe('$set stage - Add/update fields (alias for $addFields)', () => {
+      it('renders $set in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$set')).toBeInTheDocument()
+      })
+
+      it('displays $set stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$set')).toBeInTheDocument()
+      })
+
+      it('displays Set friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Set')).toBeInTheDocument()
+      })
+
+      it('shows description text for $set stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const setStage = screen.getByTestId('palette-stage-$set')
+        expect(within(setStage).getByText(/add.*field|set.*field|alias.*addFields/i)).toBeInTheDocument()
+      })
+
+      it('calls onStageAdd with $set when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$set'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$set')
+      })
+
+      it('groups $set under Transformation category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const transformationCategory = screen.getByTestId('category-transformation')
+        expect(within(transformationCategory).getByTestId('palette-stage-$set')).toBeInTheDocument()
+      })
+
+      it('tooltip contains $set usage example', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const setStage = screen.getByTestId('palette-stage-$set')
+        await user.hover(setStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$set.*:/i)
+        })
+      })
+    })
+
+    describe('comprehensive new stages verification', () => {
+      it('renders all 10 new stages in the palette', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        // Verify all new stages are present
+        expect(screen.getByTestId('palette-stage-$facet')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$bucket')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$bucketAuto')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$graphLookup')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$replaceRoot')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$replaceWith')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$merge')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$out')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$sample')).toBeInTheDocument()
+        expect(screen.getByTestId('palette-stage-$set')).toBeInTheDocument()
+      })
+
+      it('all new stages are clickable and call onStageAdd', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        const newStages = [
+          '$facet',
+          '$bucket',
+          '$bucketAuto',
+          '$graphLookup',
+          '$replaceRoot',
+          '$replaceWith',
+          '$merge',
+          '$out',
+          '$sample',
+          '$set',
+        ]
+
+        for (const stage of newStages) {
+          await user.click(screen.getByTestId(`palette-stage-${stage}`))
+        }
+
+        expect(onStageAdd).toHaveBeenCalledTimes(10)
+        newStages.forEach((stage) => {
+          expect(onStageAdd).toHaveBeenCalledWith(stage)
+        })
+      })
+
+      it('all new stages have proper category grouping', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        // Aggregation category stages
+        const aggregationCategory = screen.getByTestId('category-aggregation')
+        expect(within(aggregationCategory).getByTestId('palette-stage-$facet')).toBeInTheDocument()
+        expect(within(aggregationCategory).getByTestId('palette-stage-$bucket')).toBeInTheDocument()
+        expect(within(aggregationCategory).getByTestId('palette-stage-$bucketAuto')).toBeInTheDocument()
+        expect(within(aggregationCategory).getByTestId('palette-stage-$merge')).toBeInTheDocument()
+        expect(within(aggregationCategory).getByTestId('palette-stage-$out')).toBeInTheDocument()
+        expect(within(aggregationCategory).getByTestId('palette-stage-$sample')).toBeInTheDocument()
+
+        // Transformation category stages
+        const transformationCategory = screen.getByTestId('category-transformation')
+        expect(within(transformationCategory).getByTestId('palette-stage-$replaceRoot')).toBeInTheDocument()
+        expect(within(transformationCategory).getByTestId('palette-stage-$replaceWith')).toBeInTheDocument()
+        expect(within(transformationCategory).getByTestId('palette-stage-$set')).toBeInTheDocument()
+
+        // Join category stages
+        const joinCategory = screen.getByTestId('category-join')
+        expect(within(joinCategory).getByTestId('palette-stage-$graphLookup')).toBeInTheDocument()
+      })
+
+      it('all new stages are searchable by name', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const searchTests = [
+          { query: 'facet', expectedStage: '$facet' },
+          { query: 'bucket', expectedStage: '$bucket' },
+          { query: 'bucketAuto', expectedStage: '$bucketAuto' },
+          { query: 'graphLookup', expectedStage: '$graphLookup' },
+          { query: 'replaceRoot', expectedStage: '$replaceRoot' },
+          { query: 'replaceWith', expectedStage: '$replaceWith' },
+          { query: 'merge', expectedStage: '$merge' },
+          { query: 'out', expectedStage: '$out' },
+          { query: 'sample', expectedStage: '$sample' },
+          { query: 'set', expectedStage: '$set' },
+        ]
+
+        for (const { query, expectedStage } of searchTests) {
+          const searchInput = screen.getByTestId('stage-palette-search')
+          await user.clear(searchInput)
+          await user.type(searchInput, query)
+
+          expect(screen.getByTestId(`palette-stage-${expectedStage}`)).toBeInTheDocument()
+
+          // Clear for next search
+          await user.clear(searchInput)
+        }
+      })
+
+      it('all new stages support keyboard accessibility', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        const newStages = [
+          '$facet',
+          '$bucket',
+          '$bucketAuto',
+          '$graphLookup',
+          '$replaceRoot',
+          '$replaceWith',
+          '$merge',
+          '$out',
+          '$sample',
+          '$set',
+        ]
+
+        for (const stage of newStages) {
+          const stageElement = screen.getByTestId(`palette-stage-${stage}`)
+          expect(stageElement).toHaveAttribute('role', 'button')
+          expect(stageElement).toHaveAttribute('tabIndex', '0')
+          expect(stageElement).toHaveAttribute('aria-label', expect.stringContaining(stage))
+
+          // Test keyboard activation
+          stageElement.focus()
+          await user.keyboard('{Enter}')
+        }
+
+        expect(onStageAdd).toHaveBeenCalledTimes(10)
+      })
+
+      it('all new stages are draggable with correct data transfer', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const newStages = [
+          '$facet',
+          '$bucket',
+          '$bucketAuto',
+          '$graphLookup',
+          '$replaceRoot',
+          '$replaceWith',
+          '$merge',
+          '$out',
+          '$sample',
+          '$set',
+        ]
+
+        newStages.forEach((stage) => {
+          const stageElement = screen.getByTestId(`palette-stage-${stage}`)
+          expect(stageElement).toHaveAttribute('draggable', 'true')
+
+          const dataTransfer = {
+            setData: vi.fn(),
+            effectAllowed: '',
+          }
+
+          fireEvent.dragStart(stageElement, { dataTransfer })
+
+          expect(dataTransfer.setData).toHaveBeenCalledWith(
+            'application/json',
+            JSON.stringify({ type: stage })
+          )
+        })
+      })
+    })
+  })
 })

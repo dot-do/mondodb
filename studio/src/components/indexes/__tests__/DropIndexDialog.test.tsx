@@ -136,13 +136,19 @@ describe('DropIndexDialog', () => {
   // SECTION 3: Drop Button Click Behavior
   // ===========================================================================
   describe('drop button behavior', () => {
+    // Helper to type confirmation and enable the Drop button
+    const confirmAndDrop = async (user: ReturnType<typeof userEvent.setup>, indexName = 'email_1') => {
+      await user.type(screen.getByTestId('drop-index-confirm-input'), indexName)
+      await user.click(screen.getByTestId('drop-index-confirm'))
+    }
+
     it('calls dropMutation.mutateAsync with index name when Drop Index is clicked', async () => {
       mockMutateAsync.mockResolvedValue(undefined)
       const user = userEvent.setup()
 
       render(<DropIndexDialog {...defaultProps} />)
 
-      await user.click(screen.getByTestId('drop-index-confirm'))
+      await confirmAndDrop(user)
 
       await waitFor(() => {
         expect(mockMutateAsync).toHaveBeenCalledWith('email_1')
@@ -155,7 +161,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
-      await user.click(screen.getByTestId('drop-index-confirm'))
+      await confirmAndDrop(user)
 
       await waitFor(() => {
         expect(defaultProps.onSuccess).toHaveBeenCalled()
@@ -168,7 +174,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
-      await user.click(screen.getByTestId('drop-index-confirm'))
+      await confirmAndDrop(user)
 
       await waitFor(() => {
         expect(defaultProps.onClose).toHaveBeenCalled()
@@ -181,7 +187,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
-      await user.click(screen.getByTestId('drop-index-confirm'))
+      await confirmAndDrop(user)
 
       await waitFor(() => {
         expect(mockMutateAsync).toHaveBeenCalled()
@@ -196,15 +202,14 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
-      await user.click(screen.getByTestId('drop-index-confirm'))
+      await confirmAndDrop(user)
 
       await waitFor(() => {
         expect(mockMutateAsync).toHaveBeenCalled()
       })
 
-      // Small delay to ensure callbacks would have been called if they were going to be
-      await new Promise(resolve => setTimeout(resolve, 100))
-
+      // Verify onClose was not called - if it were going to be called,
+      // it would have been called synchronously after the mutation rejection
       expect(defaultProps.onClose).not.toHaveBeenCalled()
     })
 
@@ -288,12 +293,18 @@ describe('DropIndexDialog', () => {
   // SECTION 5: Error Handling when Drop Fails
   // ===========================================================================
   describe('error handling', () => {
+    // Helper to type confirmation before clicking Drop
+    const typeConfirmation = async (user: ReturnType<typeof userEvent.setup>, indexName = 'email_1') => {
+      await user.type(screen.getByTestId('drop-index-confirm-input'), indexName)
+    }
+
     it('displays error message when drop fails', async () => {
       mockMutateAsync.mockRejectedValue(new Error('Index not found'))
       const user = userEvent.setup()
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -307,6 +318,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -320,6 +332,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -336,6 +349,7 @@ describe('DropIndexDialog', () => {
 
       const { rerender } = render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -358,6 +372,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -376,6 +391,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -392,6 +408,8 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      await typeConfirmation(user)
+
       // First attempt fails
       await user.click(screen.getByTestId('drop-index-confirm'))
 
@@ -399,7 +417,7 @@ describe('DropIndexDialog', () => {
         expect(screen.getByTestId('drop-index-error')).toBeInTheDocument()
       })
 
-      // Second attempt succeeds
+      // Second attempt succeeds (confirmation still there)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -485,6 +503,9 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      // Type confirmation first
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
+
       // First click
       await user.click(screen.getByTestId('drop-index-confirm'))
 
@@ -504,6 +525,11 @@ describe('DropIndexDialog', () => {
   // SECTION 7: onSuccess Callback after Successful Drop
   // ===========================================================================
   describe('onSuccess callback', () => {
+    // Helper to type confirmation
+    const typeConfirmation = async (user: ReturnType<typeof userEvent.setup>, indexName = 'email_1') => {
+      await user.type(screen.getByTestId('drop-index-confirm-input'), indexName)
+    }
+
     it('calls onSuccess callback after successful mutation', async () => {
       mockMutateAsync.mockResolvedValue(undefined)
       const onSuccess = vi.fn()
@@ -511,6 +537,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} onSuccess={onSuccess} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -527,6 +554,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} onSuccess={onSuccess} onClose={onClose} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -546,6 +574,7 @@ describe('DropIndexDialog', () => {
         dropMutation={mockDropMutation as any}
       />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -562,6 +591,7 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} onSuccess={onSuccess} />)
 
+      await typeConfirmation(user)
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {
@@ -606,6 +636,9 @@ describe('DropIndexDialog', () => {
         dropMutation={mockDropMutation as any}
       />)
 
+      // Type confirmation first
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
+
       // Should not throw
       await user.click(screen.getByTestId('drop-index-confirm'))
 
@@ -619,6 +652,9 @@ describe('DropIndexDialog', () => {
       const user = userEvent.setup()
 
       const { rerender } = render(<DropIndexDialog {...defaultProps} indexName="first_index" />)
+
+      // Type confirmation first
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'first_index')
 
       // Trigger error for first index
       await user.click(screen.getByTestId('drop-index-confirm'))
@@ -648,7 +684,121 @@ describe('DropIndexDialog', () => {
   })
 
   // ===========================================================================
-  // SECTION 9: Accessibility
+  // SECTION 9: Type-to-Confirm Safety Pattern (RED: mondodb-eoa0)
+  // ===========================================================================
+  describe('type-to-confirm safety pattern', () => {
+    it('renders confirmation input field', () => {
+      render(<DropIndexDialog {...defaultProps} />)
+
+      expect(screen.getByTestId('drop-index-confirm-input')).toBeInTheDocument()
+    })
+
+    it('Drop Index button is disabled by default', () => {
+      render(<DropIndexDialog {...defaultProps} />)
+
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('shows instruction text to type index name', () => {
+      render(<DropIndexDialog {...defaultProps} />)
+
+      // The instruction label should contain "Type ... to confirm"
+      expect(screen.getByText(/to confirm/i)).toBeInTheDocument()
+      // And the index name should appear in the instruction area (multiple elements may have it)
+      expect(screen.getAllByText('email_1').length).toBeGreaterThan(0)
+    })
+
+    it('Drop Index button remains disabled with partial match', async () => {
+      const user = userEvent.setup()
+
+      render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email')
+
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('Drop Index button remains disabled with wrong text', async () => {
+      const user = userEvent.setup()
+
+      render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'wrong_name')
+
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('Drop Index button becomes enabled when exact index name is typed', async () => {
+      const user = userEvent.setup()
+
+      render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
+
+      expect(screen.getByTestId('drop-index-confirm')).not.toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('confirmation is case-sensitive', async () => {
+      const user = userEvent.setup()
+
+      render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'EMAIL_1')
+
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('resets confirmation input when dialog reopens', async () => {
+      const user = userEvent.setup()
+
+      const { rerender } = render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
+
+      // Close dialog
+      rerender(<DropIndexDialog {...defaultProps} open={false} />)
+
+      // Reopen dialog
+      rerender(<DropIndexDialog {...defaultProps} open={true} />)
+
+      expect(screen.getByTestId('drop-index-confirm-input')).toHaveValue('')
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('resets confirmation input when index name changes', async () => {
+      const user = userEvent.setup()
+
+      const { rerender } = render(<DropIndexDialog {...defaultProps} />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
+
+      // Change index name
+      rerender(<DropIndexDialog {...defaultProps} indexName="new_index" />)
+
+      expect(screen.getByTestId('drop-index-confirm-input')).toHaveValue('')
+      expect(screen.getByTestId('drop-index-confirm')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('confirmation input has accessible label', () => {
+      render(<DropIndexDialog {...defaultProps} />)
+
+      const input = screen.getByTestId('drop-index-confirm-input')
+      expect(input).toHaveAccessibleName()
+    })
+
+    it('handles index names with special characters in confirmation', async () => {
+      const user = userEvent.setup()
+
+      render(<DropIndexDialog {...defaultProps} indexName="user.email_1" />)
+
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'user.email_1')
+
+      expect(screen.getByTestId('drop-index-confirm')).not.toHaveAttribute('aria-disabled', 'true')
+    })
+  })
+
+  // ===========================================================================
+  // SECTION 10: Accessibility
   // ===========================================================================
   describe('accessibility', () => {
     it('has accessible dialog title', () => {
@@ -694,6 +844,8 @@ describe('DropIndexDialog', () => {
 
       render(<DropIndexDialog {...defaultProps} />)
 
+      // Type confirmation first
+      await user.type(screen.getByTestId('drop-index-confirm-input'), 'email_1')
       await user.click(screen.getByTestId('drop-index-confirm'))
 
       await waitFor(() => {

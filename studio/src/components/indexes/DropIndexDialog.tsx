@@ -8,10 +8,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { css, keyframes } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
-import { H3, Body } from '@leafygreen-ui/typography'
+import { H3, Body, Label } from '@leafygreen-ui/typography'
 import Button from '@leafygreen-ui/button'
 import Modal from '@leafygreen-ui/modal'
 import Icon from '@leafygreen-ui/icon'
+import TextInput from '@leafygreen-ui/text-input'
 import { useDropIndexMutation } from '@hooks/useQueries'
 
 // Animation for spinner
@@ -71,6 +72,21 @@ const errorStyles = css`
   margin-bottom: 16px;
 `
 
+const confirmInputStyles = css`
+  margin-bottom: 16px;
+`
+
+const confirmLabelStyles = css`
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: ${palette.gray.dark2};
+`
+
+const confirmIndexNameStyles = css`
+  font-weight: 600;
+  font-family: 'Source Code Pro', monospace;
+`
+
 const footerStyles = css`
   display: flex;
   align-items: center;
@@ -108,21 +124,27 @@ export function DropIndexDialog({
   dropMutation,
 }: DropIndexDialogProps) {
   const [error, setError] = useState<string | null>(null)
+  const [confirmationText, setConfirmationText] = useState('')
   const [previousIndexName, setPreviousIndexName] = useState(indexName)
   const [wasOpen, setWasOpen] = useState(open)
 
-  // Clear error when dialog is reopened or index name changes
+  // Check if confirmation matches index name (type-to-confirm safety)
+  const isConfirmed = confirmationText === indexName
+
+  // Clear error and confirmation when index name changes
   useEffect(() => {
     if (indexName !== previousIndexName) {
       setError(null)
+      setConfirmationText('')
       setPreviousIndexName(indexName)
     }
   }, [indexName, previousIndexName])
 
   useEffect(() => {
-    // Clear error when dialog opens (after being closed)
+    // Clear error and confirmation when dialog opens (after being closed)
     if (open && !wasOpen) {
       setError(null)
+      setConfirmationText('')
     }
     setWasOpen(open)
   }, [open, wasOpen])
@@ -184,14 +206,32 @@ export function DropIndexDialog({
           </Body>
         </div>
 
+        <div className={confirmInputStyles}>
+          <Body className={confirmLabelStyles}>
+            Type <span className={confirmIndexNameStyles}>{indexName}</span> to confirm
+          </Body>
+          <TextInput
+            label="Confirmation"
+            aria-label={`Type ${indexName} to confirm deletion`}
+            placeholder={indexName}
+            value={confirmationText}
+            onChange={(e) => setConfirmationText(e.target.value)}
+            data-testid="drop-index-confirm-input"
+            autoComplete="off"
+            spellCheck={false}
+            hideLabel={true}
+          />
+        </div>
+
         {error && (
           <div
             className={errorStyles}
             role="alert"
             data-testid="drop-index-error"
-            style={{ color: 'red' }}
+            style={{ color: 'red', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {error}
+            <Icon glyph="Warning" fill={palette.red.dark2} />
+            <span>{error}</span>
           </div>
         )}
 
@@ -208,7 +248,7 @@ export function DropIndexDialog({
           <Button
             variant="danger"
             onClick={handleDrop}
-            disabled={dropMutation.isPending}
+            disabled={dropMutation.isPending || !isConfirmed}
             data-testid="drop-index-confirm"
             data-variant="danger"
           >

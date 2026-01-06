@@ -956,4 +956,1105 @@ describe('PipelinePreview', () => {
       expect(onPageSizeChange).toHaveBeenCalledWith(25)
     })
   })
+
+  describe('stage-by-stage intermediate results - RED PHASE', () => {
+    // Mock pipeline stages for testing
+    const mockStages = [
+      { $match: { category: 'Electronics' } },
+      { $group: { _id: '$category', totalRevenue: { $sum: '$price' }, count: { $sum: 1 } } },
+      { $sort: { totalRevenue: -1 } },
+    ]
+
+    // Intermediate results for each stage
+    const mockIntermediateResults = [
+      // Stage 0 results (after $match)
+      [
+        { _id: '1', name: 'Product A', category: 'Electronics', price: 299.99 },
+        { _id: '3', name: 'Product C', category: 'Electronics', price: 149.99 },
+      ],
+      // Stage 1 results (after $group)
+      [
+        { _id: 'Electronics', totalRevenue: 449.98, count: 2 },
+      ],
+      // Stage 2 results (after $sort)
+      [
+        { _id: 'Electronics', totalRevenue: 449.98, count: 2 },
+      ],
+    ]
+
+    describe('stage-by-stage display', () => {
+      it('renders stage-by-stage view toggle when stageResults prop provided', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+        expect(screen.getByTestId('stage-view-toggle')).toBeInTheDocument()
+      })
+
+      it('shows all stages in stage selector', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        expect(screen.getByTestId('stage-selector')).toBeInTheDocument()
+
+        // Should show stages 0, 1, 2 and "Final" option
+        expect(screen.getByTestId('stage-option-0')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-option-1')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-option-2')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-option-final')).toBeInTheDocument()
+      })
+
+      it('displays stage labels with operator names', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        expect(screen.getByText(/Stage 0.*\$match/i)).toBeInTheDocument()
+        expect(screen.getByText(/Stage 1.*\$group/i)).toBeInTheDocument()
+        expect(screen.getByText(/Stage 2.*\$sort/i)).toBeInTheDocument()
+      })
+
+      it('shows final results by default', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        // Final results should be displayed
+        const resultCount = screen.getByTestId('result-count')
+        expect(resultCount).toHaveTextContent('1 document')
+      })
+
+      it('switches to stage 0 results when stage 0 selected', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should show stage 0 results (2 documents after $match)
+        expect(screen.getByTestId('result-count')).toHaveTextContent('2 documents')
+        expect(screen.getByTestId('result-document-0')).toHaveTextContent('Product A')
+        expect(screen.getByTestId('result-document-1')).toHaveTextContent('Product C')
+      })
+
+      it('switches to stage 1 results when stage 1 selected', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        // Should show stage 1 results (1 document after $group)
+        expect(screen.getByTestId('result-count')).toHaveTextContent('1 document')
+        expect(screen.getByTestId('result-document-0')).toHaveTextContent('Electronics')
+        expect(screen.getByTestId('result-document-0')).toHaveTextContent('449.98')
+      })
+
+      it('displays active stage indicator', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(screen.getByTestId('active-stage-indicator')).toHaveTextContent('Stage 1')
+      })
+
+      it('shows stage result count for each stage', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        // Each stage option should show its result count
+        expect(screen.getByTestId('stage-option-0')).toHaveTextContent('2')
+        expect(screen.getByTestId('stage-option-1')).toHaveTextContent('1')
+        expect(screen.getByTestId('stage-option-2')).toHaveTextContent('1')
+      })
+    })
+
+    describe('sequential stage execution', () => {
+      it('shows loading state for each stage during sequential execution', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[]}
+            stages={mockStages}
+            loading={true}
+            currentExecutingStage={0}
+          />
+        )
+
+        expect(screen.getByTestId('stage-execution-progress')).toBeInTheDocument()
+        expect(screen.getByTestId('executing-stage-0')).toBeInTheDocument()
+      })
+
+      it('displays progress indicator showing which stage is executing', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[]}
+            stages={mockStages}
+            loading={true}
+            currentExecutingStage={1}
+          />
+        )
+
+        expect(screen.getByTestId('executing-stage-1')).toBeInTheDocument()
+        expect(screen.getByText(/executing stage 1/i)).toBeInTheDocument()
+      })
+
+      it('marks completed stages with checkmark indicator', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[1]!}
+            stageResults={mockIntermediateResults.slice(0, 2)}
+            stages={mockStages}
+            loading={true}
+            currentExecutingStage={2}
+          />
+        )
+
+        // Stages 0 and 1 should be marked as complete
+        expect(screen.getByTestId('stage-0-complete')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-1-complete')).toBeInTheDocument()
+        expect(screen.queryByTestId('stage-2-complete')).not.toBeInTheDocument()
+      })
+
+      it('shows pending state for stages not yet executed', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={mockStages}
+            loading={true}
+            currentExecutingStage={1}
+          />
+        )
+
+        // Stage 2 should be pending
+        expect(screen.getByTestId('stage-2-pending')).toBeInTheDocument()
+      })
+
+      it('displays execution time per stage', () => {
+        const stageExecutionTimes = [120, 450, 30]
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            stageExecutionTimes={stageExecutionTimes}
+          />
+        )
+
+        expect(screen.getByTestId('stage-0-execution-time')).toHaveTextContent('120ms')
+        expect(screen.getByTestId('stage-1-execution-time')).toHaveTextContent('450ms')
+        expect(screen.getByTestId('stage-2-execution-time')).toHaveTextContent('30ms')
+      })
+
+      it('shows total pipeline execution time', () => {
+        const stageExecutionTimes = [120, 450, 30]
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            stageExecutionTimes={stageExecutionTimes}
+            executionTimeMs={600}
+          />
+        )
+
+        expect(screen.getByTestId('total-execution-time')).toHaveTextContent('600ms')
+      })
+
+      it('displays result count change between stages', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+        expect(screen.getByTestId('result-count')).toHaveTextContent('2 documents')
+
+        await user.click(screen.getByTestId('stage-option-1'))
+        expect(screen.getByTestId('result-count')).toHaveTextContent('1 document')
+      })
+
+      it('shows percentage of documents filtered at each stage', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showStageMetrics={true}
+          />
+        )
+
+        // Stage 0: 2 docs, Stage 1: 1 doc (50% reduction)
+        expect(screen.getByTestId('stage-1-reduction')).toHaveTextContent('50%')
+      })
+    })
+
+    describe('per-stage error handling', () => {
+      const stagesWithError = [
+        { $match: { category: 'Electronics' } },
+        { $group: { _id: '$invalidField', total: { $sum: '$price' } } },
+        { $sort: { total: -1 } },
+      ]
+
+      it('displays error at the specific stage where it occurred', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+          />
+        )
+
+        expect(screen.getByTestId('preview-error')).toBeInTheDocument()
+        expect(screen.getByTestId('error-stage-indicator')).toHaveTextContent('Stage 1')
+      })
+
+      it('marks the error stage with error indicator', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+          />
+        )
+
+        expect(screen.getByTestId('stage-1-error')).toBeInTheDocument()
+      })
+
+      it('shows successful results from stages before error', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+          />
+        )
+
+        // Should be able to view stage 0 results even though stage 1 failed
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        expect(screen.getByTestId('result-document-0')).toBeInTheDocument()
+        expect(screen.getByTestId('result-count')).toHaveTextContent('2 documents')
+      })
+
+      it('disables stage selector for stages after error', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+          />
+        )
+
+        // Stage 2 should be disabled since stage 1 failed
+        expect(screen.getByTestId('stage-option-2')).toHaveAttribute('disabled')
+      })
+
+      it('displays stage-specific error message when available', () => {
+        const stageErrors = {
+          1: { message: "Field 'invalidField' not found", code: 'FIELD_NOT_FOUND' },
+        }
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            stageErrors={stageErrors}
+            errorStage={1}
+          />
+        )
+
+        expect(screen.getByTestId('stage-1-error-message')).toHaveTextContent("Field 'invalidField' not found")
+      })
+
+      it('shows error icon on failed stage in stage selector', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+          />
+        )
+
+        const stageOption = screen.getByTestId('stage-option-1')
+        expect(within(stageOption).getByTestId('error-icon')).toBeInTheDocument()
+      })
+
+      it('allows retry from failed stage', async () => {
+        const user = userEvent.setup()
+        const onRetryFromStage = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[mockIntermediateResults[0]!]}
+            stages={stagesWithError}
+            error="Field 'invalidField' not found"
+            errorStage={1}
+            onRetryFromStage={onRetryFromStage}
+          />
+        )
+
+        await user.click(screen.getByTestId('retry-from-stage-1'))
+
+        expect(onRetryFromStage).toHaveBeenCalledWith(1)
+      })
+
+      it('displays validation errors before execution', () => {
+        const stageValidationErrors = {
+          0: { message: '$match stage requires a query object', isValidationError: true },
+        }
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={[]}
+            stages={stagesWithError}
+            stageErrors={stageValidationErrors}
+          />
+        )
+
+        expect(screen.getByTestId('stage-0-validation-error')).toBeInTheDocument()
+      })
+    })
+
+    describe('stage navigation and inspection', () => {
+      it('supports keyboard navigation through stages', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        const stageSelector = screen.getByTestId('stage-selector')
+        stageSelector.focus()
+
+        await user.keyboard('{ArrowLeft}')
+        expect(screen.getByTestId('result-count')).toHaveTextContent('1 document')
+
+        await user.keyboard('{ArrowLeft}')
+        expect(screen.getByTestId('result-count')).toHaveTextContent('2 documents')
+      })
+
+      it('shows stage code snippet when stage is selected', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showStageCode={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        expect(screen.getByTestId('stage-code-snippet')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-code-snippet')).toHaveTextContent('$match')
+      })
+
+      it('highlights differences between stage results', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showDiff={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        // Should highlight what changed from stage 0 to stage 1
+        expect(screen.getByTestId('stage-diff-indicator')).toBeInTheDocument()
+      })
+
+      it('supports comparing results between two stages', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('compare-stages-button'))
+
+        expect(screen.getByTestId('stage-comparison-view')).toBeInTheDocument()
+      })
+
+      it('displays cumulative pipeline up to selected stage', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showCumulativePipeline={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        const cumulativePipeline = screen.getByTestId('cumulative-pipeline')
+        expect(cumulativePipeline).toHaveTextContent('$match')
+        expect(cumulativePipeline).toHaveTextContent('$group')
+        expect(cumulativePipeline).not.toHaveTextContent('$sort')
+      })
+    })
+
+    describe('stage result caching', () => {
+      it('caches stage results for quick navigation', async () => {
+        const user = userEvent.setup()
+        const onFetchStageResults = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            onFetchStageResults={onFetchStageResults}
+          />
+        )
+
+        // Navigate to stage 1
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        // Navigate back to final
+        await user.click(screen.getByTestId('stage-option-final'))
+
+        // Navigate to stage 1 again - should use cached results
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        // Should not fetch again since results are cached
+        expect(onFetchStageResults).not.toHaveBeenCalled()
+      })
+
+      it('indicates when stage results are loading', async () => {
+        const user = userEvent.setup()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={[]}
+            stages={mockStages}
+            loadingStageIndex={1}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(screen.getByTestId('stage-results-loading')).toBeInTheDocument()
+      })
+    })
+
+    describe('empty stage results', () => {
+      const emptyStageResults = [
+        [{ _id: '1', status: 'active' }],
+        [], // Stage 1 returns no results
+        [],
+      ]
+
+      it('displays empty state for stage with no results', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={emptyStageResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(screen.getByTestId('preview-empty')).toBeInTheDocument()
+        expect(screen.getByText(/stage 1 returned no documents/i)).toBeInTheDocument()
+      })
+
+      it('shows warning when stage filters out all documents', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={[]}
+            stageResults={emptyStageResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(screen.getByTestId('empty-stage-warning')).toBeInTheDocument()
+      })
+    })
+
+    describe('stage result export', () => {
+      it('allows exporting results from specific stage', async () => {
+        const user = userEvent.setup()
+        const onExportStageResults = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            onExportStageResults={onExportStageResults}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+        await user.click(screen.getByTestId('export-stage-results'))
+
+        expect(onExportStageResults).toHaveBeenCalledWith(1, mockIntermediateResults[1])
+      })
+
+      it('includes stage information in export', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        const exportButton = screen.getByTestId('export-stage-results')
+        expect(exportButton).toHaveAccessibleName(/export.*stage 1/i)
+      })
+    })
+
+    describe('performance with large results - RED PHASE', () => {
+      // Generate large result sets for performance testing
+      const generateLargeResults = (count: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          _id: `doc-${i}`,
+          name: `Document ${i}`,
+          value: Math.random() * 1000,
+          category: `Category ${i % 10}`,
+          nested: { field1: i, field2: `nested-${i}` },
+        }))
+
+      const largeStageResults = [
+        generateLargeResults(10000), // Stage 0: 10k docs
+        generateLargeResults(5000),  // Stage 1: 5k docs
+        generateLargeResults(100),   // Stage 2: 100 docs (aggregated)
+      ]
+
+      const manyStages = Array.from({ length: 20 }, (_, i) => ({
+        [`$stage${i}`]: { field: `value${i}` },
+      }))
+
+      it('handles large result sets without performance degradation', () => {
+        const startTime = performance.now()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+          />
+        )
+
+        const renderTime = performance.now() - startTime
+        // Should render within 500ms even with large datasets
+        expect(renderTime).toBeLessThan(500)
+        expect(screen.getByTestId('stage-selector')).toBeInTheDocument()
+      })
+
+      it('virtualizes stage results list for performance', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            enableVirtualization={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should use virtualization - only visible items rendered
+        expect(screen.getByTestId('virtualized-results-container')).toBeInTheDocument()
+
+        // Should not render all 10k documents at once
+        const visibleDocuments = screen.getAllByTestId(/^result-document-/)
+        expect(visibleDocuments.length).toBeLessThan(100)
+      })
+
+      it('shows loading placeholder while switching to large result set', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should show loading state while processing large result set
+        expect(screen.getByTestId('stage-results-loading-placeholder')).toBeInTheDocument()
+      })
+
+      it('supports lazy loading of stage results', async () => {
+        const user = userEvent.setup()
+        const onLoadStageResults = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={[]} // Start with no cached results
+            stages={mockStages}
+            lazyLoadStageResults={true}
+            onLoadStageResults={onLoadStageResults}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should request to load stage results on demand
+        expect(onLoadStageResults).toHaveBeenCalledWith(0)
+      })
+
+      it('handles pipelines with many stages efficiently', () => {
+        const manyStageResults = manyStages.map((_, i) =>
+          generateLargeResults(100 - i * 5)
+        )
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={manyStageResults[manyStages.length - 1]!}
+            stageResults={manyStageResults}
+            stages={manyStages}
+          />
+        )
+
+        // Should render all 20 stage options
+        expect(screen.getByTestId('stage-option-0')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-option-19')).toBeInTheDocument()
+      })
+
+      it('paginates stage selector when many stages exist', () => {
+        const manyStageResults = manyStages.map(() => generateLargeResults(10))
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={manyStageResults[manyStages.length - 1]!}
+            stageResults={manyStageResults}
+            stages={manyStages}
+          />
+        )
+
+        // Should show stage pagination when > 10 stages
+        expect(screen.getByTestId('stage-selector-pagination')).toBeInTheDocument()
+      })
+
+      it('truncates intermediate results based on maxStageDocuments prop', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            maxStageDocuments={100}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should show truncation message
+        expect(screen.getByText(/showing first 100 of 10,000/i)).toBeInTheDocument()
+      })
+
+      it('shows memory usage warning for large stage results', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            showMemoryWarning={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Should display memory usage warning for 10k documents
+        expect(screen.getByTestId('memory-usage-warning')).toBeInTheDocument()
+      })
+
+      it('supports incremental loading of stage results', async () => {
+        const user = userEvent.setup()
+        const onLoadMoreResults = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={[largeStageResults[0]!.slice(0, 100)]} // Only first 100 loaded
+            stages={mockStages}
+            hasMoreResults={{ 0: true }}
+            onLoadMoreResults={onLoadMoreResults}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+        await user.click(screen.getByTestId('load-more-stage-results'))
+
+        expect(onLoadMoreResults).toHaveBeenCalledWith(0, 100) // Load next batch starting at index 100
+      })
+
+      it('cancels pending stage result requests when switching stages', async () => {
+        const user = userEvent.setup()
+        const onCancelStageLoad = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={[]}
+            stages={mockStages}
+            loadingStageIndex={0}
+            onCancelStageLoad={onCancelStageLoad}
+          />
+        )
+
+        // Switch to a different stage while stage 0 is still loading
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(onCancelStageLoad).toHaveBeenCalledWith(0)
+      })
+
+      it('preserves scroll position when navigating between stages', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            preserveScrollPosition={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Scroll down
+        const resultsContainer = screen.getByTestId('preview-results')
+        resultsContainer.scrollTop = 500
+
+        // Switch to another stage and back
+        await user.click(screen.getByTestId('stage-option-1'))
+        await user.click(screen.getByTestId('stage-option-0'))
+
+        // Scroll position should be preserved
+        expect(resultsContainer.scrollTop).toBe(500)
+      })
+
+      it('debounces rapid stage switching', async () => {
+        const user = userEvent.setup()
+        const onStageChange = vi.fn()
+
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            onStageChange={onStageChange}
+            debounceStageSwitch={true}
+          />
+        )
+
+        // Rapidly click through stages
+        await user.click(screen.getByTestId('stage-option-0'))
+        await user.click(screen.getByTestId('stage-option-1'))
+        await user.click(screen.getByTestId('stage-option-2'))
+
+        // Should debounce and only trigger final stage change
+        await waitFor(() => {
+          expect(onStageChange).toHaveBeenCalledTimes(1)
+          expect(onStageChange).toHaveBeenCalledWith(2)
+        })
+      })
+
+      it('shows estimated memory size for each stage', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={largeStageResults[2]!}
+            stageResults={largeStageResults}
+            stages={mockStages}
+            showStageMemorySize={true}
+          />
+        )
+
+        // Should show estimated memory size for stage with 10k docs
+        expect(screen.getByTestId('stage-0-memory-size')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-0-memory-size')).toHaveTextContent(/\d+(\.\d+)?\s*(KB|MB)/i)
+      })
+    })
+
+    describe('stage toggling interactions - RED PHASE', () => {
+      it('highlights the currently selected stage in stage selector', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-1'))
+
+        expect(screen.getByTestId('stage-option-1')).toHaveClass('selected')
+        expect(screen.getByTestId('stage-option-0')).not.toHaveClass('selected')
+      })
+
+      it('shows visual pipeline flow connecting stages', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showPipelineFlow={true}
+          />
+        )
+
+        expect(screen.getByTestId('pipeline-flow-visualization')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-connector-0-1')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-connector-1-2')).toBeInTheDocument()
+      })
+
+      it('shows document count change arrows between stages', () => {
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showDocCountChange={true}
+          />
+        )
+
+        // Stage 0 -> 1: 2 docs -> 1 doc (decrease)
+        expect(screen.getByTestId('doc-count-change-0-1')).toHaveAttribute('data-direction', 'decrease')
+      })
+
+      it('enables quick stage toggle via keyboard shortcuts', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        // Focus the preview
+        screen.getByTestId('pipeline-preview').focus()
+
+        // Press 1 to go to stage 0
+        await user.keyboard('1')
+        expect(screen.getByTestId('stage-option-0')).toHaveClass('selected')
+
+        // Press 2 to go to stage 1
+        await user.keyboard('2')
+        expect(screen.getByTestId('stage-option-1')).toHaveClass('selected')
+      })
+
+      it('supports next/previous stage buttons for mobile', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showStageNavButtons={true}
+          />
+        )
+
+        // Start at final results
+        await user.click(screen.getByTestId('prev-stage-button'))
+        expect(screen.getByTestId('stage-option-2')).toHaveClass('selected')
+
+        await user.click(screen.getByTestId('prev-stage-button'))
+        expect(screen.getByTestId('stage-option-1')).toHaveClass('selected')
+
+        await user.click(screen.getByTestId('next-stage-button'))
+        expect(screen.getByTestId('stage-option-2')).toHaveClass('selected')
+      })
+
+      it('shows stage breadcrumb trail', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showStageBreadcrumb={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-2'))
+
+        expect(screen.getByTestId('stage-breadcrumb')).toBeInTheDocument()
+        expect(screen.getByTestId('stage-breadcrumb')).toHaveTextContent('$match')
+        expect(screen.getByTestId('stage-breadcrumb')).toHaveTextContent('$group')
+        expect(screen.getByTestId('stage-breadcrumb')).toHaveTextContent('$sort')
+      })
+
+      it('allows clicking breadcrumb to navigate to stage', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+            showStageBreadcrumb={true}
+          />
+        )
+
+        await user.click(screen.getByTestId('stage-option-2'))
+        await user.click(screen.getByTestId('breadcrumb-stage-0'))
+
+        expect(screen.getByTestId('stage-option-0')).toHaveClass('selected')
+      })
+
+      it('displays tooltip with stage details on hover', async () => {
+        const user = userEvent.setup()
+        render(
+          <PipelinePreview
+            {...defaultProps}
+            results={mockIntermediateResults[2]!}
+            stageResults={mockIntermediateResults}
+            stages={mockStages}
+          />
+        )
+
+        await user.hover(screen.getByTestId('stage-option-0'))
+
+        await waitFor(() => {
+          expect(screen.getByTestId('stage-tooltip')).toBeInTheDocument()
+          expect(screen.getByTestId('stage-tooltip')).toHaveTextContent('$match')
+          expect(screen.getByTestId('stage-tooltip')).toHaveTextContent('2 documents')
+        })
+      })
+    })
+  })
 })

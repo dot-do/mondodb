@@ -426,7 +426,7 @@ export function PipelineCanvas({
       if (!originalStage) return
 
       const newStage: ExtendedAggregationStage = {
-        ...JSON.parse(JSON.stringify(originalStage)),
+        ...structuredClone(originalStage),
         id: `stage-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       }
 

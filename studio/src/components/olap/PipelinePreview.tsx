@@ -1070,7 +1070,7 @@ export function PipelinePreview({
           className={`${errorStyles} error`}
           role="alert"
         >
-          <span data-testid="error-icon" className={errorIconStyles}>
+          <span data-testid="error-icon" className={errorIconStyles} aria-label="Error">
             !
           </span>
           <div className={errorContentStyles}>

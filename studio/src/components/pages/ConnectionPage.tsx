@@ -236,7 +236,10 @@ export function ConnectionPage() {
 
       {error && (
         <Card className={cardStyles} style={{ borderLeft: `4px solid ${palette.red.base}` }}>
-          <Body style={{ color: palette.red.dark2 }}>{error}</Body>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon glyph="Warning" fill={palette.red.dark2} />
+            <Body style={{ color: palette.red.dark2 }}>{error}</Body>
+          </div>
         </Card>
       )}
 
@@ -291,7 +294,10 @@ export function ConnectionPage() {
             onChange={(e) => setUrl(e.target.value)}
           />
           {urlError && (
-            <Body style={{ color: palette.red.dark2 }}>{urlError}</Body>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Icon glyph="Warning" fill={palette.red.dark2} />
+              <Body style={{ color: palette.red.dark2 }}>{urlError}</Body>
+            </div>
           )}
           {testResult && (
             <div
@@ -299,10 +305,13 @@ export function ConnectionPage() {
                 testResult.success ? testResultSuccessStyles : testResultErrorStyles
               }`}
             >
-              <Body>
-                {testResult.message}
-                {testResult.latency !== undefined && ` (${testResult.latency} ms)`}
-              </Body>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon glyph={testResult.success ? 'Checkmark' : 'Warning'} fill={testResult.success ? palette.green.dark2 : palette.red.dark2} />
+                <Body>
+                  {testResult.message}
+                  {testResult.latency !== undefined && ` (${testResult.latency} ms)`}
+                </Body>
+              </div>
             </div>
           )}
           <div className={formActionsStyles}>

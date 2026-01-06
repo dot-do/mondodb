@@ -44,9 +44,11 @@
     "prepublishOnly": "npm run build && npm run test"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "bson": "^6.10.0",
     "capnweb": "^0.1.0",
     "js-yaml": "^4.1.1",
+    "nanoid": "^5.1.6",
     "zod": "^4.3.5"
   },
   "devDependencies": {

@@ -641,7 +641,7 @@ export function AggregationPipelineBuilder({
     (index: number) => {
       const stageToDuplicate = stages[index]
       const newStage = {
-        ...JSON.parse(JSON.stringify(stageToDuplicate)),
+        ...structuredClone(stageToDuplicate),
         id: generateId(),
       }
       const newStages = [...stages]

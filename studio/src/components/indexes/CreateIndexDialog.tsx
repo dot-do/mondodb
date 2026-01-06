@@ -521,8 +521,9 @@ export function CreateIndexDialog({
         </Body>
 
         {error && (
-          <div className={errorStyles} role="alert" data-testid="create-index-error">
-            {error}
+          <div className={errorStyles} role="alert" data-testid="create-index-error" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon glyph="Warning" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -699,13 +700,16 @@ export function CreateIndexDialog({
 
         {/* Validation Errors */}
         {!validation.isValid && validation.errors.length > 0 && (
-          <div className={errorStyles} data-testid="validation-errors">
-            <strong>Validation errors:</strong>
-            <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
-              {validation.errors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
+          <div className={errorStyles} data-testid="validation-errors" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+            <Icon glyph="Warning" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div>
+              <strong>Validation errors:</strong>
+              <ul style={{ margin: '8px 0 0 16px', padding: 0 }}>
+                {validation.errors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
 

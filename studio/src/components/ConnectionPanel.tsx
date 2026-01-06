@@ -617,8 +617,9 @@ export function ConnectionPanel() {
 
       {/* Error Display */}
       {(error || validationError) && (
-        <div data-testid="connection-error" className={errorStyles}>
-          {error || validationError}
+        <div data-testid="connection-error" className={errorStyles} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Icon glyph="Warning" fill={palette.red.dark2} />
+          <span>{error || validationError}</span>
         </div>
       )}
 
@@ -897,8 +898,12 @@ export function ConnectionPanel() {
               style={{
                 background: testResult.success ? palette.green.light3 : palette.red.light3,
                 color: testResult.success ? palette.green.dark2 : palette.red.dark2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}
             >
+              <Icon glyph={testResult.success ? 'Checkmark' : 'Warning'} fill={testResult.success ? palette.green.dark2 : palette.red.dark2} />
               <Body>
                 {testResult.message}
                 {testResult.latency !== undefined && ` (${testResult.latency}ms)`}
