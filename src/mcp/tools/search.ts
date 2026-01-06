@@ -390,8 +390,24 @@ function parseSimpleQuery(query: string): object {
   return { $text: { $search: trimmed } }
 }
 
+/** Default projection to optimize large collection queries */
+const SEARCH_PROJECTION = {
+  _id: 1,
+  name: 1,
+  title: 1,
+  description: 1,
+  content: 1,
+  createdAt: 1,
+  updatedAt: 1,
+} as const
+
 /**
  * Execute search against database
+ *
+ * Optimizes for large collections by:
+ * - Using projection to limit returned fields
+ * - Enforcing result limits
+ * - Graceful fallback when $text search unavailable
  */
 async function executeSearch(
   dbAccess: DatabaseAccess,
@@ -399,7 +415,11 @@ async function executeSearch(
   filter: object,
   limit: number
 ): Promise<Document[]> {
-  const searchOptions = { limit }
+  const searchOptions: FindOptions = {
+    limit,
+    // Use projection to limit fields for large collections
+    projection: SEARCH_PROJECTION as Record<string, 0 | 1>,
+  }
 
   if (collection) {
     try {
@@ -410,7 +430,7 @@ async function executeSearch(
         error instanceof Error &&
         (error.message.includes('$text') || error.message.includes('text index'))
       ) {
-        return executeRegexFallback(dbAccess, collection, filter, searchOptions)
+        return executeRegexFallback(dbAccess, collection, filter, { limit })
       }
       throw error
     }
@@ -428,6 +448,7 @@ async function executeSearch(
     try {
       const docs = (await dbAccess.find(coll, filter as Record<string, unknown>, {
         limit: limit - allResults.length,
+        projection: SEARCH_PROJECTION as Record<string, 0 | 1>,
       })) as Document[]
       allResults.push(
         ...docs.map((d) => ({
@@ -474,7 +495,55 @@ async function executeRegexFallback(
     ],
   }
 
-  return (await dbAccess.find(collection, regexFilter, options)) as Document[]
+  const results = (await dbAccess.find(collection, regexFilter, options)) as Document[]
+
+  // Sort by relevance score
+  return sortByRelevance(results, searchTerm)
+}
+
+/**
+ * Calculate relevance score for a document based on search terms
+ *
+ * Higher scores indicate more relevant results based on:
+ * - Number of term matches
+ * - Position of matches (title/name weighted higher)
+ * - Exact vs partial matches
+ */
+function scoreResult(doc: Document, query: string): number {
+  const terms = query.toLowerCase().split(/\s+/).filter(t => t.length > 1)
+  if (terms.length === 0) return 0
+
+  let score = 0
+
+  // Score title/name matches higher (weight: 3x)
+  const titleText = (doc.title ?? doc.name ?? '').toString().toLowerCase()
+  for (const term of terms) {
+    if (titleText.includes(term)) {
+      score += 3
+      // Bonus for exact match
+      if (titleText === term) score += 2
+    }
+  }
+
+  // Score content matches (weight: 1x)
+  const contentText = JSON.stringify(doc).toLowerCase()
+  for (const term of terms) {
+    const matches = contentText.split(term).length - 1
+    score += Math.min(matches, 5) // Cap at 5 matches per term
+  }
+
+  return score
+}
+
+/**
+ * Sort documents by relevance score (descending)
+ */
+function sortByRelevance(docs: Document[], query: string): Document[] {
+  return [...docs].sort((a, b) => {
+    const scoreA = scoreResult(a, query)
+    const scoreB = scoreResult(b, query)
+    return scoreB - scoreA // Higher score first
+  })
 }
 
 /**

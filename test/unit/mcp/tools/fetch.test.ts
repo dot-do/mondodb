@@ -128,9 +128,11 @@ describe('fetchTool', () => {
 
       await fetchTool(mockDbAccess, 'database.collection.test123')
 
-      expect(mockDbAccess.findOne).toHaveBeenCalledWith('collection', {
-        _id: 'test123',
-      })
+      expect(mockDbAccess.findOne).toHaveBeenCalledWith(
+        'collection',
+        { _id: 'test123' },
+        undefined // No projection when not specified
+      )
     })
   })
 
