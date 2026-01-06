@@ -3,7 +3,7 @@
  * Types and interfaces for MongoDB aggregation pipeline stage editing
  */
 
-// All supported stage types (top 10)
+// All supported stage types
 export type StageType =
   | '$match'
   | '$project'
@@ -15,6 +15,8 @@ export type StageType =
   | '$lookup'
   | '$addFields'
   | '$count'
+  | '$vectorSearch'
+  | '$search'
 
 // Comparison operators for $match
 export type ComparisonOperator =

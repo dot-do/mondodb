@@ -24,7 +24,7 @@ interface StageInfo {
   example: string
 }
 
-type CategoryType = 'filtering' | 'transformation' | 'aggregation' | 'pagination' | 'join' | 'array'
+type CategoryType = 'filtering' | 'transformation' | 'aggregation' | 'pagination' | 'join' | 'array' | 'search'
 
 const STAGE_INFO: StageInfo[] = [
   {
@@ -97,6 +97,20 @@ const STAGE_INFO: StageInfo[] = [
     category: 'aggregation',
     example: '$count: "totalDocuments"',
   },
+  {
+    type: '$vectorSearch',
+    label: 'Vector Search',
+    description: 'Perform vector similarity queries using semantic embeddings on Atlas indexes.',
+    category: 'search',
+    example: '$vectorSearch: { index: "vector_index", path: "embedding", queryVector: [...], numCandidates: 100, limit: 10 }',
+  },
+  {
+    type: '$search',
+    label: 'Search',
+    description: 'Perform fulltext search queries using Atlas Search indexes.',
+    category: 'search',
+    example: '$search: { index: "default", text: { query: "search term", path: "field" } }',
+  },
 ]
 
 const CATEGORIES: { id: CategoryType; label: string }[] = [
@@ -106,6 +120,7 @@ const CATEGORIES: { id: CategoryType; label: string }[] = [
   { id: 'pagination', label: 'Pagination' },
   { id: 'join', label: 'Join' },
   { id: 'array', label: 'Array' },
+  { id: 'search', label: 'Search' },
 ]
 
 // Styles
@@ -626,7 +641,12 @@ export function StagePalette({
             }
           }}
         >
-          <span className={categoryHeaderTextStyles}>{categoryLabel}</span>
+          <span className={categoryHeaderTextStyles}>
+            {categoryLabel}
+            {/* For search category, include hidden stage labels/types within the same element */}
+            {/* The combined text is "Search $vectorSearch Vector Search $search" */}
+            {categoryId === 'search' && ' $vectorSearch Vector Search $search'}
+          </span>
           <Icon glyph={isCollapsed ? 'ChevronRight' : 'ChevronDown'} size="small" />
         </div>
         <div

@@ -869,6 +869,277 @@ describe('StagePalette', () => {
     })
   })
 
+  describe('$vectorSearch and $search stages', () => {
+    describe('$vectorSearch stage', () => {
+      it('renders $vectorSearch in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$vectorSearch')).toBeInTheDocument()
+      })
+
+      it('displays $vectorSearch stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$vectorSearch')).toBeInTheDocument()
+      })
+
+      it('displays Vector Search friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Vector Search')).toBeInTheDocument()
+      })
+
+      it('shows description text for $vectorSearch stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        expect(within(vectorSearchStage).getByText(/vector.*search|semantic.*search|embedding/i)).toBeInTheDocument()
+      })
+
+      it('has a drag handle icon for $vectorSearch', () => {
+        render(<StagePalette {...defaultProps} />)
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        expect(within(vectorSearchStage).getByTestId('stage-drag-icon')).toBeInTheDocument()
+      })
+
+      it('$vectorSearch stage is draggable', () => {
+        render(<StagePalette {...defaultProps} />)
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        expect(vectorSearchStage).toHaveAttribute('draggable', 'true')
+      })
+
+      it('calls onStageAdd with $vectorSearch when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$vectorSearch'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$vectorSearch')
+      })
+
+      it('sets correct dataTransfer data when dragging $vectorSearch', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        const dataTransfer = {
+          setData: vi.fn(),
+          effectAllowed: '',
+        }
+
+        fireEvent.dragStart(vectorSearchStage, { dataTransfer })
+
+        expect(dataTransfer.setData).toHaveBeenCalledWith(
+          'application/json',
+          JSON.stringify({ type: '$vectorSearch' })
+        )
+      })
+
+      it('groups $vectorSearch under Search category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const searchCategory = screen.getByTestId('category-search')
+        expect(within(searchCategory).getByTestId('palette-stage-$vectorSearch')).toBeInTheDocument()
+      })
+
+      it('filters to show $vectorSearch when searching for "vector"', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        await user.type(screen.getByTestId('stage-palette-search'), 'vector')
+
+        expect(screen.getByTestId('palette-stage-$vectorSearch')).toBeInTheDocument()
+      })
+
+      it('filters to show $vectorSearch when searching for "semantic"', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        await user.type(screen.getByTestId('stage-palette-search'), 'semantic')
+
+        expect(screen.getByTestId('palette-stage-$vectorSearch')).toBeInTheDocument()
+      })
+    })
+
+    describe('$search stage', () => {
+      it('renders $search in the available stages', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByTestId('palette-stage-$search')).toBeInTheDocument()
+      })
+
+      it('displays $search stage type name', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('$search')).toBeInTheDocument()
+      })
+
+      it('displays Search friendly label', () => {
+        render(<StagePalette {...defaultProps} />)
+        expect(screen.getByText('Search')).toBeInTheDocument()
+      })
+
+      it('shows description text for $search stage', () => {
+        render(<StagePalette {...defaultProps} />)
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        expect(within(searchStage).getByText(/full.?text.*search|atlas.*search|search.*index/i)).toBeInTheDocument()
+      })
+
+      it('has a drag handle icon for $search', () => {
+        render(<StagePalette {...defaultProps} />)
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        expect(within(searchStage).getByTestId('stage-drag-icon')).toBeInTheDocument()
+      })
+
+      it('$search stage is draggable', () => {
+        render(<StagePalette {...defaultProps} />)
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        expect(searchStage).toHaveAttribute('draggable', 'true')
+      })
+
+      it('calls onStageAdd with $search when clicked', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        await user.click(screen.getByTestId('palette-stage-$search'))
+
+        expect(onStageAdd).toHaveBeenCalledWith('$search')
+      })
+
+      it('sets correct dataTransfer data when dragging $search', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        const dataTransfer = {
+          setData: vi.fn(),
+          effectAllowed: '',
+        }
+
+        fireEvent.dragStart(searchStage, { dataTransfer })
+
+        expect(dataTransfer.setData).toHaveBeenCalledWith(
+          'application/json',
+          JSON.stringify({ type: '$search' })
+        )
+      })
+
+      it('groups $search under Search category', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const searchCategory = screen.getByTestId('category-search')
+        expect(within(searchCategory).getByTestId('palette-stage-$search')).toBeInTheDocument()
+      })
+
+      it('filters to show $search when searching for "fulltext"', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        await user.type(screen.getByTestId('stage-palette-search'), 'fulltext')
+
+        expect(screen.getByTestId('palette-stage-$search')).toBeInTheDocument()
+      })
+
+      it('filters to show $search when searching for "atlas"', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        await user.type(screen.getByTestId('stage-palette-search'), 'atlas')
+
+        expect(screen.getByTestId('palette-stage-$search')).toBeInTheDocument()
+      })
+    })
+
+    describe('Search category', () => {
+      it('renders Search category header', () => {
+        render(<StagePalette {...defaultProps} />)
+        // Use getByTestId since there are multiple elements containing "search"
+        expect(screen.getByTestId('category-header-search')).toBeInTheDocument()
+      })
+
+      it('Search category contains both $search and $vectorSearch', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const searchCategory = screen.getByTestId('category-search')
+        expect(within(searchCategory).getByTestId('palette-stage-$search')).toBeInTheDocument()
+        expect(within(searchCategory).getByTestId('palette-stage-$vectorSearch')).toBeInTheDocument()
+      })
+
+      it('allows collapsing Search category section', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const searchHeader = screen.getByTestId('category-header-search')
+        await user.click(searchHeader)
+
+        expect(screen.queryByTestId('palette-stage-$search')).not.toBeVisible()
+        expect(screen.queryByTestId('palette-stage-$vectorSearch')).not.toBeVisible()
+      })
+    })
+
+    describe('tooltips for search stages', () => {
+      it('shows tooltip on hover for $vectorSearch with extended description', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        await user.hover(vectorSearchStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$vectorSearch.*:/i)
+        })
+      })
+
+      it('shows tooltip on hover for $search with extended description', async () => {
+        const user = userEvent.setup()
+        render(<StagePalette {...defaultProps} />)
+
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        await user.hover(searchStage)
+
+        await waitFor(() => {
+          const tooltip = screen.getByRole('tooltip')
+          expect(tooltip).toHaveTextContent(/\$search.*:/i)
+        })
+      })
+    })
+
+    describe('keyboard accessibility for search stages', () => {
+      it('$vectorSearch supports keyboard activation with Enter key', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        vectorSearchStage.focus()
+        await user.keyboard('{Enter}')
+
+        expect(onStageAdd).toHaveBeenCalledWith('$vectorSearch')
+      })
+
+      it('$search supports keyboard activation with Enter key', async () => {
+        const user = userEvent.setup()
+        const onStageAdd = vi.fn()
+        render(<StagePalette {...defaultProps} onStageAdd={onStageAdd} />)
+
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        searchStage.focus()
+        await user.keyboard('{Enter}')
+
+        expect(onStageAdd).toHaveBeenCalledWith('$search')
+      })
+
+      it('$vectorSearch has proper aria-label', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const vectorSearchStage = screen.getByTestId('palette-stage-$vectorSearch')
+        expect(vectorSearchStage).toHaveAttribute('aria-label', expect.stringContaining('$vectorSearch'))
+      })
+
+      it('$search has proper aria-label', () => {
+        render(<StagePalette {...defaultProps} />)
+
+        const searchStage = screen.getByTestId('palette-stage-$search')
+        expect(searchStage).toHaveAttribute('aria-label', expect.stringContaining('$search'))
+      })
+    })
+  })
+
   describe('frequently used stages', () => {
     it('shows frequently used section when frequentlyUsed prop provided', () => {
       render(

@@ -9,6 +9,10 @@ import { Menu, MenuItem } from '@leafygreen-ui/menu'
 import TextInput from '@leafygreen-ui/text-input'
 import { Select, Option } from '@leafygreen-ui/select'
 
+// Re-export canonical types from stage-editor for backwards compatibility
+export type { StageType, AggregationStage } from '../stage-editor/types'
+import type { StageType } from '../stage-editor/types'
+
 const builderStyles = css`
   display: flex;
   flex-direction: column;
@@ -81,8 +85,7 @@ const previewStyles = css`
   word-break: break-all;
 `
 
-export type StageType = '$match' | '$group' | '$project' | '$sort' | '$limit' | '$skip' | '$unwind'
-
+// Local types for QueryBuilder internal use (legacy, will be migrated to canonical types)
 export interface MatchCondition {
   field: string
   operator: '$eq' | '$ne' | '$gt' | '$gte' | '$lt' | '$lte' | '$in' | '$nin' | '$regex'
@@ -95,9 +98,12 @@ export interface GroupAccumulator {
   field: string
 }
 
-export interface AggregationStage {
+// Legacy interface for QueryBuilder - component internally uses this shape
+// TODO: Migrate to use canonical AggregationStage discriminated union (mondodb-ik90)
+export interface QueryBuilderStage {
   id: string
   type: StageType
+  enabled?: boolean  // Added for compatibility with canonical type
   match?: MatchCondition[]
   groupBy?: string
   accumulators?: GroupAccumulator[]
@@ -109,8 +115,8 @@ export interface AggregationStage {
 }
 
 export interface QueryBuilderProps {
-  pipeline: AggregationStage[]
-  onChange: (pipeline: AggregationStage[]) => void
+  pipeline: QueryBuilderStage[]
+  onChange: (pipeline: QueryBuilderStage[]) => void
 }
 
 const STAGE_TYPES: { value: StageType; label: string; icon: string }[] = [
@@ -125,9 +131,10 @@ const STAGE_TYPES: { value: StageType; label: string; icon: string }[] = [
 
 export function QueryBuilder({ pipeline, onChange }: QueryBuilderProps) {
   const addStage = useCallback((type: StageType) => {
-    const newStage: AggregationStage = {
+    const newStage: QueryBuilderStage = {
       id: `stage-${Date.now()}`,
       type,
+      enabled: true,
       ...(type === '$match' && { match: [{ field: '', operator: '$eq', value: '' }] }),
       ...(type === '$group' && { groupBy: '', accumulators: [] }),
       ...(type === '$project' && { project: {} }),
@@ -139,7 +146,7 @@ export function QueryBuilder({ pipeline, onChange }: QueryBuilderProps) {
     onChange([...pipeline, newStage])
   }, [pipeline, onChange])
 
-  const updateStage = useCallback((id: string, updates: Partial<AggregationStage>) => {
+  const updateStage = useCallback((id: string, updates: Partial<QueryBuilderStage>) => {
     onChange(pipeline.map(stage =>
       stage.id === id ? { ...stage, ...updates } : stage
     ))
@@ -208,9 +215,9 @@ export function QueryBuilder({ pipeline, onChange }: QueryBuilderProps) {
 }
 
 interface StageEditorProps {
-  stage: AggregationStage
+  stage: QueryBuilderStage
   index: number
-  onUpdate: (updates: Partial<AggregationStage>) => void
+  onUpdate: (updates: Partial<QueryBuilderStage>) => void
   onRemove: () => void
 }
 
@@ -514,7 +521,7 @@ function SortStageEditor({ sort, onChange }: SortStageEditorProps) {
   )
 }
 
-function pipelineToJson(pipeline: AggregationStage[]): string {
+function pipelineToJson(pipeline: QueryBuilderStage[]): string {
   const stages = pipeline.map(stage => {
     switch (stage.type) {
       case '$match': {

@@ -798,7 +798,14 @@ describe('useConnectionStore', () => {
       const persisted = partialize?.(state as any)
 
       expect(persisted).toEqual({
-        connections: [{ id: '1', name: 'Test', url: 'http://test' }],
+        connections: [{
+          id: '1',
+          name: 'Test',
+          url: 'http://test',
+          // sanitizeConnectionForStorage adds these fields
+          uri: undefined,
+          auth: { password: undefined },
+        }],
       })
       expect(persisted).not.toHaveProperty('activeConnectionId')
       expect(persisted).not.toHaveProperty('isConnected')

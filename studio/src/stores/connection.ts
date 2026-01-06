@@ -88,6 +88,47 @@ function isValidUri(uri: string): boolean {
   return /^mongodo:\/\//.test(uri) || /^mongodb(\+srv)?:\/\//.test(uri)
 }
 
+// Sanitize password from URI - replaces password with **** or removes it
+function sanitizeUriPassword(uri: string): string {
+  if (!uri) return uri
+  try {
+    // Handle mongodo:// protocol by temporarily converting to http://
+    const protocol = uri.match(/^(mongodo|mongodb(\+srv)?):\/\//)?.[0] || ''
+    if (!protocol) return uri
+
+    const urlStr = uri.replace(/^(mongodo|mongodb(\+srv)?):\/\//, 'http://')
+    const url = new URL(urlStr)
+
+    if (url.password) {
+      // Replace password with mask
+      url.password = '****'
+    }
+
+    // Convert back to original protocol
+    return url.toString().replace(/^http:\/\//, protocol)
+  } catch {
+    // If URL parsing fails, try regex-based sanitization as fallback
+    // Matches user:password@ pattern and replaces password with ****
+    return uri.replace(/(:\/\/[^:]+):([^@]+)@/, '$1:****@')
+  }
+}
+
+// Sanitize connection for storage - removes sensitive data before persisting
+function sanitizeConnectionForStorage(connection: ConnectionInfo): ConnectionInfo {
+  return {
+    ...connection,
+    // Sanitize password from URI
+    uri: sanitizeUriPassword(connection.uri),
+    // Sanitize legacy url field if present
+    url: connection.url ? sanitizeUriPassword(connection.url) : connection.url,
+    // Remove password from auth config
+    auth: {
+      ...connection.auth,
+      password: undefined,
+    },
+  }
+}
+
 // Auto-connect to same origin if health endpoint is available
 async function autoConnectToSameOrigin(
   set: (state: Partial<ConnectionState>) => void
@@ -147,16 +188,18 @@ export const useConnectionStore = create<ConnectionState>()(
         const id = crypto.randomUUID()
         const now = new Date().toISOString()
         const { host, port, database } = parseUri(connection.uri)
+        // Sanitize connection before storing - remove passwords for security
+        const sanitizedConnection = sanitizeConnectionForStorage({
+          ...connection,
+          id,
+          host,
+          port,
+          database,
+          createdAt: now,
+          updatedAt: now,
+        } as ConnectionInfo)
         set((state) => ({
-          connections: [...state.connections, {
-            ...connection,
-            id,
-            host,
-            port,
-            database,
-            createdAt: now,
-            updatedAt: now,
-          }],
+          connections: [...state.connections, sanitizedConnection],
         }))
         return id
       },
@@ -381,7 +424,8 @@ export const useConnectionStore = create<ConnectionState>()(
     {
       name: 'mongo.do-connections',
       partialize: (state) => ({
-        connections: state.connections,
+        // Sanitize connections before storing - removes passwords for security
+        connections: state.connections.map(sanitizeConnectionForStorage),
       }),
       onRehydrateStorage: () => (state) => {
         // Auto-connect to same origin if not already connected

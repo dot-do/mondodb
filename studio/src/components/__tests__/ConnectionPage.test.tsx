@@ -941,4 +941,104 @@ describe('ConnectionPage', () => {
       expect(screen.getByLabelText(/connection name/i)).toHaveValue('')
     })
   })
+
+  describe('Password Security', () => {
+    it('should NOT persist password to localStorage when saving connection', async () => {
+      const user = userEvent.setup()
+      render(<ConnectionPage />)
+
+      await user.click(screen.getByRole('button', { name: /add connection/i }))
+
+      const urlInput = screen.getByLabelText(/connection url/i)
+      await user.clear(urlInput)
+      await user.type(urlInput, 'mongodo://user:secretpassword@localhost:27017/mydb')
+
+      const nameInput = screen.getByLabelText(/connection name/i)
+      await user.type(nameInput, 'Secure Connection')
+
+      const form = screen.getByText('New Connection').closest('form')
+      await user.click(within(form!).getByRole('button', { name: /^connect$/i }))
+
+      // Verify saveConnection was called with URI that does NOT contain the password
+      expect(mockStore.saveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: expect.not.stringContaining('secretpassword'),
+        })
+      )
+    })
+
+    it('should store sanitized URI without password when saving', async () => {
+      const user = userEvent.setup()
+      render(<ConnectionPage />)
+
+      await user.click(screen.getByRole('button', { name: /add connection/i }))
+
+      const urlInput = screen.getByLabelText(/connection url/i)
+      await user.clear(urlInput)
+      await user.type(urlInput, 'mongodo://admin:mysecret@prod.example.com:27017/production')
+
+      const nameInput = screen.getByLabelText(/connection name/i)
+      await user.type(nameInput, 'Production')
+
+      const form = screen.getByText('New Connection').closest('form')
+      await user.click(within(form!).getByRole('button', { name: /^connect$/i }))
+
+      // URI should have password stripped but keep username
+      expect(mockStore.saveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: 'mongodo://admin@prod.example.com:27017/production',
+        })
+      )
+    })
+
+    it('should mask password with *** in displayed URI', async () => {
+      const mockConnectionsWithPassword: ConnectionInfo[] = [
+        {
+          id: 'conn-with-pass',
+          name: 'Secure DB',
+          uri: 'mongodo://user@secure.example.com:27017/db',
+          host: 'secure.example.com',
+          port: 27017,
+          auth: { type: 'password', username: 'user' },
+          tls: { enabled: false },
+        },
+      ]
+
+      // Simulate a connection that was saved with a password in memory
+      mockStore = createMockStore({
+        connections: mockConnectionsWithPassword,
+        getPasswordForConnection: vi.fn().mockReturnValue('actualpassword'),
+      })
+      vi.mocked(useConnectionStore).mockReturnValue(mockStore as unknown as ReturnType<typeof useConnectionStore>)
+
+      render(<ConnectionPage />)
+
+      // Should display masked password in the connection card
+      expect(screen.getByText(/mongodo:\/\/user:\*\*\*@secure\.example\.com:27017\/db/)).toBeInTheDocument()
+    })
+
+    it('should pass full URI with password to connect function', async () => {
+      const user = userEvent.setup()
+      render(<ConnectionPage />)
+
+      await user.click(screen.getByRole('button', { name: /add connection/i }))
+
+      const urlInput = screen.getByLabelText(/connection url/i)
+      await user.clear(urlInput)
+      await user.type(urlInput, 'mongodo://user:mypassword@localhost:27017/db')
+
+      const form = screen.getByText('New Connection').closest('form')
+      await user.click(within(form!).getByRole('button', { name: /^connect$/i }))
+
+      // connect should receive the connection ID, but the store should have
+      // the password available in memory for the actual connection
+      expect(mockStore.connect).toHaveBeenCalledWith('test-id')
+      // saveConnection should be called with password stored separately
+      expect(mockStore.saveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          password: 'mypassword',
+        })
+      )
+    })
+  })
 })

@@ -16,6 +16,44 @@ interface TestResult {
   latency?: number
 }
 
+// Parse a mongodo:// URI and extract password if present
+function parseUri(uri: string): { sanitizedUri: string; password?: string; username?: string } {
+  // Match pattern: mongodo://[user[:password]@]host[:port][/database]
+  const authMatch = uri.match(/^(mongodo:\/\/)([^:@]+):([^@]+)@(.+)$/)
+  if (authMatch) {
+    const [, protocol, username, password, rest] = authMatch
+    // Return URI without password (but with username)
+    return {
+      sanitizedUri: `${protocol}${username}@${rest}`,
+      password,
+      username,
+    }
+  }
+
+  // Check for username without password
+  const usernameOnlyMatch = uri.match(/^(mongodo:\/\/)([^:@]+)@(.+)$/)
+  if (usernameOnlyMatch) {
+    const [, , username] = usernameOnlyMatch
+    return { sanitizedUri: uri, username }
+  }
+
+  return { sanitizedUri: uri }
+}
+
+// Mask password in URI for display
+function getMaskedUri(uri: string, hasPassword: boolean): string {
+  if (!hasPassword) return uri
+
+  // If we have a username in URI without password, insert masked password
+  const usernameMatch = uri.match(/^(mongodo:\/\/)([^:@]+)@(.+)$/)
+  if (usernameMatch) {
+    const [, protocol, username, rest] = usernameMatch
+    return `${protocol}${username}:***@${rest}`
+  }
+
+  return uri
+}
+
 const pageStyles = css`
   max-width: 800px;
   margin: 0 auto;
@@ -141,7 +179,7 @@ export function ConnectionPage() {
     return null
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
 
     // Validate URL
@@ -152,11 +190,15 @@ export function ConnectionPage() {
     }
     setUrlError(null)
 
+    // Parse URI to extract password (password should not be persisted to localStorage)
+    const { sanitizedUri, password } = parseUri(url)
+
     const id = saveConnection({
       name: name || 'New Connection',
-      uri: url,
+      uri: sanitizedUri,
       auth: { type: 'none' },
       tls: { enabled: false },
+      password, // Password stored in memory only (not persisted to localStorage)
     })
     try {
       await connect(id)
@@ -276,7 +318,7 @@ export function ConnectionPage() {
               disabled={isConnecting}
               onClick={(e) => {
                 e.preventDefault()
-                handleSubmit(e as unknown as React.FormEvent)
+                handleSubmit(e)
               }}
             >
               {isConnecting ? 'Connecting...' : 'Connect'}
@@ -307,6 +349,9 @@ function ConnectionCard({
     }
   }
 
+  // Get display URI with password masked if auth type is 'password'
+  const displayUri = getMaskedUri(connection.uri, connection.auth?.type === 'password')
+
   return (
     <Card
       className={`${cardStyles} connection-card`}
@@ -321,7 +366,7 @@ function ConnectionCard({
           </div>
           <div>
             <Subtitle>{connection.name}</Subtitle>
-            <Body>{connection.uri}</Body>
+            <Body>{displayUri}</Body>
             {connection.lastConnected && (
               <Body style={{ fontSize: 12, color: palette.gray.dark1 }}>
                 Last connected:{' '}
