@@ -414,8 +414,6 @@ SETTINGS
 export class S3QueueClient {
   private config: S3QueueConfig;
   private connected: boolean = false;
-  private clickhouseEndpoint?: string;
-  private database?: string;
 
   constructor(config: S3QueueConfig) {
     this.config = config;
@@ -424,9 +422,8 @@ export class S3QueueClient {
   /**
    * Connect to ClickHouse for S3Queue management
    */
-  async connect(clickhouseEndpoint?: string, database?: string): Promise<void> {
-    this.clickhouseEndpoint = clickhouseEndpoint;
-    this.database = database;
+  async connect(_clickhouseEndpoint?: string, _database?: string): Promise<void> {
+    // Parameters reserved for future implementation when actual ClickHouse queries are added
     this.connected = true;
   }
 

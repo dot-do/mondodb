@@ -74,7 +74,7 @@ const MAX_COLLECTION_NAME_LENGTH = 255
  * Validate a collection name
  * @throws Error if collection name is invalid
  */
-function validateCollection(name: unknown): asserts name is string {
+function _validateCollection(name: unknown): asserts name is string {
   if (!name || typeof name !== 'string') {
     throw new Error('Collection name must be a non-empty string')
   }
@@ -96,7 +96,7 @@ function validateCollection(name: unknown): asserts name is string {
  * Validate a document
  * @throws Error if document is invalid
  */
-function validateDocument(doc: unknown): asserts doc is Document {
+function _validateDocument(doc: unknown): asserts doc is Document {
   if (doc === null || doc === undefined) {
     throw new Error('Document is required')
   }
@@ -112,7 +112,7 @@ function validateDocument(doc: unknown): asserts doc is Document {
  * Validate a filter object
  * @throws Error if filter is invalid
  */
-function validateFilter(filter: unknown): asserts filter is Document {
+function _validateFilter(filter: unknown): asserts filter is Document {
   if (filter === undefined) {
     return // undefined is allowed (will use empty filter)
   }
@@ -128,7 +128,7 @@ function validateFilter(filter: unknown): asserts filter is Document {
  * Validate an update object
  * @throws Error if update is invalid
  */
-function validateUpdate(update: unknown): asserts update is Document {
+function _validateUpdate(update: unknown): asserts update is Document {
   if (update === null || update === undefined) {
     throw new Error('Update is required')
   }
@@ -144,7 +144,7 @@ function validateUpdate(update: unknown): asserts update is Document {
  * Validate an aggregation pipeline
  * @throws Error if pipeline is invalid
  */
-function validatePipeline(pipeline: unknown): asserts pipeline is Document[] {
+function _validatePipeline(pipeline: unknown): asserts pipeline is Document[] {
   if (!Array.isArray(pipeline)) {
     throw new Error('Pipeline must be an array')
   }
@@ -225,7 +225,7 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
   /**
    * Log an operation for audit purposes
    */
-  private log(method: string, collection: string, args: unknown): void {
+  private _log(method: string, collection: string, args: unknown): void {
     const props = this.getProps()
     if (props.enableAuditLog) {
       console.log(
@@ -282,7 +282,7 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
   /**
    * Execute a request with deduplication for read operations
    */
-  private async deduplicatedRequest<T>(
+  private async _deduplicatedRequest<T>(
     endpoint: string,
     body: Record<string, unknown>
   ): Promise<T> {
@@ -335,10 +335,10 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     filter: Record<string, unknown> = {}
   ): Promise<{ documents: unknown[] }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
-    return this.request('/find', { collection, filter }) as Promise<{ documents: unknown[] }>
+    _validateCollection(collection)
+    _validateFilter(filter)
+    this._log('find', collection, { filter })
+    return this._deduplicatedRequest('/find', { collection, filter }) as Promise<{ documents: unknown[] }>
   }
 
   /**
@@ -348,10 +348,10 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     filter: Record<string, unknown> = {}
   ): Promise<{ document: unknown | null }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
-    return this.request('/findOne', { collection, filter }) as Promise<{ document: unknown | null }>
+    _validateCollection(collection)
+    _validateFilter(filter)
+    this._log('findOne', collection, { filter })
+    return this._deduplicatedRequest('/findOne', { collection, filter }) as Promise<{ document: unknown | null }>
   }
 
   /**
@@ -361,12 +361,9 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     document?: Record<string, unknown>
   ): Promise<{ insertedId: string }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
-    if (!document) {
-      throw new Error('Document is required')
-    }
+    _validateCollection(collection)
+    _validateDocument(document)
+    this._log('insertOne', collection, { document })
     return this.request('/insertOne', { collection, document }) as Promise<{ insertedId: string }>
   }
 
@@ -377,9 +374,11 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     documents: Record<string, unknown>[]
   ): Promise<{ insertedIds: string[] }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
+    _validateCollection(collection)
+    for (const doc of documents) {
+      _validateDocument(doc)
     }
+    this._log('insertMany', collection, { documentCount: documents.length })
     return this.request('/insertMany', { collection, documents }) as Promise<{ insertedIds: string[] }>
   }
 
@@ -391,9 +390,10 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     filter: Record<string, unknown>,
     update: Record<string, unknown>
   ): Promise<{ modifiedCount: number }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
+    _validateCollection(collection)
+    _validateFilter(filter)
+    _validateUpdate(update)
+    this._log('updateOne', collection, { filter, update })
     return this.request('/updateOne', { collection, filter, update }) as Promise<{ modifiedCount: number }>
   }
 
@@ -405,9 +405,10 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     filter: Record<string, unknown>,
     update: Record<string, unknown>
   ): Promise<{ modifiedCount: number }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
+    _validateCollection(collection)
+    _validateFilter(filter)
+    _validateUpdate(update)
+    this._log('updateMany', collection, { filter, update })
     return this.request('/updateMany', { collection, filter, update }) as Promise<{ modifiedCount: number }>
   }
 
@@ -418,9 +419,9 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     filter: Record<string, unknown>
   ): Promise<{ deletedCount: number }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
+    _validateCollection(collection)
+    _validateFilter(filter)
+    this._log('deleteOne', collection, { filter })
     return this.request('/deleteOne', { collection, filter }) as Promise<{ deletedCount: number }>
   }
 
@@ -431,9 +432,9 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     filter: Record<string, unknown>
   ): Promise<{ deletedCount: number }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
+    _validateCollection(collection)
+    _validateFilter(filter)
+    this._log('deleteMany', collection, { filter })
     return this.request('/deleteMany', { collection, filter }) as Promise<{ deletedCount: number }>
   }
 
@@ -444,10 +445,10 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     pipeline: Record<string, unknown>[]
   ): Promise<{ documents: unknown[] }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
-    return this.request('/aggregate', { collection, pipeline }) as Promise<{ documents: unknown[] }>
+    _validateCollection(collection)
+    _validatePipeline(pipeline)
+    this._log('aggregate', collection, { pipelineStages: pipeline.length })
+    return this._deduplicatedRequest('/aggregate', { collection, pipeline }) as Promise<{ documents: unknown[] }>
   }
 
   /**
@@ -457,23 +458,25 @@ export class DatabaseProxy extends WorkerEntrypoint<Env> {
     collection: string,
     filter: Record<string, unknown> = {}
   ): Promise<{ count: number }> {
-    if (!collection) {
-      throw new Error('Collection name is required')
-    }
-    return this.request('/countDocuments', { collection, filter }) as Promise<{ count: number }>
+    _validateCollection(collection)
+    _validateFilter(filter)
+    this._log('countDocuments', collection, { filter })
+    return this._deduplicatedRequest('/countDocuments', { collection, filter }) as Promise<{ count: number }>
   }
 
   /**
    * List all collections in the database
    */
   async listCollections(): Promise<string[]> {
-    return this.request('/listCollections', {}) as Promise<string[]>
+    this._log('listCollections', '*', {})
+    return this._deduplicatedRequest('/listCollections', {}) as Promise<string[]>
   }
 
   /**
    * List databases (returns the current database ID)
    */
   async listDatabases(): Promise<string[]> {
+    this._log('listDatabases', '*', {})
     const props = (this.ctx as unknown as { props: Props }).props
     return [props.databaseId]
   }

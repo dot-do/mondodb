@@ -34,7 +34,7 @@ export function useDatabasesQuery() {
 
   return useQuery({
     queryKey: queryKeys.databases,
-    queryFn: () => rpcClient.listDatabases(),
+    queryFn: ({ signal }) => rpcClient.listDatabases({ signal }),
     enabled: isConnected,
   })
 }
@@ -44,7 +44,7 @@ export function useCollectionsQuery(database: string, enabled = true) {
 
   return useQuery({
     queryKey: queryKeys.collections(database),
-    queryFn: () => rpcClient.listCollections(database),
+    queryFn: ({ signal }) => rpcClient.listCollections(database, { signal }),
     enabled: isConnected && enabled && !!database,
   })
 }
@@ -59,7 +59,7 @@ export function useDocumentsQuery(
 
   return useQuery({
     queryKey: queryKeys.documents(database, collection, options),
-    queryFn: () => rpcClient.find(database, collection, options),
+    queryFn: ({ signal }) => rpcClient.find(database, collection, options, { signal }),
     enabled: isConnected && !!database && !!collection,
   })
 }
@@ -90,7 +90,7 @@ export function useInfiniteDocumentsQuery(
 
   return useInfiniteQuery({
     queryKey: queryKeys.infiniteDocuments(database, collection, filter, sort),
-    queryFn: async ({ pageParam }): Promise<InfiniteDocumentsPage> => {
+    queryFn: async ({ pageParam, signal }): Promise<InfiniteDocumentsPage> => {
       // Build the filter with cursor for pagination
       // For cursor-based pagination, we use _id as the cursor
       const cursorFilter = pageParam
@@ -104,7 +104,7 @@ export function useInfiniteDocumentsQuery(
         filter: cursorFilter,
         sort,
         limit: pageSize + 1, // Fetch one extra to check if there's more
-      })
+      }, { signal })
 
       // Check if there are more documents
       const hasMore = documents.length > pageSize
@@ -135,7 +135,7 @@ export function useDocumentQuery(
 
   return useQuery({
     queryKey: queryKeys.document(database, collection, id),
-    queryFn: () => rpcClient.findOne(database, collection, { _id: id }),
+    queryFn: ({ signal }) => rpcClient.findOne(database, collection, { _id: id }, { signal }),
     enabled: isConnected && !!database && !!collection && !!id,
   })
 }
@@ -149,7 +149,7 @@ export function useDocumentCountQuery(
 
   return useQuery({
     queryKey: queryKeys.count(database, collection, filter),
-    queryFn: () => rpcClient.countDocuments(database, collection, filter),
+    queryFn: ({ signal }) => rpcClient.countDocuments(database, collection, filter, { signal }),
     enabled: isConnected && !!database && !!collection,
   })
 }
@@ -160,7 +160,7 @@ export function useIndexesQuery(database: string, collection: string) {
 
   return useQuery({
     queryKey: queryKeys.indexes(database, collection),
-    queryFn: () => rpcClient.listIndexes(database, collection),
+    queryFn: ({ signal }) => rpcClient.listIndexes(database, collection, { signal }),
     enabled: isConnected && !!database && !!collection,
   })
 }
@@ -294,7 +294,50 @@ export function useAggregateQuery(
 
   return useQuery({
     queryKey: ['aggregate', database, collection, pipeline],
-    queryFn: () => rpcClient.aggregate(database, collection, pipeline),
+    queryFn: ({ signal }) => rpcClient.aggregate(database, collection, pipeline, { signal }),
     enabled: isConnected && !!database && !!collection && enabled,
+  })
+}
+
+/**
+ * Mutation hook for creating a new collection.
+ */
+export function useCreateCollectionMutation(database: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      name,
+      options,
+    }: {
+      name: string
+      options?: Record<string, unknown>
+    }) => {
+      return rpcClient.createCollection(database, name, options)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.collections(database),
+      })
+    },
+  })
+}
+
+/**
+ * Mutation hook for creating a new database.
+ * Creates a database by creating an initial collection (MongoDB creates databases lazily).
+ */
+export function useCreateDatabaseMutation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (params: { name: string; initialCollection?: string }) => {
+      return rpcClient.createDatabase(params.name, params.initialCollection)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.databases,
+      })
+    },
   })
 }

@@ -5,19 +5,36 @@ import { BrowserRouter } from 'react-router-dom'
 import LeafyGreenProvider from '@leafygreen-ui/leafygreen-provider'
 import { afterEach } from 'vitest'
 
-// Clean up LeafyGreen portals after each test
+// Singleton QueryClient for tests - cleared between tests to prevent memory leaks
+let testQueryClient: QueryClient | null = null
+
+// Clean up LeafyGreen portals and QueryClient cache after each test
 afterEach(() => {
   cleanup()
+  // Clear query cache to prevent memory accumulation
+  if (testQueryClient) {
+    testQueryClient.clear()
+  }
 })
 
-const createTestQueryClient = () =>
-  new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
+const createTestQueryClient = () => {
+  // Reuse singleton to reduce memory overhead, but always clear cache between tests
+  if (!testQueryClient) {
+    testQueryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          // Disable caching for tests to prevent memory buildup
+          gcTime: 0,
+          staleTime: 0,
+        },
       },
-    },
-  })
+    })
+  }
+  // Clear any existing cache data
+  testQueryClient.clear()
+  return testQueryClient
+}
 
 interface WrapperProps {
   children: React.ReactNode

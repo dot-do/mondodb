@@ -82,7 +82,7 @@ export function ConnectionPage() {
     isConnected,
     isConnecting,
     error,
-    addConnection,
+    saveConnection,
     connect,
     removeConnection,
   } = useConnectionStore()
@@ -99,7 +99,12 @@ export function ConnectionPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const id = addConnection({ name: name || 'New Connection', url })
+    const id = saveConnection({
+      name: name || 'New Connection',
+      uri: url,
+      auth: { type: 'none' },
+      tls: { enabled: false },
+    })
     try {
       await connect(id)
       // Only reset form and navigate after successful connection

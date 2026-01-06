@@ -56,12 +56,6 @@ const MAX_PREVIEW_LENGTH = 500
 /** Default database name if not specified */
 const DEFAULT_DATABASE = 'default'
 
-/** Maximum collections to search when no collection specified */
-const MAX_COLLECTIONS_TO_SEARCH = 10
-
-/** Common text fields for relevance scoring */
-const TEXT_FIELDS = ['name', 'title', 'description', 'content', 'body', 'summary', 'text'] as const
-
 /** Document type from database */
 interface Document {
   _id?: string | { toString(): string }
@@ -70,11 +64,6 @@ interface Document {
   title?: string
   name?: string
   [key: string]: unknown
-}
-
-/** Extended search result with relevance score */
-interface ScoredDocument extends Document {
-  _relevanceScore?: number
 }
 
 /** Options for search */
@@ -174,14 +163,12 @@ export async function searchTool(
       }
     }
 
-    // Execute search with the search term for relevance scoring
-    const searchTerm = extractSearchTerm(filter)
+    // Execute search
     const documents = await executeSearch(
       dbAccess,
       collection ?? options.collection,
       filter,
-      findOptions,
-      searchTerm
+      findOptions.limit ?? MAX_RESULTS
     )
 
     // Apply offset and limit after fetching
@@ -256,28 +243,6 @@ function createErrorResponse(
     ],
     isError: true,
   }
-}
-
-/**
- * Extract search term from filter for relevance scoring
- */
-function extractSearchTerm(filter: object): string | undefined {
-  const textFilter = filter as { $text?: { $search?: string } }
-  if (textFilter.$text?.$search) {
-    return textFilter.$text.$search
-  }
-
-  // Check for $or regex patterns (fallback search)
-  const orFilter = filter as { $or?: Array<Record<string, { $regex?: string }>> }
-  if (orFilter.$or?.[0]) {
-    const firstCondition = orFilter.$or[0]
-    const firstField = Object.keys(firstCondition)[0]
-    if (firstField && firstCondition[firstField]?.$regex) {
-      return firstCondition[firstField].$regex
-    }
-  }
-
-  return undefined
 }
 
 /**

@@ -594,8 +594,10 @@ describe('DatabaseBrowser', () => {
       fireEvent.click(screen.getByText('testdb'))
 
       await waitFor(() => {
-        // Stats mock returns count: 1000
-        expect(screen.getByText(/1,000 docs/i)).toBeInTheDocument()
+        // Stats mock returns count: 1000 for each collection
+        // There should be at least one element showing "1,000 docs"
+        const docCountElements = screen.getAllByText(/1,000 docs/i)
+        expect(docCountElements.length).toBeGreaterThan(0)
       })
     })
 
@@ -710,9 +712,10 @@ describe('DatabaseBrowser', () => {
       fireEvent.click(screen.getByText('production'))
 
       await waitFor(() => {
-        // Both should be visible
-        expect(screen.getByText('users')).toBeInTheDocument()
-        expect(screen.getAllByText('products')).toHaveLength(2) // from both dbs
+        // Both databases expanded, each shows the same collections from mock
+        // So 'users', 'products', 'orders' appear twice (once per database)
+        expect(screen.getAllByText('users')).toHaveLength(2)
+        expect(screen.getAllByText('products')).toHaveLength(2)
       })
     })
 

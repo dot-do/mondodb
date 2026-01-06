@@ -45,7 +45,7 @@ interface ConnectionState {
 
   // Actions
   addConnection: (connection: Omit<ConnectionInfo, 'id'>) => string
-  saveConnection: (connection: Omit<ConnectionInfo, 'id' | 'createdAt' | 'updatedAt'>) => string
+  saveConnection: (connection: Omit<ConnectionInfo, 'id' | 'createdAt' | 'updatedAt' | 'host' | 'port' | 'database'>) => string
   removeConnection: (id: string) => void
   updateConnection: (id: string, updates: Partial<ConnectionInfo>) => void
   duplicateConnection: (id: string) => void
@@ -383,11 +383,14 @@ export const useConnectionStore = create<ConnectionState>()(
       partialize: (state) => ({
         connections: state.connections,
       }),
-      onRehydrateStorage: (api) => (state) => {
+      onRehydrateStorage: () => (state) => {
         // Auto-connect to same origin if not already connected
         // Wait for auto-connect to complete before marking hydrated
         if (typeof window !== 'undefined' && state && !state.isConnected) {
-          autoConnectToSameOrigin(api.setState).then((connected) => {
+          autoConnectToSameOrigin((updates) => {
+            // Directly update using the store's setState through getState pattern
+            useConnectionStore.setState(updates)
+          }).then((connected) => {
             // If auto-connect failed, still mark as hydrated so app can proceed
             if (!connected) {
               state?.setHydrated()

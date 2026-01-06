@@ -44,6 +44,8 @@ export interface DatabaseBrowserProps {
   onDatabaseSelect?: (database: string) => void
   /** Called when a collection is selected */
   onCollectionSelect?: (database: string, collection: string) => void
+  /** Called when a collection is double-clicked to open */
+  onCollectionOpen?: (database: string, collection: string) => void
   /** Called when create database is requested */
   onCreateDatabase?: () => void
   /** Called when drop database is requested */
@@ -52,6 +54,12 @@ export interface DatabaseBrowserProps {
   onCreateCollection?: (database: string) => void
   /** Called when drop collection is requested */
   onDropCollection?: (database: string, collection: string) => void
+  /** Whether to show breadcrumb for selection */
+  showBreadcrumb?: boolean
+  /** Whether multi-select is enabled */
+  multiSelectEnabled?: boolean
+  /** Called when multiple items are selected */
+  onMultiSelect?: (selections: Array<{ database: string; collection: string }>) => void
 }
 
 const styles = {
@@ -251,6 +259,15 @@ function PlusIcon() {
   )
 }
 
+/** Collapse all icon */
+function CollapseAllIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2 4h12M2 8h8M2 12h4" />
+    </svg>
+  )
+}
+
 export function DatabaseBrowser({
   databases,
   fetchCollections,
@@ -263,10 +280,14 @@ export function DatabaseBrowser({
   onRefresh,
   onDatabaseSelect,
   onCollectionSelect,
+  onCollectionOpen,
   onCreateDatabase,
   onDropDatabase,
   onCreateCollection,
   onDropCollection,
+  showBreadcrumb,
+  multiSelectEnabled,
+  onMultiSelect,
 }: DatabaseBrowserProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -274,6 +295,17 @@ export function DatabaseBrowser({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isCreateHovered, setIsCreateHovered] = useState(false)
   const [isClearHovered, setIsClearHovered] = useState(false)
+  const [isCollapseAllHovered, setIsCollapseAllHovered] = useState(false)
+
+  // Expanded databases state
+  const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
+    new Set(selectedDatabase ? [selectedDatabase] : [])
+  )
+
+  // Multi-select state
+  const [multiSelectedItems, setMultiSelectedItems] = useState<
+    Array<{ database: string; collection: string }>
+  >([])
 
   // Collections cache
   const [collectionsByDatabase, setCollectionsByDatabase] = useState<
@@ -395,6 +427,7 @@ export function DatabaseBrowser({
     setCollectionsByDatabase(new Map())
     setCollectionStats(new Map())
     setDatabaseStats(new Map())
+    setExpandedDatabases(new Set())
     onRefresh?.()
     // Give visual feedback for at least 500ms
     setTimeout(() => setIsRefreshing(false), 500)
@@ -405,6 +438,20 @@ export function DatabaseBrowser({
     setSearchQuery('')
   }, [])
 
+  // Handle collapse all
+  const handleCollapseAll = useCallback(() => {
+    setExpandedDatabases(new Set())
+  }, [])
+
+  // Handle multi-select
+  const handleMultiSelect = useCallback(
+    (selections: Array<{ database: string; collection: string }>) => {
+      setMultiSelectedItems(selections)
+      onMultiSelect?.(selections)
+    },
+    [onMultiSelect]
+  )
+
   // Auto-expand selected database on mount
   useEffect(() => {
     if (selectedDatabase && !collectionsByDatabase.has(selectedDatabase)) {
@@ -412,12 +459,41 @@ export function DatabaseBrowser({
     }
   }, [selectedDatabase, collectionsByDatabase, handleDatabaseToggle])
 
+  // Scroll selected collection into view
+  useEffect(() => {
+    if (selectedDatabase && selectedCollection && collectionsByDatabase.has(selectedDatabase)) {
+      // Use requestAnimationFrame to wait for DOM update
+      requestAnimationFrame(() => {
+        const selectedElement = document.querySelector(
+          `[data-testid="collection-item-${selectedCollection}"]`
+        )
+        if (selectedElement && typeof selectedElement.scrollIntoView === 'function') {
+          selectedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      })
+    }
+  }, [selectedDatabase, selectedCollection, collectionsByDatabase])
+
   return (
     <div style={styles.container} data-testid="database-browser">
       <div style={styles.header}>
         <div style={styles.title}>
           <span style={styles.titleText}>Databases</span>
           <div style={styles.headerActions}>
+            <button
+              style={{
+                ...styles.iconButton,
+                ...(isCollapseAllHovered ? styles.iconButtonHover : {}),
+              }}
+              onClick={handleCollapseAll}
+              onMouseEnter={() => setIsCollapseAllHovered(true)}
+              onMouseLeave={() => setIsCollapseAllHovered(false)}
+              title="Collapse all"
+              aria-label="Collapse all databases"
+              data-testid="collapse-all-button"
+            >
+              <CollapseAllIcon />
+            </button>
             <button
               style={{
                 ...styles.iconButton,
@@ -478,6 +554,20 @@ export function DatabaseBrowser({
           </div>
         )}
 
+        {showBreadcrumb && selectedDatabase && selectedCollection && (
+          <div
+            style={{
+              padding: '8px 12px',
+              fontSize: '12px',
+              color: '#666',
+              borderBottom: '1px solid #e8e8e8',
+            }}
+            data-testid="selection-breadcrumb"
+          >
+            {selectedDatabase} &gt; {selectedCollection}
+          </div>
+        )}
+
         <CollectionTree
           databases={filteredData.databases}
           collectionsByDatabase={filteredData.collectionsByDatabase}
@@ -494,6 +584,12 @@ export function DatabaseBrowser({
           onDropDatabase={onDropDatabase}
           onDropCollection={onDropCollection}
           onCreateCollection={onCreateCollection}
+          onCollectionOpen={onCollectionOpen}
+          onMultiSelect={handleMultiSelect}
+          multiSelectEnabled={multiSelectEnabled}
+          expandedDatabases={expandedDatabases}
+          setExpandedDatabases={setExpandedDatabases}
+          multiSelectedItems={multiSelectedItems}
         />
 
         {onCreateDatabase && (

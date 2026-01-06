@@ -1,16 +1,16 @@
 import { useState, useCallback, useMemo } from 'react'
 import { css, cx } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
-import { Body, Subtitle, InlineCode } from '@leafygreen-ui/typography'
+import { Body, Subtitle, InlineCode, H3 } from '@leafygreen-ui/typography'
 import Button from '@leafygreen-ui/button'
 import Icon from '@leafygreen-ui/icon'
 import IconButton from '@leafygreen-ui/icon-button'
 import Badge from '@leafygreen-ui/badge'
 import Tooltip from '@leafygreen-ui/tooltip'
-import { useIndexesQuery } from '@hooks/useQueries'
+import Modal from '@leafygreen-ui/modal'
+import { useIndexesQuery, useDropIndexMutation } from '@hooks/useQueries'
 import { SkeletonLoader } from '../SkeletonLoader'
 import { CreateIndexDialog } from './CreateIndexDialog'
-import { DropIndexDialog } from './DropIndexDialog'
 import type { IndexInfo } from '@lib/rpc-client'
 
 const containerStyles = css`
@@ -134,6 +134,7 @@ export function IndexList({ database, collection }: IndexListProps) {
   const [dropTarget, setDropTarget] = useState<IndexInfo | null>(null)
 
   const { data: indexes, isLoading, error, refetch } = useIndexesQuery(database, collection)
+  const dropIndexMutation = useDropIndexMutation(database, collection)
 
   const handleCreateSuccess = useCallback(() => {
     refetch()
@@ -162,8 +163,7 @@ export function IndexList({ database, collection }: IndexListProps) {
       <div className={containerStyles} data-testid="index-list-error">
         <div className={errorStyles}>
           <Icon glyph="Warning" size="xlarge" />
-          <Subtitle>Error loading indexes</Subtitle>
-          <Body>{String(error)}</Body>
+          <Subtitle>Error loading indexes: {error instanceof Error ? error.message : String(error)}</Subtitle>
           <Button
             variant="default"
             onClick={() => refetch()}
@@ -214,15 +214,15 @@ export function IndexList({ database, collection }: IndexListProps) {
             Create Index
           </Button>
         </div>
-      ) : (
+      ) : !dropTarget ? (
         <div className={tableContainerStyles}>
-          <table className={tableStyles} data-testid="index-table">
+          <table className={tableStyles} data-testid="index-table" role="table">
             <thead>
               <tr className={headerRowStyles}>
-                <th className={headerCellStyles}>Name</th>
-                <th className={headerCellStyles}>Keys</th>
-                <th className={headerCellStyles}>Properties</th>
-                <th className={headerCellStyles} style={{ width: 80 }}>Actions</th>
+                <th className={headerCellStyles} role="columnheader">Name</th>
+                <th className={headerCellStyles} role="columnheader">Keys</th>
+                <th className={headerCellStyles} role="columnheader">Properties</th>
+                <th className={headerCellStyles} style={{ width: 80 }} role="columnheader">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -246,7 +246,7 @@ export function IndexList({ database, collection }: IndexListProps) {
                         <Badge variant="green">TTL: {index.expireAfterSeconds}s</Badge>
                       )}
                       {index.name === '_id_' && (
-                        <Badge variant="gray">default</Badge>
+                        <Badge variant="lightgray">default</Badge>
                       )}
                     </div>
                   </td>
@@ -286,10 +286,10 @@ export function IndexList({ database, collection }: IndexListProps) {
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
       {/* Create Index Dialog */}
-      <CreateIndex
+      <CreateIndexDialog
         database={database}
         collection={collection}
         open={createOpen}
@@ -299,17 +299,72 @@ export function IndexList({ database, collection }: IndexListProps) {
 
       {/* Drop Index Dialog */}
       {dropTarget && (
-        <DropIndex
-          database={database}
-          collection={collection}
+        <DropIndexDialog
           indexName={dropTarget.name}
-          indexInfo={dropTarget}
           open={!!dropTarget}
           onClose={() => setDropTarget(null)}
           onSuccess={handleDropSuccess}
+          dropMutation={dropIndexMutation}
         />
       )}
     </div>
+  )
+}
+
+// Simple drop index dialog component
+interface DropIndexDialogProps {
+  indexName: string
+  open: boolean
+  onClose: () => void
+  onSuccess?: () => void
+  dropMutation: ReturnType<typeof useDropIndexMutation>
+}
+
+function DropIndexDialog({
+  indexName,
+  open,
+  onClose,
+  onSuccess,
+  dropMutation,
+}: DropIndexDialogProps) {
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDrop = useCallback(async () => {
+    setError(null)
+    try {
+      await dropMutation.mutateAsync(indexName)
+      onSuccess?.()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to drop index')
+    }
+  }, [dropMutation, indexName, onSuccess, onClose])
+
+  return (
+    <Modal open={open} setOpen={onClose}>
+      <div style={{ padding: 24 }}>
+        <H3>Drop Index</H3>
+        <Body style={{ marginTop: 16, marginBottom: 16 }}>
+          Are you sure you want to drop the index <strong data-testid="drop-index-name">{indexName}</strong>?
+          This action cannot be undone.
+        </Body>
+        {error && (
+          <Body style={{ color: palette.red.dark2, marginBottom: 16 }}>{error}</Body>
+        )}
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleDrop}
+            disabled={dropMutation.isPending}
+          >
+            {dropMutation.isPending ? 'Dropping...' : 'Drop Index'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

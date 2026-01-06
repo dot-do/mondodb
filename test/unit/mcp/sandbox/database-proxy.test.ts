@@ -273,7 +273,7 @@ describe('DatabaseProxy WorkerEntrypoint', () => {
 
   describe('error handling', () => {
     it('should throw error when collection name is not provided', async () => {
-      await expect(proxy.find('', {})).rejects.toThrow('Collection name is required')
+      await expect(proxy.find('', {})).rejects.toThrow('Collection name must be a non-empty string')
     })
 
     it('should propagate errors from the Durable Object', async () => {

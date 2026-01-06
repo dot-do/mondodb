@@ -17,12 +17,20 @@ export interface CollectionItemProps {
   database: string
   /** Whether this collection is currently selected */
   isSelected?: boolean
+  /** Whether this collection is part of a multi-selection */
+  isMultiSelected?: boolean
   /** Whether stats are currently loading */
   isLoadingStats?: boolean
   /** Called when the collection is clicked */
-  onClick?: (database: string, collection: string) => void
+  onClick?: (database: string, collection: string, event?: React.MouseEvent) => void
+  /** Called when the collection is double-clicked */
+  onDoubleClick?: (database: string, collection: string) => void
   /** Called when drop collection is requested */
   onDropCollection?: (database: string, collection: string) => void
+  /** Index of this collection in the list (for keyboard navigation) */
+  collectionIndex?: number
+  /** Total number of collections in the list (for keyboard navigation) */
+  totalCollections?: number
 }
 
 const styles = {
@@ -154,16 +162,47 @@ export function CollectionItem({
   stats,
   database,
   isSelected = false,
+  isMultiSelected = false,
   isLoadingStats = false,
   onClick,
+  onDoubleClick,
   onDropCollection,
+  collectionIndex,
+  totalCollections,
 }: CollectionItemProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [isDropHovered, setIsDropHovered] = useState(false)
 
-  const handleClick = useCallback(() => {
-    onClick?.(database, collection.name)
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    onClick?.(database, collection.name, e)
   }, [onClick, database, collection.name])
+
+  const handleDoubleClick = useCallback(() => {
+    onDoubleClick?.(database, collection.name)
+  }, [onDoubleClick, database, collection.name])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' && collectionIndex !== undefined && totalCollections !== undefined) {
+      e.preventDefault()
+      // Focus next sibling collection item
+      const parent = (e.target as HTMLElement).parentElement
+      const siblings = parent?.querySelectorAll('[role="treeitem"]')
+      if (siblings && collectionIndex < totalCollections - 1) {
+        (siblings[collectionIndex + 1] as HTMLElement)?.focus()
+      }
+    } else if (e.key === 'ArrowUp' && collectionIndex !== undefined && collectionIndex > 0) {
+      e.preventDefault()
+      // Focus previous sibling collection item
+      const parent = (e.target as HTMLElement).parentElement
+      const siblings = parent?.querySelectorAll('[role="treeitem"]')
+      if (siblings) {
+        (siblings[collectionIndex - 1] as HTMLElement)?.focus()
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      onClick?.(database, collection.name)
+    }
+  }, [collectionIndex, totalCollections, onClick, database, collection.name])
 
   const handleDropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -177,20 +216,27 @@ export function CollectionItem({
   )
 
   const isView = collection.type === 'view'
+  const isHighlighted = isSelected || isMultiSelected
 
   return (
     <div
       style={{
         ...styles.container,
-        ...(isHovered && !isSelected ? styles.containerHover : {}),
-        ...(isSelected ? styles.containerSelected : {}),
+        ...(isHovered && !isHighlighted ? styles.containerHover : {}),
+        ...(isHighlighted ? styles.containerSelected : {}),
       }}
+      className={isSelected ? 'selected' : undefined}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       role="treeitem"
+      tabIndex={0}
       aria-selected={isSelected}
+      aria-level={2}
       data-testid={`collection-item-${collection.name}`}
+      data-type={collection.type}
     >
       <CollectionIcon isView={isView} />
       <span style={styles.name}>{collection.name}</span>
@@ -204,7 +250,7 @@ export function CollectionItem({
       ) : stats ? (
         <div style={styles.stats}>
           <span style={styles.statItem} title={`${stats.count} documents`}>
-            {formatCount(stats.count)} docs
+            {stats.count.toLocaleString()} docs
           </span>
           <span style={styles.statItem} title={`${stats.size} bytes`}>
             {formatSize(stats.size)}

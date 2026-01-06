@@ -295,6 +295,32 @@ export const useQueryStore = create<QueryState>()(
         history: state.history,
         maxHistorySize: state.maxHistorySize,
       }),
+      // Handle storage errors gracefully (e.g., QuotaExceededError)
+      storage: {
+        getItem: (name) => {
+          try {
+            const str = localStorage.getItem(name)
+            return str ? JSON.parse(str) : null
+          } catch {
+            return null
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value))
+          } catch {
+            // Silently fail on storage errors (e.g., QuotaExceededError)
+            console.warn('Failed to persist query history to localStorage')
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name)
+          } catch {
+            // Silently fail
+          }
+        },
+      },
     }
   )
 )

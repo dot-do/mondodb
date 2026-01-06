@@ -76,6 +76,7 @@ const COLLECTION_METHODS = new Set([
   'deleteOne',
   'deleteMany',
   'count',
+  'countDocuments',
   'distinct',
   'aggregate',
   'createCollection',

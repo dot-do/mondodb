@@ -121,11 +121,13 @@ describe('useConnectionStore', () => {
 
       expect(id!).toBe('test-uuid-1')
       expect(result.current.connections).toHaveLength(1)
-      expect(result.current.connections[0]).toEqual({
-        id: 'test-uuid-1',
-        name: 'Test Connection',
-        url: 'http://localhost:8787',
-      })
+      expect(result.current.connections[0]).toEqual(
+        expect.objectContaining({
+          id: 'test-uuid-1',
+          name: 'Test Connection',
+          url: 'http://localhost:8787',
+        })
+      )
     })
 
     it('adds multiple connections', () => {
@@ -359,12 +361,14 @@ describe('useConnectionStore', () => {
         })
       })
 
-      expect(result.current.connections[0]).toEqual({
-        id: 'conn-id',
-        name: 'New Name',
-        url: 'http://new-url:8787',
-        lastConnected: 12345,
-      })
+      expect(result.current.connections[0]).toEqual(
+        expect.objectContaining({
+          id: 'conn-id',
+          name: 'New Name',
+          url: 'http://new-url:8787',
+          lastConnected: 12345,
+        })
+      )
     })
 
     it('only updates the specified connection', () => {

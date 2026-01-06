@@ -235,7 +235,7 @@ export function ImportDocuments({
 
       for (let i = 0; i < lines.length; i++) {
         try {
-          const doc = JSON.parse(lines[i])
+          const doc = JSON.parse(lines[i] ?? '')
           if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
             throw new Error(`Line ${i + 1} is not a valid document object`)
           }
@@ -498,7 +498,6 @@ export function ImportDocuments({
                 <Button
                   variant="default"
                   onClick={resetState}
-                  disabled={progress.status === 'importing'}
                 >
                   Clear
                 </Button>
@@ -510,7 +509,7 @@ export function ImportDocuments({
                 <Button
                   variant="primary"
                   onClick={handleImport}
-                  disabled={insertManyMutation.isPending || progress.status === 'importing'}
+                  disabled={insertManyMutation.isPending}
                   data-testid="import-submit"
                 >
                   Import {documents.length.toLocaleString()} Documents

@@ -142,7 +142,6 @@ export class PipelineBinding {
       throw new Error('Pipeline binding is not available');
     }
 
-    const startTime = Date.now();
     const messageId = randomUUID();
 
     try {

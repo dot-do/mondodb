@@ -9,7 +9,7 @@ import IconButton from '@leafygreen-ui/icon-button'
 import Tooltip from '@leafygreen-ui/tooltip'
 import { SegmentedControl, SegmentedControlOption } from '@leafygreen-ui/segmented-control'
 import TextInput from '@leafygreen-ui/text-input'
-import { useInsertManyMutation } from '@hooks/useQueries'
+import { useInsertManyDocumentsMutation } from '@hooks/useQueries'
 
 // Types
 export type ImportFormat = 'json' | 'csv'
@@ -376,7 +376,7 @@ export function ImportDialog({
   const [isDragging, setIsDragging] = useState(false)
   const [importProgress, setImportProgress] = useState<number>(0)
 
-  const insertManyMutation = useInsertManyMutation(database, collection)
+  const insertManyMutation = useInsertManyDocumentsMutation(database, collection)
 
   // Reset state when closing
   const handleClose = useCallback(() => {

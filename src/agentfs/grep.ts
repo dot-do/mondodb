@@ -27,7 +27,7 @@ import type { FileSystem, GrepOptions, GrepMatch } from './types'
 const BINARY_DETECTION_SAMPLE_SIZE = 8192
 
 /** Maximum number of null bytes in sample before considering file binary */
-const MAX_NULL_BYTES_FOR_TEXT = 1
+const MAX_NULL_BYTES_FOR_TEXT = 10
 
 // Pre-compiled regex for performance
 const WINDOWS_LINE_ENDING = /\r\n/g
@@ -78,7 +78,7 @@ export class AgentGrep {
    * @param content - File content to check
    * @returns True if content appears to be binary
    */
-  private isBinaryContent(content: string): boolean {
+  private _isBinaryContent(content: string): boolean {
     const sampleSize = Math.min(content.length, BINARY_DETECTION_SAMPLE_SIZE)
     let nullCount = 0
 
@@ -159,6 +159,9 @@ export class AgentGrep {
 
         // Skip empty files
         if (!content) continue
+
+        // Skip binary files
+        if (this._isBinaryContent(content)) continue
 
         // Normalize line endings for consistent processing
         const normalizedContent = this.normalizeLineEndings(content)
@@ -291,6 +294,9 @@ export class AgentGrep {
       try {
         const content = await this.fs.readFile(file)
         if (!content) continue
+
+        // Skip binary files
+        if (this._isBinaryContent(content)) continue
 
         // Normalize line endings for consistent processing
         const normalizedContent = this.normalizeLineEndings(content)

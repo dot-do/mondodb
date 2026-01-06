@@ -16,13 +16,31 @@ export default defineConfig({
         'src/test/',
       ],
     },
-    // Memory optimization: limit concurrent workers to prevent 21GB+ memory usage
+    // Memory optimization: Use forks instead of threads for better memory isolation
+    // Each test file runs in a separate process, preventing memory accumulation
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        maxThreads: 4,
-        minThreads: 1,
+      forks: {
+        // Single fork to minimize memory usage - tests run sequentially but safely
+        maxForks: 1,
+        minForks: 1,
+        // Isolate each test file in its own process
+        isolate: true,
       },
     },
+    // Prevent runaway tests from consuming excessive memory/time
+    testTimeout: 30000,
+    hookTimeout: 10000,
+    // Ensure test isolation - each test file gets fresh module state
+    isolate: true,
+    // Clear mocks between tests automatically
+    clearMocks: true,
+    // Restore mocks after each test
+    restoreMocks: true,
+    // Limit file parallelism when running
+    fileParallelism: false,
+    // Fail fast on first error to prevent memory buildup from cascading failures
+    bail: 1,
   },
   resolve: {
     alias: {

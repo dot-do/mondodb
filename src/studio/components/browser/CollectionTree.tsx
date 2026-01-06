@@ -8,7 +8,7 @@
  * - Empty states when no data
  */
 
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { CollectionItem } from './CollectionItem'
 import type { DatabaseInfo, CollectionInfo, CollectionStats, DatabaseStats } from './types'
 
@@ -53,20 +53,12 @@ export interface CollectionTreeProps {
   showBreadcrumb?: boolean
   /** Called when collapse all is triggered */
   onCollapseAll?: () => void
-}
-
-/** Format bytes to human-readable size */
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(0))} ${sizes[i]}`
-}
-
-/** Format number with commas */
-function formatNumber(num: number): string {
-  return num.toLocaleString()
+  /** Expanded databases set (controlled) */
+  expandedDatabases?: Set<string>
+  /** Callback to set expanded databases (controlled) */
+  setExpandedDatabases?: (databases: Set<string>) => void
+  /** Currently selected items in multi-select mode */
+  multiSelectedItems?: Array<{ database: string; collection: string }>
 }
 
 const styles = {
@@ -241,6 +233,28 @@ interface DatabaseNodeProps {
   onDropDatabase?: (database: string) => void
   onDropCollection?: (database: string, collection: string) => void
   onCreateCollection?: (database: string) => void
+  onCollectionOpen?: (database: string, collection: string) => void
+  onMultiSelect?: (selections: Array<{ database: string; collection: string }>) => void
+  multiSelectEnabled?: boolean
+  multiSelectedItems?: Array<{ database: string; collection: string }>
+}
+
+/** Format bytes to human-readable size */
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+
+  // Use decimal (1000) for more intuitive display
+  const k = 1000
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+
+  if (bytes < k) return `${bytes} B`
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  const value = bytes / Math.pow(k, i)
+
+  // Round to integer for cleaner display
+  const formatted = Math.round(value).toString()
+  return `${formatted} ${sizes[i]}`
 }
 
 function DatabaseNode({
@@ -259,15 +273,39 @@ function DatabaseNode({
   onDropDatabase,
   onDropCollection,
   onCreateCollection,
+  onCollectionOpen,
+  onMultiSelect,
+  multiSelectEnabled,
+  multiSelectedItems,
 }: DatabaseNodeProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [isCreateHovered, setIsCreateHovered] = useState(false)
   const [isDropHovered, setIsDropHovered] = useState(false)
 
+  const collectionGroupId = `collections-${database.name}`
+
   const handleClick = useCallback(() => {
     onToggle(database.name, !isExpanded)
     onSelect?.(database.name)
   }, [database.name, isExpanded, onToggle, onSelect])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowRight' && !isExpanded) {
+        e.preventDefault()
+        onToggle(database.name, true)
+        onSelect?.(database.name)
+      } else if (e.key === 'ArrowLeft' && isExpanded) {
+        e.preventDefault()
+        onToggle(database.name, false)
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onToggle(database.name, !isExpanded)
+        onSelect?.(database.name)
+      }
+    },
+    [database.name, isExpanded, onToggle, onSelect]
+  )
 
   const handleCreateClick = useCallback(
     (e: React.MouseEvent) => {
@@ -288,6 +326,40 @@ function DatabaseNode({
     [database.name, onDropDatabase]
   )
 
+  const handleCollectionClick = useCallback(
+    (db: string, coll: string, e?: React.MouseEvent) => {
+      if (multiSelectEnabled && e?.metaKey) {
+        // Multi-select mode with Cmd/Ctrl key - add to existing selection
+        const newItem = { database: db, collection: coll }
+        const currentItems = multiSelectedItems || []
+
+        // Check if already in multi-selection
+        const existingIndex = currentItems.findIndex(
+          item => item.database === db && item.collection === coll
+        )
+
+        let newItems: Array<{ database: string; collection: string }>
+        if (existingIndex >= 0) {
+          // Remove if already selected
+          newItems = currentItems.filter((_, i) => i !== existingIndex)
+        } else {
+          // Add to selection - include current items plus the new one
+          newItems = [...currentItems, newItem]
+        }
+
+        onMultiSelect?.(newItems)
+      } else if (multiSelectEnabled) {
+        // Regular click in multi-select mode - start new selection with this item
+        const newItem = { database: db, collection: coll }
+        onMultiSelect?.([newItem])
+        onCollectionSelect?.(db, coll)
+      } else {
+        onCollectionSelect?.(db, coll)
+      }
+    },
+    [multiSelectEnabled, multiSelectedItems, onMultiSelect, onCollectionSelect]
+  )
+
   return (
     <div style={styles.databaseNode} data-testid={`database-node-${database.name}`}>
       <div
@@ -297,22 +369,33 @@ function DatabaseNode({
           ...(isSelected ? styles.databaseHeaderSelected : {}),
         }}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         role="treeitem"
+        tabIndex={0}
         aria-expanded={isExpanded}
         aria-selected={isSelected}
+        aria-level={1}
+        aria-owns={isExpanded ? collectionGroupId : undefined}
       >
         <span
           style={{
-            ...styles.expandIcon,
-            ...(isExpanded ? styles.expandIconExpanded : {}),
+            ...styles.expandChevron,
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
           }}
+          data-testid="expand-chevron"
         >
           <ChevronIcon />
         </span>
         <DatabaseIcon />
         <span style={styles.databaseName}>{database.name}</span>
+
+        {database.sizeOnDisk !== undefined && database.sizeOnDisk > 0 && (
+          <span style={styles.databaseStats}>
+            {formatSize(database.sizeOnDisk)}
+          </span>
+        )}
 
         {stats && (
           <span style={styles.databaseStats}>
@@ -358,7 +441,7 @@ function DatabaseNode({
       </div>
 
       {isExpanded && (
-        <div style={styles.collectionList} role="group">
+        <div style={styles.collectionList} role="group" id={collectionGroupId}>
           {isLoading ? (
             <>
               <div style={styles.skeleton} data-testid="collection-skeleton" />
@@ -367,8 +450,11 @@ function DatabaseNode({
           ) : collections.length === 0 ? (
             <div style={styles.emptyCollections}>No collections</div>
           ) : (
-            collections.map((collection) => {
+            collections.map((collection, index) => {
               const statsKey = `${database.name}.${collection.name}`
+              const isMultiSelected = multiSelectedItems?.some(
+                item => item.database === database.name && item.collection === collection.name
+              )
               return (
                 <CollectionItem
                   key={collection.name}
@@ -378,9 +464,13 @@ function DatabaseNode({
                   isSelected={
                     isSelected && selectedCollection === collection.name
                   }
+                  isMultiSelected={isMultiSelected}
                   isLoadingStats={loadingStats?.has(statsKey)}
-                  onClick={onCollectionSelect}
+                  onClick={handleCollectionClick}
+                  onDoubleClick={onCollectionOpen}
                   onDropCollection={onDropCollection}
+                  collectionIndex={index}
+                  totalCollections={collections.length}
                 />
               )
             })
@@ -407,14 +497,25 @@ export function CollectionTree({
   onDropDatabase,
   onDropCollection,
   onCreateCollection,
+  onCollectionOpen,
+  onMultiSelect,
+  multiSelectEnabled,
+  expandedDatabases: controlledExpandedDatabases,
+  setExpandedDatabases: controlledSetExpandedDatabases,
+  multiSelectedItems,
 }: CollectionTreeProps) {
-  const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(
+  const [internalExpandedDatabases, setInternalExpandedDatabases] = useState<Set<string>>(
     new Set(selectedDatabase ? [selectedDatabase] : [])
   )
 
+  // Use controlled or internal state
+  const expandedDatabases = controlledExpandedDatabases ?? internalExpandedDatabases
+  const setExpandedDatabases = controlledSetExpandedDatabases ?? setInternalExpandedDatabases
+
   const handleDatabaseToggle = useCallback(
     (database: string, isExpanded: boolean) => {
-      setExpandedDatabases((prev) => {
+      // Use functional update to ensure we have the latest state
+      const updateFn = (prev: Set<string>) => {
         const next = new Set(prev)
         if (isExpanded) {
           next.add(database)
@@ -422,10 +523,21 @@ export function CollectionTree({
           next.delete(database)
         }
         return next
-      })
+      }
+
+      // Apply the update
+      if (controlledSetExpandedDatabases) {
+        // For controlled state, compute new value and set it
+        const newValue = updateFn(expandedDatabases)
+        controlledSetExpandedDatabases(newValue)
+      } else {
+        // For internal state, use functional update
+        setInternalExpandedDatabases(updateFn)
+      }
+
       onDatabaseToggle?.(database, isExpanded)
     },
-    [onDatabaseToggle]
+    [expandedDatabases, controlledSetExpandedDatabases, onDatabaseToggle]
   )
 
   // Sort databases alphabetically
@@ -479,6 +591,10 @@ export function CollectionTree({
             onDropDatabase={onDropDatabase}
             onDropCollection={onDropCollection}
             onCreateCollection={onCreateCollection}
+            onCollectionOpen={onCollectionOpen}
+            onMultiSelect={onMultiSelect}
+            multiSelectEnabled={multiSelectEnabled}
+            multiSelectedItems={multiSelectedItems}
           />
         )
       })}

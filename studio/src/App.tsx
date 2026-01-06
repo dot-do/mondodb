@@ -5,7 +5,7 @@ import { SkeletonLoader } from '@components/SkeletonLoader'
 import { useConnectionStore } from '@stores/connection'
 
 // Lazy load page components for better performance
-const ConnectionPage = lazy(() => import('@components/pages/ConnectionPage').then(m => ({ default: m.ConnectionPage })))
+const ConnectionPanel = lazy(() => import('@components/ConnectionPanel').then(m => ({ default: m.ConnectionPanel })))
 const DatabasePage = lazy(() => import('@components/pages/DatabasePage').then(m => ({ default: m.DatabasePage })))
 const CollectionPage = lazy(() => import('@components/pages/CollectionPage').then(m => ({ default: m.CollectionPage })))
 
@@ -42,7 +42,7 @@ export function App() {
             index
             element={
               <Suspense fallback={<PageLoader />}>
-                <ConnectionPage />
+                <ConnectionPanel />
               </Suspense>
             }
           />

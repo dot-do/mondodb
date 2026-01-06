@@ -14,6 +14,22 @@ vi.mock('@stores/connection', () => ({
 vi.mock('@hooks/useQueries', () => ({
   useDatabasesQuery: vi.fn(),
   useCollectionsQuery: vi.fn(),
+  useCreateDatabaseMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useDropDatabaseMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useCreateCollectionMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useDropCollectionMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
 }))
 
 // Mock react-router-dom navigate

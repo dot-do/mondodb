@@ -9,6 +9,7 @@
  */
 
 import { MondoRpcTarget } from './rpc-target';
+import { createRpcHandler } from './endpoint';
 import type {
   DurableObjectNamespace,
   DurableObjectStub,
@@ -209,13 +210,185 @@ export class MondoEntrypoint extends WorkerEntrypoint implements MondoBindings {
       });
     }
 
-    // RPC endpoint
+    // RPC endpoint - use the endpoint RPC handler for proper routing to Durable Object
     if (url.pathname === '/rpc' || url.pathname.startsWith('/rpc/')) {
-      const { newWorkersRpcResponse } = await import('./rpc-target');
-      return newWorkersRpcResponse(this.rpcTarget, request);
+      // Transform the request from { id, method, params } format to { method, db, collection, ... } format
+      const { transformedRequest, requestId } = await this.transformRpcRequest(request);
+      const rpcHandler = createRpcHandler(this.env, this.ctx);
+      const response = await rpcHandler.fetch(transformedRequest);
+      // Transform the response to { id, result, error } format expected by Studio client
+      return this.transformRpcResponse(response, requestId);
     }
 
     return new Response('Not found', { status: 404 });
+  }
+
+  /**
+   * Transform RPC request from { id, method, params } format to { method, db, collection, ... } format
+   * This allows the endpoint RPC handler to process requests from the Studio client
+   */
+  private async transformRpcRequest(request: Request): Promise<{ transformedRequest: Request; requestId?: string }> {
+    try {
+      const body = await request.json() as { id?: string; method: string; params?: unknown[] };
+      const { id: requestId, method, params = [] } = body;
+
+      // Build the HTTP RPC request format expected by endpoint.ts
+      const httpRpcBody: Record<string, unknown> = { method };
+
+      // Map params to the appropriate fields based on method
+      switch (method) {
+        case 'listDatabases':
+          // No additional params needed
+          break;
+
+        case 'listCollections':
+          // params: [database]
+          if (params[0]) httpRpcBody.db = params[0];
+          break;
+
+        case 'find':
+        case 'countDocuments':
+          // params: [database, collection, options]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) {
+            const options = params[2] as Record<string, unknown>;
+            httpRpcBody.filter = options.filter;
+            httpRpcBody.options = options;
+          }
+          break;
+
+        case 'findOne':
+          // params: [database, collection, filter]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.filter = params[2];
+          break;
+
+        case 'insertOne':
+          // params: [database, collection, document]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.document = params[2];
+          break;
+
+        case 'insertMany':
+          // params: [database, collection, documents]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.documents = params[2];
+          break;
+
+        case 'updateOne':
+        case 'updateMany':
+          // params: [database, collection, filter, update]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.filter = params[2];
+          if (params[3]) httpRpcBody.update = params[3];
+          break;
+
+        case 'deleteOne':
+        case 'deleteMany':
+          // params: [database, collection, filter]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.filter = params[2];
+          break;
+
+        case 'aggregate':
+          // params: [database, collection, pipeline]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.pipeline = params[2];
+          break;
+
+        case 'createCollection':
+          // params: [database, name, options]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          if (params[2]) httpRpcBody.options = params[2];
+          break;
+
+        case 'dropCollection':
+          // params: [database, name]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          break;
+
+        case 'listIndexes':
+          // params: [database, collection]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          break;
+
+        case 'createIndex':
+          // params: [database, collection, keys, options]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          // TODO: Handle index creation params
+          break;
+
+        case 'dropIndex':
+          // params: [database, collection, indexName]
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          // TODO: Handle index name param
+          break;
+
+        default:
+          // For unknown methods, try to extract db and collection from first two params
+          if (params[0]) httpRpcBody.db = params[0];
+          if (params[1]) httpRpcBody.collection = params[1];
+          break;
+      }
+
+      // Create a new request with the transformed body
+      const transformedRequest = new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: JSON.stringify(httpRpcBody),
+      });
+
+      return { transformedRequest, requestId };
+    } catch {
+      // If parsing fails, return the original request
+      return { transformedRequest: request };
+    }
+  }
+
+  /**
+   * Transform RPC response from { ok, result, error, code } format to { id, result, error } format
+   * This converts endpoint.ts response format to the format expected by Studio client
+   */
+  private async transformRpcResponse(response: Response, requestId?: string): Promise<Response> {
+    try {
+      const body = await response.json() as { ok?: number; result?: unknown; error?: string; code?: number };
+
+      // Build the response format expected by Studio client
+      const rpcResponse: { id?: string; result?: unknown; error?: { code: number; message: string } } = {};
+
+      if (requestId) {
+        rpcResponse.id = requestId;
+      }
+
+      if (body.ok === 1) {
+        rpcResponse.result = body.result;
+      } else if (body.error) {
+        rpcResponse.error = {
+          code: body.code || -1,
+          message: body.error,
+        };
+      }
+
+      return new Response(JSON.stringify(rpcResponse), {
+        status: response.status,
+        headers: response.headers,
+      });
+    } catch {
+      // If parsing fails, return the original response
+      return response;
+    }
   }
 
   /**

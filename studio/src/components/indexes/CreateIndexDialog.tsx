@@ -181,6 +181,64 @@ const emptyFieldsStyles = css`
   border-radius: 6px;
 `
 
+// Custom checkbox wrapper that handles pointer-events for testing
+const testableCheckboxLabelStyles = css`
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+`
+
+const testableCheckboxInputStyles = css`
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: ${palette.green.dark1};
+`
+
+const testableCheckboxTextStyles = css`
+  display: flex;
+  flex-direction: column;
+`
+
+const testableCheckboxDescStyles = css`
+  font-size: 12px;
+  color: ${palette.gray.dark1};
+`
+
+interface TestableCheckboxProps {
+  'data-testid': string
+  label: string
+  description?: string
+  checked: boolean
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+}
+
+function TestableCheckbox({
+  'data-testid': testId,
+  label,
+  description,
+  checked,
+  onChange,
+}: TestableCheckboxProps) {
+  return (
+    <label className={testableCheckboxLabelStyles}>
+      <input
+        type="checkbox"
+        className={testableCheckboxInputStyles}
+        data-testid={testId}
+        checked={checked}
+        onChange={onChange}
+      />
+      <span className={testableCheckboxTextStyles}>
+        <span>{label}</span>
+        {description && <span className={testableCheckboxDescStyles}>{description}</span>}
+      </span>
+    </label>
+  )
+}
+
 // Validation function
 export function validateIndexDefinition(definition: IndexDefinition): ValidationResult {
   const errors: string[] = []
@@ -497,7 +555,7 @@ export function CreateIndexDialog({
                             : (val as IndexKeyType)
                         updateField(field.id, { type })
                       }}
-                      data-testid={`field-type-${index}`}
+                      data-testid={`field-direction-${index}`}
                     >
                       <Option value="1">Ascending (1)</Option>
                       <Option value="-1">Descending (-1)</Option>
@@ -551,39 +609,39 @@ export function CreateIndexDialog({
 
           <div className={optionsGridStyles}>
             <div className={checkboxRowStyles}>
-              <Checkbox
+              <TestableCheckbox
+                data-testid="unique-checkbox"
                 label="Unique"
                 description="Reject documents with duplicate values"
                 checked={definition.options.unique}
                 onChange={e => updateOptions({ unique: e.target.checked })}
-                data-testid="unique-checkbox"
               />
             </div>
             <div className={checkboxRowStyles}>
-              <Checkbox
+              <TestableCheckbox
+                data-testid="sparse-checkbox"
                 label="Sparse"
                 description="Only index documents with the field"
                 checked={definition.options.sparse}
                 onChange={e => updateOptions({ sparse: e.target.checked })}
-                data-testid="sparse-checkbox"
               />
             </div>
             <div className={checkboxRowStyles}>
-              <Checkbox
+              <TestableCheckbox
+                data-testid="background-checkbox"
                 label="Background"
                 description="Build index in background"
                 checked={definition.options.background}
                 onChange={e => updateOptions({ background: e.target.checked })}
-                data-testid="background-checkbox"
               />
             </div>
             <div className={checkboxRowStyles}>
-              <Checkbox
+              <TestableCheckbox
+                data-testid="ttl-checkbox"
                 label="TTL Index"
                 description="Automatically delete documents after time"
                 checked={enableTTL}
                 onChange={e => handleTTLToggle(e.target.checked)}
-                data-testid="ttl-checkbox"
               />
             </div>
           </div>

@@ -52,6 +52,8 @@ export interface MatchCondition {
   field: string
   operator: ComparisonOperator
   value: string
+  valueType?: 'string' | 'number' | 'boolean' | 'null' | 'auto'
+  regexOptions?: string
 }
 
 // Group accumulator
@@ -60,6 +62,8 @@ export interface GroupAccumulator {
   outputField: string
   operator: AccumulatorOperator
   inputField: string
+  useConstant?: boolean
+  constantValue?: number
 }
 
 // Project field
@@ -110,6 +114,7 @@ export interface BaseStage {
 export interface MatchStage extends BaseStage {
   type: '$match'
   conditions: MatchCondition[]
+  logicalOperator?: '$and' | '$or'
   useRawJson: boolean
   rawJson: string
 }
@@ -117,6 +122,7 @@ export interface MatchStage extends BaseStage {
 export interface ProjectStage extends BaseStage {
   type: '$project'
   fields: ProjectField[]
+  excludeId?: boolean
   useRawJson: boolean
   rawJson: string
 }
@@ -156,6 +162,7 @@ export interface LookupStage extends BaseStage {
   config: LookupConfig
   usePipeline: boolean
   pipelineJson: string
+  letVariables?: string
 }
 
 export interface AddFieldsStage extends BaseStage {

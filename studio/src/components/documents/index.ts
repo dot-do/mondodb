@@ -79,9 +79,15 @@ export {
   useDocumentQuery,
   useDocumentsQuery,
   useDocumentCountQuery,
+  useInfiniteDocumentsQuery,
   useInsertDocumentMutation,
   useUpdateDocumentMutation,
   useDeleteDocumentMutation,
+} from '@hooks/useQueries'
+
+export type {
+  InfiniteDocumentsOptions,
+  InfiniteDocumentsPage,
 } from '@hooks/useQueries'
 
 // Document operations hooks

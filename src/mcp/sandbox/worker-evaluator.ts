@@ -32,9 +32,6 @@ export function getWorkerId(code: string): string {
   return `sandbox-${hash}`
 }
 
-// Track active workers for cleanup
-const activeWorkers = new Map<string, { createdAt: number; lastUsed: number }>()
-
 // =============================================================================
 // Execution Metrics
 // =============================================================================

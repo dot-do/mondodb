@@ -211,10 +211,9 @@ export function CollectionPage() {
                 <DocumentList
                   documents={documents ?? []}
                   totalCount={count}
-                  page={Math.floor(skip / limit) + 1}
-                  pageSize={limit}
-                  onPageChange={(page) => setSkip((page - 1) * limit)}
-                  onPageSizeChange={setLimit}
+                  hasMore={hasNextPage}
+                  isFetchingMore={isFetchingNextPage}
+                  onLoadMore={handleLoadMore}
                   onDocumentDelete={handleDocumentDelete}
                 />
               )}

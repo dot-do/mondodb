@@ -45,6 +45,8 @@ describe('ProtectedRoute', () => {
   it('redirects to / when user is not connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: false,
+      isHydrated: true,
+      isHydrated: true,
       connections: [],
       activeConnectionId: null,
       isConnecting: false,
@@ -93,6 +95,7 @@ describe('ProtectedRoute', () => {
   it('renders children when user is connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: true,
+      isHydrated: true,
       connections: [{ id: '1', name: 'Test', url: 'mongodo://localhost' }],
       activeConnectionId: '1',
       isConnecting: false,
@@ -129,6 +132,7 @@ describe('ProtectedRoute', () => {
   it('redirects from collection route when not connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: false,
+      isHydrated: true,
       connections: [],
       activeConnectionId: null,
       isConnecting: false,
@@ -165,6 +169,7 @@ describe('ProtectedRoute', () => {
   it('allows access to collection route when connected', () => {
     vi.mocked(useConnectionStore).mockReturnValue({
       isConnected: true,
+      isHydrated: true,
       connections: [{ id: '1', name: 'Test', url: 'mongodo://localhost' }],
       activeConnectionId: '1',
       isConnecting: false,

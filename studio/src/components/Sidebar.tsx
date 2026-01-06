@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
@@ -8,6 +9,7 @@ import { useConnectionStore } from '@stores/connection'
 import { useDatabasesQuery, useCollectionsQuery } from '@hooks/useQueries'
 import { SkeletonLoader } from './SkeletonLoader'
 import { getClickableProps } from '@/utils/keyboard'
+import { CreateDatabase, CreateDatabaseButton } from './database/CreateDatabase'
 
 const sidebarHeaderStyles = css`
   padding: 16px;
@@ -63,11 +65,28 @@ const emptyStateStyles = css`
   color: ${palette.gray.dark1};
 `
 
+const createButtonContainerStyles = css`
+  padding: 8px 16px;
+  border-top: 1px solid ${palette.gray.light2};
+`
+
+const emptyStateMessageStyles = css`
+  padding: 16px;
+  text-align: center;
+  color: ${palette.gray.dark1};
+`
+
 export function Sidebar() {
   const navigate = useNavigate()
   const { database, collection } = useParams()
   const { isConnected } = useConnectionStore()
-  const { data: databases, isLoading: isLoadingDbs } = useDatabasesQuery()
+  const { data: databases, isLoading: isLoadingDbs, refetch } = useDatabasesQuery()
+  const [isCreateDatabaseOpen, setIsCreateDatabaseOpen] = useState(false)
+
+  const handleCreateDatabaseSuccess = (databaseName: string) => {
+    refetch()
+    navigate(`/db/${databaseName}`)
+  }
 
   return (
     <div>
@@ -84,9 +103,11 @@ export function Sidebar() {
         ) : isLoadingDbs ? (
           <SkeletonLoader count={3} />
         ) : databases?.length === 0 ? (
-          <div className={emptyStateStyles}>
-            <Body>No databases found</Body>
-          </div>
+          <>
+            <div className={emptyStateMessageStyles}>
+              <Body>No databases</Body>
+            </div>
+          </>
         ) : (
           databases?.map((db) => (
             <DatabaseNavItem
@@ -99,6 +120,18 @@ export function Sidebar() {
           ))
         )}
       </nav>
+
+      {isConnected && (
+        <div className={createButtonContainerStyles}>
+          <CreateDatabaseButton onClick={() => setIsCreateDatabaseOpen(true)} />
+        </div>
+      )}
+
+      <CreateDatabase
+        open={isCreateDatabaseOpen}
+        onClose={() => setIsCreateDatabaseOpen(false)}
+        onSuccess={handleCreateDatabaseSuccess}
+      />
     </div>
   )
 }

@@ -1,4 +1,9 @@
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+
+// Memory cleanup: Clear all mocks before each test to prevent memory accumulation
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 // Mock LeafyGreen Modal to avoid focus-trap issues in jsdom
 vi.mock('@leafygreen-ui/modal', async () => {
@@ -15,6 +20,18 @@ vi.mock('@leafygreen-ui/modal', async () => {
       setOpen?: (open: boolean) => void
       className?: string
     }) {
+      // Handle Escape key to close modal
+      React.useEffect(() => {
+        if (!open) return
+        const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === 'Escape' && setOpen) {
+            setOpen(false)
+          }
+        }
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+      }, [open, setOpen])
+
       if (!open) return null
       return React.createElement('div', {
         'data-testid': 'lg-modal',
@@ -84,6 +101,19 @@ vi.mock('@leafygreen-ui/confirmation-modal', async () => {
 
 import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
+import { PointerEventsCheckLevel } from '@testing-library/user-event/dist/esm/options.js'
+import userEvent from '@testing-library/user-event'
+
+// Configure user-event to skip pointer-events checking for LeafyGreen components
+// LeafyGreen uses pointer-events: none on hidden inputs (checkboxes, etc.) which
+// causes issues with userEvent's default pointer-events checking
+const originalSetup = userEvent.setup.bind(userEvent)
+userEvent.setup = (options = {}) => {
+  return originalSetup({
+    pointerEventsCheck: PointerEventsCheckLevel.Never,
+    ...options,
+  })
+}
 
 // Mock clipboard API globally for all tests
 // We need to create a persistent mock that doesn't get cleared by vi.clearAllMocks()
@@ -100,27 +130,35 @@ Object.defineProperty(navigator, 'clipboard', {
 // Expose the clipboard mock for tests to verify
 ;(globalThis as Record<string, unknown>).__clipboardMock = clipboardMock
 
-// Cleanup after each test
+// Cleanup after each test - critical for preventing memory leaks
 afterEach(() => {
+  // Clean up React Testing Library DOM
   cleanup()
+  // Clear clipboard mock state
   clipboardMock.writeText.mockClear()
   clipboardMock.readText.mockClear()
+  // Clear all timers to prevent memory retention
+  vi.clearAllTimers()
+  // Reset all mocks to prevent state accumulation
+  vi.resetAllMocks()
 })
 
-// Mock matchMedia for LeafyGreen components
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
-})
+// Mock matchMedia for LeafyGreen components (only in browser environment)
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}
 
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {

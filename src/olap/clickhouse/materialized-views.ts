@@ -267,8 +267,6 @@ export function createTombstoneView(
   sourceTable: string = 'mondodb_cdc_queue',
   tombstoneTable: string = 'mondodb_tombstones'
 ): MaterializedViewConfig {
-  const generator = new MaterializedViewGenerator();
-
   return {
     name: 'mondodb_tombstone_mv',
     sourceTable,

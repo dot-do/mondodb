@@ -242,12 +242,16 @@ function convertToJSON(documents: Document[], fields: string[]): string {
         let current = result
         for (let i = 0; i < parts.length - 1; i++) {
           const part = parts[i]
+          if (part === undefined) continue
           if (!current[part]) {
             current[part] = {}
           }
           current = current[part] as Record<string, unknown>
         }
-        current[parts[parts.length - 1]] = value
+        const lastPart = parts[parts.length - 1]
+        if (lastPart !== undefined) {
+          current[lastPart] = value
+        }
       }
     }
     return result
@@ -389,7 +393,8 @@ export function ExportDialog({
             hasMore = false
           } else {
             allDocuments.push(...batch)
-            lastId = batch[batch.length - 1]._id
+            const lastDoc = batch[batch.length - 1]
+            lastId = lastDoc ? lastDoc._id : null
             hasMore = batch.length === batchSize
             setExportedCount(allDocuments.length)
             setProgress(Math.min(45, (allDocuments.length / total) * 45))

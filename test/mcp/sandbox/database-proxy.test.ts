@@ -270,7 +270,7 @@ describe('DatabaseProxy WorkerEntrypoint', () => {
 
     it('should validate collection name', async () => {
       // Empty collection name should throw an error
-      await expect(proxy.find('', {})).rejects.toThrow('Collection name is required')
+      await expect(proxy.find('', {})).rejects.toThrow('Collection name must be a non-empty string')
     })
 
     it('should validate document structure', async () => {

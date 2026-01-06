@@ -17,11 +17,13 @@ export class RpcAbortError extends Error {
 }
 
 /**
- * Options for RPC calls that support cancellation.
+ * Options for RPC calls that support cancellation and timeouts.
  */
 export interface RpcCallOptions {
   /** AbortSignal to cancel the request */
   signal?: AbortSignal
+  /** Timeout in milliseconds (overrides default timeout) */
+  timeout?: number
 }
 
 /**
@@ -110,12 +112,27 @@ export interface InsertManyResult {
   insertedIds: string[]
 }
 
+/**
+ * Configuration options for the RPC client.
+ */
+export interface RpcClientConfig {
+  /** Base URL for RPC calls */
+  baseUrl?: string
+  /** Default timeout in milliseconds (default: 30000 = 30 seconds) */
+  defaultTimeout?: number
+}
+
+/** Default timeout for RPC requests: 30 seconds */
+const DEFAULT_TIMEOUT = 30000
+
 class RpcClient {
   private baseUrl: string
   private requestId = 0
+  private defaultTimeout: number
 
-  constructor(baseUrl = '') {
-    this.baseUrl = baseUrl
+  constructor(config: RpcClientConfig = {}) {
+    this.baseUrl = config.baseUrl ?? ''
+    this.defaultTimeout = config.defaultTimeout ?? DEFAULT_TIMEOUT
   }
 
   /**
@@ -134,8 +151,61 @@ class RpcClient {
     return this.baseUrl
   }
 
+  /**
+   * Set the default timeout for RPC calls.
+   * @param timeout - Timeout in milliseconds
+   */
+  setDefaultTimeout(timeout: number): void {
+    this.defaultTimeout = timeout
+  }
+
+  /**
+   * Get the current default timeout.
+   */
+  getDefaultTimeout(): number {
+    return this.defaultTimeout
+  }
+
   private nextId(): string {
     return String(++this.requestId)
+  }
+
+  /**
+   * Create an AbortSignal that combines the provided signal with a timeout.
+   * Returns the combined signal and a cleanup function.
+   */
+  private createTimeoutSignal(
+    options?: RpcCallOptions
+  ): { signal: AbortSignal; cleanup: () => void } {
+    const timeout = options?.timeout ?? this.defaultTimeout
+    const controller = new AbortController()
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+    // Set up timeout
+    if (timeout > 0) {
+      timeoutId = setTimeout(() => {
+        controller.abort(new DOMException('Request timeout', 'TimeoutError'))
+      }, timeout)
+    }
+
+    // If an external signal is provided, listen for its abort
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason)
+      } else {
+        options.signal.addEventListener('abort', () => {
+          controller.abort(options.signal?.reason)
+        })
+      }
+    }
+
+    const cleanup = () => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId)
+      }
+    }
+
+    return { signal: controller.signal, cleanup }
   }
 
   /**
@@ -143,8 +213,8 @@ class RpcClient {
    *
    * @param method - The RPC method to call
    * @param params - Parameters to pass to the method
-   * @param options - Optional settings including AbortSignal for cancellation
-   * @throws RpcAbortError if the request is aborted
+   * @param options - Optional settings including AbortSignal for cancellation and timeout
+   * @throws RpcAbortError if the request is aborted or times out
    */
   async call<T>(
     method: string,
@@ -155,6 +225,8 @@ class RpcClient {
     if (options?.signal?.aborted) {
       throw new RpcAbortError()
     }
+
+    const { signal, cleanup } = this.createTimeoutSignal(options)
 
     try {
       const response = await fetch(`${this.baseUrl}/rpc`, {
@@ -167,7 +239,7 @@ class RpcClient {
           method,
           params,
         }),
-        signal: options?.signal,
+        signal,
       })
 
       if (!response.ok) {
@@ -182,11 +254,13 @@ class RpcClient {
 
       return data.result as T
     } catch (error) {
-      // Convert AbortError to RpcAbortError for consistent error handling
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new RpcAbortError()
+      // Convert AbortError/TimeoutError to RpcAbortError for consistent error handling
+      if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+        throw new RpcAbortError(error.name === 'TimeoutError' ? 'RPC request timed out' : 'RPC request was aborted')
       }
       throw error
+    } finally {
+      cleanup()
     }
   }
 
@@ -215,8 +289,8 @@ class RpcClient {
    * Make a batch RPC call with optional cancellation support.
    *
    * @param requests - Array of RPC requests to execute
-   * @param options - Optional settings including AbortSignal for cancellation
-   * @throws RpcAbortError if the request is aborted
+   * @param options - Optional settings including AbortSignal for cancellation and timeout
+   * @throws RpcAbortError if the request is aborted or times out
    */
   async batch<T>(
     requests: RpcRequest[],
@@ -226,6 +300,8 @@ class RpcClient {
     if (options?.signal?.aborted) {
       throw new RpcAbortError()
     }
+
+    const { signal, cleanup } = this.createTimeoutSignal(options)
 
     try {
       const response = await fetch(`${this.baseUrl}/rpc/batch`, {
@@ -239,7 +315,7 @@ class RpcClient {
             id: req.id ?? this.nextId(),
           }))
         ),
-        signal: options?.signal,
+        signal,
       })
 
       if (!response.ok) {
@@ -255,11 +331,13 @@ class RpcClient {
         return r.result as T
       })
     } catch (error) {
-      // Convert AbortError to RpcAbortError for consistent error handling
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new RpcAbortError()
+      // Convert AbortError/TimeoutError to RpcAbortError for consistent error handling
+      if (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+        throw new RpcAbortError(error.name === 'TimeoutError' ? 'RPC request timed out' : 'RPC request was aborted')
       }
       throw error
+    } finally {
+      cleanup()
     }
   }
 
@@ -285,24 +363,42 @@ class RpcClient {
   }
 
   // Database operations
-  async listDatabases(): Promise<DatabaseInfo[]> {
-    return this.call<DatabaseInfo[]>('listDatabases')
+  async listDatabases(callOptions?: RpcCallOptions): Promise<DatabaseInfo[]> {
+    return this.call<DatabaseInfo[]>('listDatabases', [], callOptions)
   }
 
-  async listCollections(database: string): Promise<CollectionInfo[]> {
-    return this.call<CollectionInfo[]>('listCollections', [database])
+  async listCollections(database: string, callOptions?: RpcCallOptions): Promise<CollectionInfo[]> {
+    return this.call<CollectionInfo[]>('listCollections', [database], callOptions)
   }
 
   async createCollection(
     database: string,
     name: string,
-    options?: Record<string, unknown>
+    options?: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<void> {
-    return this.call<void>('createCollection', [database, name, options])
+    return this.call<void>('createCollection', [database, name, options], callOptions)
   }
 
-  async dropCollection(database: string, name: string): Promise<void> {
-    return this.call<void>('dropCollection', [database, name])
+  async dropCollection(database: string, name: string, callOptions?: RpcCallOptions): Promise<void> {
+    return this.call<void>('dropCollection', [database, name], callOptions)
+  }
+
+  /**
+   * Create a new database.
+   * MongoDB creates databases lazily when the first collection is created.
+   *
+   * @param name - The name of the database to create
+   * @param initialCollection - Optional initial collection name (defaults to '_init')
+   */
+  async createDatabase(
+    name: string,
+    initialCollection?: string
+  ): Promise<{ ok: boolean }> {
+    // MongoDB creates databases lazily, so we create an initial collection
+    const collectionName = initialCollection || '_init'
+    await this.createCollection(name, collectionName)
+    return { ok: true }
   }
 
   // Document operations
@@ -486,31 +582,34 @@ class RpcClient {
   // Index operations
   async listIndexes(
     database: string,
-    collection: string
+    collection: string,
+    callOptions?: RpcCallOptions
   ): Promise<IndexInfo[]> {
-    return this.call<IndexInfo[]>('listIndexes', [database, collection])
+    return this.call<IndexInfo[]>('listIndexes', [database, collection], callOptions)
   }
 
   async createIndex(
     database: string,
     collection: string,
     keys: Record<string, 1 | -1 | 'text' | '2dsphere'>,
-    options?: Record<string, unknown>
+    options?: Record<string, unknown>,
+    callOptions?: RpcCallOptions
   ): Promise<string> {
     return this.call<string>('createIndex', [
       database,
       collection,
       keys,
       options,
-    ])
+    ], callOptions)
   }
 
   async dropIndex(
     database: string,
     collection: string,
-    indexName: string
+    indexName: string,
+    callOptions?: RpcCallOptions
   ): Promise<void> {
-    return this.call<void>('dropIndex', [database, collection, indexName])
+    return this.call<void>('dropIndex', [database, collection, indexName], callOptions)
   }
 
   // Health check
