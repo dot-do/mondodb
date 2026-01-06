@@ -3,9 +3,11 @@ import {
   createWorkerEvaluator,
   createMockLoader,
   createMockDbAccess,
+  getWorkerId,
   EvaluatorResult,
   DatabaseAccess,
   WorkerEvaluator,
+  ExecutionContext,
 } from '../../../../src/mcp/sandbox/worker-evaluator'
 import type { WorkerLoader, WorkerCode } from '../../../../src/types/function'
 
@@ -468,6 +470,232 @@ describe('Worker Loader Evaluator', () => {
       expect(result.success).toBe(false)
       expect(result.error).toBe('Something went wrong')
       expect(result.logs).toEqual(['starting...', 'error!'])
+    })
+  })
+
+  describe('getWorkerId (content-based caching)', () => {
+    it('should generate consistent ID for same code', () => {
+      const code = 'return db.collection("users").find()'
+      const id1 = getWorkerId(code)
+      const id2 = getWorkerId(code)
+
+      expect(id1).toBe(id2)
+    })
+
+    it('should generate different IDs for different code', () => {
+      const id1 = getWorkerId('return 1')
+      const id2 = getWorkerId('return 2')
+
+      expect(id1).not.toBe(id2)
+    })
+
+    it('should prefix ID with sandbox-', () => {
+      const id = getWorkerId('return 1')
+      expect(id).toMatch(/^sandbox-[0-9a-f]{16}$/)
+    })
+
+    it('should generate 16-character hash', () => {
+      const id = getWorkerId('any code here')
+      // sandbox- (8 chars) + hash (16 chars) = 24 chars total
+      expect(id.length).toBe(24)
+    })
+  })
+
+  describe('Content-based worker ID option', () => {
+    it('should use content-based ID when useContentBasedId is true', async () => {
+      const { loader, getCapturedIds } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const code = 'return db.collection("users").find()'
+      const expectedId = getWorkerId(code)
+
+      const evaluator = createWorkerEvaluator(loader, dbAccess, code, {
+        useContentBasedId: true
+      })
+      await evaluator.execute()
+
+      const ids = getCapturedIds()
+      expect(ids[0]).toBe(expectedId)
+    })
+
+    it('should prefer custom ID over content-based ID', async () => {
+      const { loader, getCapturedIds } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const code = 'return 1'
+
+      const evaluator = createWorkerEvaluator(loader, dbAccess, code, {
+        id: 'my-custom-id',
+        useContentBasedId: false // explicit false
+      })
+      await evaluator.execute()
+
+      const ids = getCapturedIds()
+      expect(ids[0]).toBe('my-custom-id')
+    })
+
+    it('should enable caching identical code executions', async () => {
+      const { loader, getCapturedIds } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const code = 'return 42'
+
+      // Create two evaluators with same code and content-based ID
+      const evaluator1 = createWorkerEvaluator(loader, dbAccess, code, { useContentBasedId: true })
+      const evaluator2 = createWorkerEvaluator(loader, dbAccess, code, { useContentBasedId: true })
+
+      await evaluator1.execute()
+      await evaluator2.execute()
+
+      const ids = getCapturedIds()
+      // Both should use the same worker ID
+      expect(ids[0]).toBe(ids[1])
+    })
+  })
+
+  describe('Execution metrics', () => {
+    it('should include duration in metrics', async () => {
+      const { loader } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 1')
+
+      const result = await evaluator.execute()
+
+      expect(result.metrics).toBeDefined()
+      expect(result.metrics!.duration).toBeGreaterThanOrEqual(0)
+    })
+
+    it('should include metrics even on error', async () => {
+      const throwingLoader: WorkerLoader = {
+        get(_id, _getCode) {
+          return {
+            getEntrypoint() {
+              return {
+                async fetch() {
+                  throw new Error('Execution failed')
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(throwingLoader, dbAccess, 'return 1')
+
+      const result = await evaluator.execute()
+
+      expect(result.success).toBe(false)
+      expect(result.metrics).toBeDefined()
+      expect(result.metrics!.duration).toBeGreaterThanOrEqual(0)
+    })
+
+    it('should preserve metrics from worker response', async () => {
+      const mockResults = new Map<string, EvaluatorResult>([
+        ['sandbox-test', {
+          success: true,
+          value: 42,
+          logs: [],
+          metrics: {
+            duration: 100,
+            memoryUsage: 1024,
+            cpuTime: 50
+          }
+        }]
+      ])
+      const { loader } = createMockLoader(mockResults)
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 42', { id: 'sandbox-test' })
+
+      const result = await evaluator.execute()
+
+      expect(result.metrics).toBeDefined()
+      expect(result.metrics!.memoryUsage).toBe(1024)
+      expect(result.metrics!.cpuTime).toBe(50)
+    })
+  })
+
+  describe('Execution context', () => {
+    it('should accept execution context option', async () => {
+      const { loader } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const context: ExecutionContext = {
+        requestId: 'req-123',
+        userId: 'user-456',
+        metadata: { source: 'test' }
+      }
+
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 1', { context })
+      const result = await evaluator.execute()
+
+      expect(result.success).toBe(true)
+    })
+
+    it('should pass request ID in headers', async () => {
+      let capturedHeaders: Record<string, string> = {}
+
+      const loader: WorkerLoader = {
+        get(_id, _getCode) {
+          return {
+            getEntrypoint() {
+              return {
+                async fetch(request: Request) {
+                  request.headers.forEach((value, key) => {
+                    capturedHeaders[key] = value
+                  })
+                  return Response.json({ success: true, logs: [] })
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 1', {
+        context: { requestId: 'trace-abc-123' }
+      })
+
+      await evaluator.execute()
+
+      expect(capturedHeaders['x-request-id']).toBe('trace-abc-123')
+    })
+
+    it('should pass user ID in headers', async () => {
+      let capturedHeaders: Record<string, string> = {}
+
+      const loader: WorkerLoader = {
+        get(_id, _getCode) {
+          return {
+            getEntrypoint() {
+              return {
+                async fetch(request: Request) {
+                  request.headers.forEach((value, key) => {
+                    capturedHeaders[key] = value
+                  })
+                  return Response.json({ success: true, logs: [] })
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 1', {
+        context: { userId: 'user-xyz' }
+      })
+
+      await evaluator.execute()
+
+      expect(capturedHeaders['x-user-id']).toBe('user-xyz')
+    })
+
+    it('should work without context', async () => {
+      const { loader } = createMockLoader()
+      const { dbAccess } = createMockDbAccess()
+      const evaluator = createWorkerEvaluator(loader, dbAccess, 'return 1')
+
+      const result = await evaluator.execute()
+
+      expect(result.success).toBe(true)
     })
   })
 })

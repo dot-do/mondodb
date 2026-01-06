@@ -93,6 +93,18 @@ export interface WorkerEvaluator {
 }
 
 /**
+ * Execution context for tracking and correlation
+ */
+export interface ExecutionContext {
+  /** Unique request ID for tracing */
+  requestId?: string
+  /** User ID for attribution */
+  userId?: string
+  /** Additional metadata */
+  metadata?: Record<string, unknown>
+}
+
+/**
  * Options for creating a worker evaluator
  */
 export interface EvaluatorOptions {
@@ -100,6 +112,10 @@ export interface EvaluatorOptions {
   timeout?: number
   /** Unique ID for the worker instance */
   id?: string
+  /** Use content-based worker ID for caching (default: false) */
+  useContentBasedId?: boolean
+  /** Execution context for tracking */
+  context?: ExecutionContext
 }
 
 /**
@@ -130,11 +146,17 @@ export function createWorkerEvaluator(
   code: string,
   options: EvaluatorOptions = {}
 ): WorkerEvaluator {
-  const workerId = options.id ?? `sandbox-${randomUUID()}`
+  // Use content-based ID for caching, or custom ID, or random UUID
+  const workerId = options.useContentBasedId
+    ? getWorkerId(code)
+    : options.id ?? `sandbox-${randomUUID()}`
   const timeout = options.timeout ?? 30000
+  const context = options.context
 
   return {
     async execute(): Promise<EvaluatorResult> {
+      const startTime = performance.now()
+
       try {
         // Generate sandbox code that wraps user code
         const sandboxCode = generateSandboxCode(code)
@@ -159,6 +181,9 @@ export function createWorkerEvaluator(
             success: false,
             error: 'Worker does not have getEntrypoint method',
             logs: [],
+            metrics: {
+              duration: performance.now() - startTime
+            }
           }
         }
         const entrypoint = worker.getEntrypoint()
@@ -170,22 +195,37 @@ export function createWorkerEvaluator(
           }, timeout)
         })
 
+        // Build request headers with context if provided
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (context?.requestId) {
+          headers['X-Request-Id'] = context.requestId
+        }
+        if (context?.userId) {
+          headers['X-User-Id'] = context.userId
+        }
+
         // Execute with timeout race
         const response = await Promise.race([
           entrypoint.fetch(
             new Request('http://internal/evaluate', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
+              headers
             })
           ),
           timeoutPromise
         ])
 
         const result = await response.json() as EvaluatorResult
+        const duration = performance.now() - startTime
 
         const evalResult: EvaluatorResult = {
           success: result.success,
           logs: result.logs ?? [],
+          metrics: {
+            duration,
+            // If the result already has metrics, preserve them
+            ...(result.metrics ?? {})
+          }
         }
         if (result.value !== undefined) {
           evalResult.value = result.value
@@ -195,10 +235,14 @@ export function createWorkerEvaluator(
         }
         return evalResult
       } catch (error) {
+        const duration = performance.now() - startTime
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Execution failed',
-          logs: []
+          logs: [],
+          metrics: {
+            duration
+          }
         }
       }
     }

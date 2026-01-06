@@ -6,6 +6,8 @@ import {
   escapeUserCode,
   generateSafeSandboxCode,
   SandboxResult,
+  ConsoleLogEntry,
+  SandboxOptions,
 } from '../../../../src/mcp/sandbox/template'
 
 describe('Sandbox Code Template', () => {
@@ -300,6 +302,187 @@ describe('Sandbox Code Template', () => {
       }
 
       expect(result.logs).toEqual([])
+    })
+  })
+
+  describe('Timeout handling', () => {
+    it('includes default timeout of 30000ms', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('const timeoutMs = 30000')
+    })
+
+    it('accepts custom timeout via options', () => {
+      const code = generateSandboxCode('return 1', { timeout: 5000 })
+      expect(code).toContain('const timeoutMs = 5000')
+    })
+
+    it('includes timeout promise race', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('Promise.race([executionPromise, timeoutPromise])')
+    })
+
+    it('creates timeout error message', () => {
+      const code = generateSandboxCode('return 1', { timeout: 10000 })
+      expect(code).toContain('Execution timeout after')
+    })
+  })
+
+  describe('Console method support', () => {
+    it('captures console.log', () => {
+      const code = generateSandboxCode('console.log("test")')
+      expect(code).toContain("console.log = createLogger('log')")
+    })
+
+    it('captures console.error', () => {
+      const code = generateSandboxCode('console.error("error")')
+      expect(code).toContain("console.error = createLogger('error')")
+    })
+
+    it('captures console.warn', () => {
+      const code = generateSandboxCode('console.warn("warning")')
+      expect(code).toContain("console.warn = createLogger('warn')")
+    })
+
+    it('captures console.info', () => {
+      const code = generateSandboxCode('console.info("info")')
+      expect(code).toContain("console.info = createLogger('info')")
+    })
+
+    it('includes formatArgs helper for object serialization', () => {
+      const code = generateSandboxCode('console.log({ key: "value" })')
+      expect(code).toContain('function formatArgs(args)')
+      expect(code).toContain('JSON.stringify(a, null, 2)')
+    })
+
+    it('restores all console methods after execution', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('console.log = originalConsole.log')
+      expect(code).toContain('console.error = originalConsole.error')
+      expect(code).toContain('console.warn = originalConsole.warn')
+      expect(code).toContain('console.info = originalConsole.info')
+    })
+  })
+
+  describe('Utility functions', () => {
+    it('exposes sleep utility', () => {
+      const code = generateSandboxCode('await utils.sleep(100)')
+      expect(code).toContain('sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms))')
+    })
+
+    it('exposes ObjectId utility', () => {
+      const code = generateSandboxCode('utils.ObjectId("123")')
+      expect(code).toContain("ObjectId: (id) => ({ $oid: id || generateObjectId() })")
+    })
+
+    it('exposes ISODate utility', () => {
+      const code = generateSandboxCode('utils.ISODate()')
+      expect(code).toContain('ISODate: (date) => ({ $date:')
+    })
+
+    it('exposes UUID utility', () => {
+      const code = generateSandboxCode('utils.UUID()')
+      expect(code).toContain('UUID: () => crypto.randomUUID()')
+    })
+
+    it('includes ObjectId generator helper', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('function generateObjectId()')
+      expect(code).toContain('const timestamp = Math.floor(Date.now() / 1000)')
+    })
+  })
+
+  describe('Source map support', () => {
+    it('includes SOURCE_LINE_OFFSET constant', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('const SOURCE_LINE_OFFSET =')
+    })
+
+    it('accepts custom source line offset', () => {
+      const code = generateSandboxCode('return 1', { sourceLineOffset: 100 })
+      expect(code).toContain('const SOURCE_LINE_OFFSET = 100')
+    })
+
+    it('includes formatError function', () => {
+      const code = generateSandboxCode('throw new Error("test")')
+      expect(code).toContain('function formatError(error)')
+    })
+
+    it('adjusts line numbers in stack traces', () => {
+      const code = generateSandboxCode('return 1')
+      expect(code).toContain('sandbox\\.js:(\\d+):(\\d+)')
+      expect(code).toContain('user-code:')
+    })
+  })
+
+  describe('SandboxOptions', () => {
+    it('supports timeout option', () => {
+      const options: SandboxOptions = { timeout: 5000 }
+      const code = generateSandboxCode('return 1', options)
+      expect(code).toContain('5000')
+    })
+
+    it('supports includeTimestamps option', () => {
+      const code = generateSandboxCode('return 1', { includeTimestamps: true })
+      expect(code).toContain('timestamp: Date.now()')
+    })
+
+    it('excludes timestamps by default', () => {
+      const code = generateSandboxCode('return 1', { includeTimestamps: false })
+      // Check that the timestamp line doesn't appear in the log entry creation
+      const logEntryMatch = code.match(/const entry = \{[^}]+\}/s)
+      expect(logEntryMatch?.[0]).not.toContain('timestamp')
+    })
+
+    it('supports sourceLineOffset option', () => {
+      const options: SandboxOptions = { sourceLineOffset: 50 }
+      const code = generateSandboxCode('return 1', options)
+      expect(code).toContain('const SOURCE_LINE_OFFSET = 50')
+    })
+  })
+
+  describe('ConsoleLogEntry interface', () => {
+    it('supports log level', () => {
+      const entry: ConsoleLogEntry = {
+        level: 'log',
+        message: 'test message',
+      }
+      expect(entry.level).toBe('log')
+    })
+
+    it('supports all log levels', () => {
+      const levels: ConsoleLogEntry['level'][] = ['log', 'error', 'warn', 'info']
+      for (const level of levels) {
+        const entry: ConsoleLogEntry = { level, message: 'test' }
+        expect(entry.level).toBe(level)
+      }
+    })
+
+    it('supports optional timestamp', () => {
+      const entry: ConsoleLogEntry = {
+        level: 'log',
+        message: 'test',
+        timestamp: Date.now(),
+      }
+      expect(entry.timestamp).toBeDefined()
+      expect(typeof entry.timestamp).toBe('number')
+    })
+  })
+
+  describe('Type definitions', () => {
+    it('includes utils type definitions', () => {
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('declare const utils')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('sleep(ms: number): Promise<void>')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('ObjectId(id?: string): { $oid: string }')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('ISODate(date?: string | Date): { $date: string }')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('UUID(): string')
+    })
+
+    it('includes console type definitions', () => {
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('declare const console')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('log(...args: unknown[]): void')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('error(...args: unknown[]): void')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('warn(...args: unknown[]): void')
+      expect(SANDBOX_TYPE_DEFINITIONS).toContain('info(...args: unknown[]): void')
     })
   })
 })

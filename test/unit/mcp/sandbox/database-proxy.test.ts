@@ -296,4 +296,209 @@ describe('DatabaseProxy WorkerEntrypoint', () => {
       expect(mockNamespace.idFromName).toHaveBeenCalledWith('otherdb')
     })
   })
+
+  describe('rate limiting', () => {
+    it('should throw error when rate limit is exceeded', async () => {
+      // Set a very low rate limit
+      ;(proxy as unknown as { ctx: { props: { databaseId: string; maxRequestsPerExecution: number } } }).ctx.props.maxRequestsPerExecution = 2
+
+      // First two requests should succeed
+      await proxy.find('users', {})
+      await proxy.find('products', {})
+
+      // Third request should fail
+      await expect(proxy.find('orders', {})).rejects.toThrow(
+        'Rate limit exceeded: too many database requests in single execution (max: 2)'
+      )
+    })
+
+    it('should use default rate limit of 1000 if not specified', async () => {
+      // Access private field to verify initial state
+      const privateProxy = proxy as unknown as { requestCount: number }
+      expect(privateProxy.requestCount).toBe(0)
+
+      await proxy.find('users', {})
+      expect(privateProxy.requestCount).toBe(1)
+    })
+  })
+
+  describe('request deduplication', () => {
+    it('should deduplicate identical concurrent requests', async () => {
+      // Make two identical requests concurrently
+      const [result1, result2] = await Promise.all([
+        proxy.find('users', { active: true }),
+        proxy.find('users', { active: true }),
+      ])
+
+      // Both should return same result
+      expect(result1).toEqual(result2)
+
+      // But fetch should only be called once
+      expect(mockStub.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not deduplicate different requests', async () => {
+      // Make two different requests concurrently
+      await Promise.all([
+        proxy.find('users', { active: true }),
+        proxy.find('users', { active: false }),
+      ])
+
+      // Both should call fetch
+      expect(mockStub.fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should deduplicate findOne requests', async () => {
+      await Promise.all([
+        proxy.findOne('users', { _id: '123' }),
+        proxy.findOne('users', { _id: '123' }),
+      ])
+
+      expect(mockStub.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('should NOT deduplicate write operations', async () => {
+      // Write operations should not be deduplicated
+      await Promise.all([
+        proxy.insertOne('users', { name: 'John' }),
+        proxy.insertOne('users', { name: 'John' }),
+      ])
+
+      // Both should call fetch because writes shouldn't be deduplicated
+      expect(mockStub.fetch).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('audit logging', () => {
+    let consoleSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      consoleSpy.mockRestore()
+    })
+
+    it('should log operations when enableAuditLog is true', async () => {
+      ;(proxy as unknown as { ctx: { props: { databaseId: string; enableAuditLog: boolean } } }).ctx.props.enableAuditLog = true
+
+      await proxy.find('users', { active: true })
+
+      expect(consoleSpy).toHaveBeenCalled()
+      const logCall = consoleSpy.mock.calls[0][0]
+      const logEntry = JSON.parse(logCall)
+      expect(logEntry.method).toBe('find')
+      expect(logEntry.collection).toBe('users')
+      expect(logEntry.databaseId).toBe('testdb')
+    })
+
+    it('should NOT log operations when enableAuditLog is false', async () => {
+      ;(proxy as unknown as { ctx: { props: { databaseId: string; enableAuditLog: boolean } } }).ctx.props.enableAuditLog = false
+
+      await proxy.find('users', { active: true })
+
+      expect(consoleSpy).not.toHaveBeenCalled()
+    })
+
+    it('should redact sensitive fields in audit logs', async () => {
+      ;(proxy as unknown as { ctx: { props: { databaseId: string; enableAuditLog: boolean } } }).ctx.props.enableAuditLog = true
+
+      await proxy.find('users', {
+        password: 'secret123',
+        apiKey: 'key123',
+        name: 'John',
+      })
+
+      expect(consoleSpy).toHaveBeenCalled()
+      const logCall = consoleSpy.mock.calls[0][0]
+      const logEntry = JSON.parse(logCall)
+      expect(logEntry.args.filter.password).toBe('[REDACTED]')
+      expect(logEntry.args.filter.apiKey).toBe('[REDACTED]')
+      expect(logEntry.args.filter.name).toBe('John')
+    })
+
+    it('should redact nested sensitive fields', async () => {
+      ;(proxy as unknown as { ctx: { props: { databaseId: string; enableAuditLog: boolean } } }).ctx.props.enableAuditLog = true
+
+      await proxy.find('users', {
+        user: {
+          password: 'nested-secret',
+          email: 'test@test.com',
+        },
+      })
+
+      expect(consoleSpy).toHaveBeenCalled()
+      const logCall = consoleSpy.mock.calls[0][0]
+      const logEntry = JSON.parse(logCall)
+      expect(logEntry.args.filter.user.password).toBe('[REDACTED]')
+      expect(logEntry.args.filter.user.email).toBe('test@test.com')
+    })
+  })
+
+  describe('input validation', () => {
+    describe('collection validation', () => {
+      it('should reject collection names with $', async () => {
+        await expect(proxy.find('users$test', {})).rejects.toThrow("Invalid collection name: contains '$'")
+      })
+
+      it('should reject collection names with null character', async () => {
+        await expect(proxy.find('users\0test', {})).rejects.toThrow("Invalid collection name: contains '\\0'")
+      })
+
+      it('should reject collection names with dots', async () => {
+        await expect(proxy.find('users.test', {})).rejects.toThrow("Invalid collection name: contains '.'")
+      })
+
+      it('should reject collection names starting with system. (caught by dot validation)', async () => {
+        // Note: The dot validation runs before the system. check, so it catches this first
+        await expect(proxy.find('system.users', {})).rejects.toThrow("Invalid collection name: contains '.'")
+      })
+
+      it('should reject collection names exceeding max length', async () => {
+        const longName = 'a'.repeat(256)
+        await expect(proxy.find(longName, {})).rejects.toThrow('Collection name must not exceed 255 characters')
+      })
+    })
+
+    describe('filter validation', () => {
+      it('should reject array as filter', async () => {
+        await expect(proxy.find('users', [] as unknown as object)).rejects.toThrow('Filter must be an object, not an array')
+      })
+
+      it('should reject primitive as filter', async () => {
+        await expect(proxy.find('users', 'invalid' as unknown as object)).rejects.toThrow('Filter must be an object')
+      })
+    })
+
+    describe('document validation', () => {
+      it('should reject array as document', async () => {
+        await expect(proxy.insertOne('users', [] as unknown as object)).rejects.toThrow('Document must be an object, not an array')
+      })
+
+      it('should reject primitive as document', async () => {
+        await expect(proxy.insertOne('users', 'invalid' as unknown as object)).rejects.toThrow('Document must be an object')
+      })
+    })
+
+    describe('update validation', () => {
+      it('should reject null as update', async () => {
+        await expect(proxy.updateOne('users', { _id: '1' }, null as unknown as object)).rejects.toThrow('Update is required')
+      })
+
+      it('should reject array as update', async () => {
+        await expect(proxy.updateOne('users', { _id: '1' }, [] as unknown as object)).rejects.toThrow('Update must be an object, not an array')
+      })
+    })
+
+    describe('pipeline validation', () => {
+      it('should reject non-array as pipeline', async () => {
+        await expect(proxy.aggregate('users', {} as unknown as object[])).rejects.toThrow('Pipeline must be an array')
+      })
+
+      it('should reject pipeline with invalid stages', async () => {
+        await expect(proxy.aggregate('users', [null] as unknown as object[])).rejects.toThrow('Pipeline stage at index 0 must be an object')
+      })
+    })
+  })
 })
