@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -25,7 +25,15 @@ import Button from '@leafygreen-ui/button'
 import Icon from '@leafygreen-ui/icon'
 import IconButton from '@leafygreen-ui/icon-button'
 import { Menu, MenuItem } from '@leafygreen-ui/menu'
+import Tooltip from '@leafygreen-ui/tooltip'
 import type { AggregationStage, StageType } from '../olap/QueryBuilder'
+
+// Extended AggregationStage type to include error and enabled properties
+type ExtendedAggregationStage = AggregationStage & {
+  enabled?: boolean
+  _hasError?: boolean
+  _errorMessage?: string
+}
 
 // Styles
 const canvasStyles = css`
@@ -85,6 +93,15 @@ const stageCardOverlayStyles = css`
   ${stageCardStyles}
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   cursor: grabbing;
+`
+
+const stageCardDisabledStyles = css`
+  opacity: 0.5;
+  background: ${palette.gray.light3};
+`
+
+const stageCardErrorStyles = css`
+  border-color: ${palette.red.base};
 `
 
 const stageHeaderStyles = css`
@@ -184,6 +201,94 @@ const stageIndexStyles = css`
   font-weight: 600;
 `
 
+const contextMenuStyles = css`
+  position: fixed;
+  background: ${palette.white};
+  border: 1px solid ${palette.gray.light2};
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  z-index: 1000;
+  padding: 4px 0;
+`
+
+const contextMenuItemStyles = css`
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &:hover {
+    background: ${palette.gray.light3};
+  }
+`
+
+const contextMenuItemDisabledStyles = css`
+  opacity: 0.5;
+  cursor: not-allowed;
+
+  &:hover {
+    background: transparent;
+  }
+`
+
+const dropZoneStyles = css`
+  height: 8px;
+  margin: 4px 0;
+  border-radius: 4px;
+  transition: background 0.2s ease, height 0.2s ease;
+
+  &[data-drag-over='true'] {
+    height: 24px;
+    background: ${palette.green.light2};
+    border: 2px dashed ${palette.green.base};
+  }
+`
+
+const expandedDetailsStyles = css`
+  padding: 16px;
+  background: ${palette.gray.light3};
+  border-top: 1px solid ${palette.gray.light2};
+  font-family: 'Source Code Pro', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+`
+
+const errorIndicatorStyles = css`
+  display: flex;
+  align-items: center;
+  color: ${palette.red.base};
+  cursor: help;
+`
+
+const toggleButtonStyles = css`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &[aria-pressed='true'] {
+    background: ${palette.green.light2};
+    color: ${palette.green.dark1};
+  }
+
+  &[aria-pressed='false'] {
+    background: ${palette.gray.light2};
+    color: ${palette.gray.dark1};
+  }
+
+  &:hover {
+    opacity: 0.8;
+  }
+`
+
 // Stage type configurations
 const STAGE_TYPES: { value: StageType; label: string; description: string }[] = [
   { value: '$match', label: 'Match', description: 'Filter documents' },
@@ -196,10 +301,12 @@ const STAGE_TYPES: { value: StageType; label: string; description: string }[] = 
 ]
 
 export interface PipelineCanvasProps {
-  stages: AggregationStage[]
-  onChange: (stages: AggregationStage[]) => void
+  stages: ExtendedAggregationStage[]
+  onChange: (stages: ExtendedAggregationStage[]) => void
   onStageSelect?: (stageId: string | null) => void
   selectedStageId?: string | null
+  confirmDelete?: boolean
+  readOnly?: boolean
 }
 
 export function PipelineCanvas({
@@ -207,8 +314,15 @@ export function PipelineCanvas({
   onChange,
   onStageSelect,
   selectedStageId,
+  confirmDelete = false,
+  readOnly = false,
 }: PipelineCanvasProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stageIndex: number } | null>(null)
+  const [deleteConfirmIndex, setDeleteConfirmIndex] = useState<number | null>(null)
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set())
+  const [dragOverZone, setDragOverZone] = useState<string | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -220,6 +334,15 @@ export function PipelineCanvas({
       coordinateGetter: sortableKeyboardCoordinates,
     })
   )
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null)
+    if (contextMenu) {
+      document.addEventListener('click', handleClick)
+      return () => document.removeEventListener('click', handleClick)
+    }
+  }, [contextMenu])
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string)
@@ -245,9 +368,10 @@ export function PipelineCanvas({
 
   const addStage = useCallback(
     (type: StageType) => {
-      const newStage: AggregationStage = {
+      const newStage: ExtendedAggregationStage = {
         id: `stage-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         type,
+        enabled: true,
         ...(type === '$match' && { match: [{ field: '', operator: '$eq' as const, value: '' }] }),
         ...(type === '$group' && { groupBy: '', accumulators: [] }),
         ...(type === '$project' && { project: {} }),
@@ -263,37 +387,229 @@ export function PipelineCanvas({
   )
 
   const removeStage = useCallback(
-    (id: string) => {
-      onChange(stages.filter((s) => s.id !== id))
-      if (selectedStageId === id) {
+    (index: number) => {
+      const stageId = stages[index]?.id
+      if (!stageId) return
+
+      if (confirmDelete && deleteConfirmIndex === null) {
+        setDeleteConfirmIndex(index)
+        return
+      }
+
+      onChange(stages.filter((_, i) => i !== index))
+      if (selectedStageId === stageId) {
         onStageSelect?.(null)
       }
+      setDeleteConfirmIndex(null)
     },
-    [stages, onChange, selectedStageId, onStageSelect]
+    [stages, onChange, selectedStageId, onStageSelect, confirmDelete, deleteConfirmIndex]
   )
 
-  const duplicateStage = useCallback(
-    (id: string) => {
-      const stageIndex = stages.findIndex((s) => s.id === id)
-      if (stageIndex === -1) return
+  const handleConfirmDelete = useCallback(() => {
+    if (deleteConfirmIndex !== null) {
+      const stageId = stages[deleteConfirmIndex]?.id
+      onChange(stages.filter((_, i) => i !== deleteConfirmIndex))
+      if (selectedStageId === stageId) {
+        onStageSelect?.(null)
+      }
+      setDeleteConfirmIndex(null)
+    }
+  }, [deleteConfirmIndex, stages, onChange, selectedStageId, onStageSelect])
 
-      const originalStage = stages[stageIndex]
-      const newStage: AggregationStage = {
+  const handleCancelDelete = useCallback(() => {
+    setDeleteConfirmIndex(null)
+  }, [])
+
+  const duplicateStage = useCallback(
+    (index: number) => {
+      const originalStage = stages[index]
+      if (!originalStage) return
+
+      const newStage: ExtendedAggregationStage = {
         ...JSON.parse(JSON.stringify(originalStage)),
         id: `stage-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       }
 
       const newStages = [...stages]
-      newStages.splice(stageIndex + 1, 0, newStage)
+      newStages.splice(index + 1, 0, newStage)
       onChange(newStages)
+    },
+    [stages, onChange]
+  )
+
+  const toggleStage = useCallback(
+    (index: number) => {
+      const newStages = stages.map((stage, i) => {
+        if (i === index) {
+          return { ...stage, enabled: !(stage.enabled ?? true) }
+        }
+        return stage
+      })
+      onChange(newStages)
+    },
+    [stages, onChange]
+  )
+
+  const moveStageUp = useCallback(
+    (index: number) => {
+      if (index <= 0) return
+      onChange(arrayMove(stages, index, index - 1))
+      setContextMenu(null)
+    },
+    [stages, onChange]
+  )
+
+  const moveStageDown = useCallback(
+    (index: number) => {
+      if (index >= stages.length - 1) return
+      onChange(arrayMove(stages, index, index + 1))
+      setContextMenu(null)
+    },
+    [stages, onChange]
+  )
+
+  const toggleExpand = useCallback((index: number) => {
+    setExpandedStages((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }, [])
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent, index: number) => {
+      event.preventDefault()
+      setContextMenu({ x: event.clientX, y: event.clientY, stageIndex: index })
+    },
+    []
+  )
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!selectedStageId) return
+
+      const selectedIndex = stages.findIndex((s) => s.id === selectedStageId)
+      if (selectedIndex === -1) return
+
+      // Handle Delete key
+      if (event.key === 'Delete') {
+        event.preventDefault()
+        removeStage(selectedIndex)
+        return
+      }
+
+      // Handle Ctrl+D for duplicate
+      if (event.ctrlKey && event.key === 'd') {
+        event.preventDefault()
+        duplicateStage(selectedIndex)
+        return
+      }
+
+      // Handle Ctrl+ArrowUp for move up
+      if (event.ctrlKey && event.key === 'ArrowUp') {
+        event.preventDefault()
+        moveStageUp(selectedIndex)
+        return
+      }
+
+      // Handle Ctrl+ArrowDown for move down
+      if (event.ctrlKey && event.key === 'ArrowDown') {
+        event.preventDefault()
+        moveStageDown(selectedIndex)
+        return
+      }
+
+      // Handle ArrowUp/ArrowDown for navigation
+      if (event.key === 'ArrowDown' && !event.ctrlKey) {
+        event.preventDefault()
+        if (selectedIndex < stages.length - 1) {
+          onStageSelect?.(stages[selectedIndex + 1]!.id)
+        }
+        return
+      }
+
+      if (event.key === 'ArrowUp' && !event.ctrlKey) {
+        event.preventDefault()
+        if (selectedIndex > 0) {
+          onStageSelect?.(stages[selectedIndex - 1]!.id)
+        }
+        return
+      }
+    },
+    [selectedStageId, stages, removeStage, duplicateStage, moveStageUp, moveStageDown, onStageSelect]
+  )
+
+  const handleDropZoneDragEnter = useCallback((zoneId: string) => {
+    setDragOverZone(zoneId)
+  }, [])
+
+  const handleDropZoneDragLeave = useCallback(() => {
+    setDragOverZone(null)
+  }, [])
+
+  const handleDropZoneDrop = useCallback(
+    (event: React.DragEvent, insertIndex: number) => {
+      event.preventDefault()
+      setDragOverZone(null)
+
+      try {
+        const data = event.dataTransfer.getData('text/plain')
+        if (!data) return
+
+        const stageData = JSON.parse(data)
+        if (!stageData.type) return
+
+        const newStage: ExtendedAggregationStage = {
+          id: `stage-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          type: stageData.type,
+          enabled: true,
+          ...(stageData.type === '$match' && { match: [{ field: '', operator: '$eq' as const, value: '' }] }),
+          ...(stageData.type === '$group' && { groupBy: '', accumulators: [] }),
+          ...(stageData.type === '$project' && { project: {} }),
+          ...(stageData.type === '$sort' && { sort: {} }),
+          ...(stageData.type === '$limit' && { limit: 10 }),
+          ...(stageData.type === '$skip' && { skip: 0 }),
+          ...(stageData.type === '$unwind' && { unwindPath: '' }),
+        }
+
+        const newStages = [...stages]
+        newStages.splice(insertIndex, 0, newStage)
+        onChange(newStages)
+      } catch {
+        // Invalid JSON, ignore
+      }
     },
     [stages, onChange]
   )
 
   const activeStage = activeId ? stages.find((s) => s.id === activeId) : null
 
+  // Render drop zone
+  const renderDropZone = (id: string, insertIndex: number) => (
+    <div
+      key={id}
+      data-testid={id}
+      className={dropZoneStyles}
+      data-drag-over={dragOverZone === id ? 'true' : undefined}
+      onDragEnter={() => handleDropZoneDragEnter(id)}
+      onDragLeave={handleDropZoneDragLeave}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => handleDropZoneDrop(e, insertIndex)}
+    />
+  )
+
   return (
-    <div className={canvasStyles} data-testid="pipeline-canvas">
+    <div
+      ref={canvasRef}
+      className={canvasStyles}
+      data-testid="pipeline-canvas"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       <Subtitle>Pipeline Stages</Subtitle>
 
       <div className={pipelineContainerStyles}>
@@ -311,16 +627,24 @@ export function PipelineCanvas({
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={stages.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              {renderDropZone('drop-zone-start', 0)}
               {stages.map((stage, index) => (
                 <div key={stage.id}>
                   <SortableStageCard
                     stage={stage}
                     index={index}
                     isSelected={selectedStageId === stage.id}
+                    isExpanded={expandedStages.has(index)}
                     onSelect={() => onStageSelect?.(stage.id)}
-                    onRemove={() => removeStage(stage.id)}
-                    onDuplicate={() => duplicateStage(stage.id)}
+                    onRemove={() => removeStage(index)}
+                    onDuplicate={() => duplicateStage(index)}
+                    onToggle={() => toggleStage(index)}
+                    onExpand={() => toggleExpand(index)}
+                    onCollapse={() => toggleExpand(index)}
+                    onContextMenu={(e) => handleContextMenu(e, index)}
+                    readOnly={readOnly}
                   />
+                  {renderDropZone(`drop-zone-after-${index}`, index + 1)}
                   {index < stages.length - 1 && (
                     <div className={connectorStyles}>
                       <div className={connectorLineStyles} />
@@ -343,57 +667,155 @@ export function PipelineCanvas({
         )}
       </div>
 
-      <div className={toolbarStyles}>
-        <Menu
-          trigger={
-            <Button
-              variant="primary"
-              leftGlyph={<Icon glyph="Plus" />}
-              data-testid="add-stage-button"
-            >
-              Add Stage
-            </Button>
-          }
-        >
-          {STAGE_TYPES.map(({ value, label, description }) => (
-            <MenuItem
-              key={value}
-              onClick={() => addStage(value)}
-              description={description}
-              data-testid={`add-stage-${value.slice(1)}`}
-            >
-              {label} ({value})
-            </MenuItem>
-          ))}
-        </Menu>
+      {!readOnly && (
+        <div className={toolbarStyles}>
+          <Menu
+            trigger={
+              <Button
+                variant="primary"
+                leftGlyph={<Icon glyph="Plus" />}
+                data-testid="add-stage-button"
+              >
+                Add Stage
+              </Button>
+            }
+          >
+            {STAGE_TYPES.map(({ value, label, description }) => (
+              <MenuItem
+                key={value}
+                onClick={() => addStage(value)}
+                description={description}
+                data-testid={`add-stage-${value.slice(1)}`}
+              >
+                {label} ({value})
+              </MenuItem>
+            ))}
+          </Menu>
 
-        {stages.length > 0 && (
+          {stages.length > 0 && (
+            <Body style={{ color: palette.gray.dark1 }}>
+              {stages.length} stage{stages.length === 1 ? '' : 's'}
+            </Body>
+          )}
+        </div>
+      )}
+
+      {readOnly && stages.length > 0 && (
+        <div className={toolbarStyles}>
           <Body style={{ color: palette.gray.dark1 }}>
             {stages.length} stage{stages.length === 1 ? '' : 's'}
           </Body>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className={contextMenuStyles}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          data-testid="stage-context-menu"
+        >
+          <div
+            className={`${contextMenuItemStyles} ${contextMenu.stageIndex === 0 ? contextMenuItemDisabledStyles : ''}`}
+            onClick={() => contextMenu.stageIndex > 0 && moveStageUp(contextMenu.stageIndex)}
+            data-testid="context-menu-move-up"
+            aria-disabled={contextMenu.stageIndex === 0 ? 'true' : 'false'}
+          >
+            <Icon glyph="ChevronUp" size="small" />
+            Move Up
+          </div>
+          <div
+            className={`${contextMenuItemStyles} ${contextMenu.stageIndex === stages.length - 1 ? contextMenuItemDisabledStyles : ''}`}
+            onClick={() => contextMenu.stageIndex < stages.length - 1 && moveStageDown(contextMenu.stageIndex)}
+            data-testid="context-menu-move-down"
+            aria-disabled={contextMenu.stageIndex === stages.length - 1 ? 'true' : 'false'}
+          >
+            <Icon glyph="ChevronDown" size="small" />
+            Move Down
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteConfirmIndex !== null && (
+        <div
+          data-testid="delete-confirmation-dialog"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={handleCancelDelete}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              padding: 24,
+              borderRadius: 8,
+              maxWidth: 400,
+              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.2)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Body>Are you sure you want to delete this stage?</Body>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+              <Button
+                onClick={handleCancelDelete}
+                data-testid="cancel-delete-button"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmDelete}
+                data-testid="confirm-delete-button"
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // Sortable stage card wrapper
 interface SortableStageCardProps {
-  stage: AggregationStage
+  stage: ExtendedAggregationStage
   index: number
   isSelected: boolean
+  isExpanded: boolean
   onSelect: () => void
   onRemove: () => void
   onDuplicate: () => void
+  onToggle: () => void
+  onExpand: () => void
+  onCollapse: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+  readOnly: boolean
 }
 
 function SortableStageCard({
   stage,
   index,
   isSelected,
+  isExpanded,
   onSelect,
   onRemove,
   onDuplicate,
+  onToggle,
+  onExpand,
+  onCollapse,
+  onContextMenu,
+  readOnly,
 }: SortableStageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stage.id,
@@ -412,10 +834,15 @@ function SortableStageCard({
         index={index}
         isSelected={isSelected}
         isDragging={isDragging}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        isExpanded={isExpanded}
+        dragHandleProps={readOnly ? undefined : { ...attributes, ...listeners }}
         onSelect={onSelect}
-        onRemove={onRemove}
-        onDuplicate={onDuplicate}
+        onRemove={readOnly ? undefined : onRemove}
+        onDuplicate={readOnly ? undefined : onDuplicate}
+        onToggle={readOnly ? undefined : onToggle}
+        onExpand={onExpand}
+        onCollapse={onCollapse}
+        onContextMenu={onContextMenu}
       />
     </div>
   )
@@ -423,15 +850,20 @@ function SortableStageCard({
 
 // Stage card component
 interface StageCardProps {
-  stage: AggregationStage
+  stage: ExtendedAggregationStage
   index: number
   isSelected?: boolean
   isDragging?: boolean
   isOverlay?: boolean
+  isExpanded?: boolean
   dragHandleProps?: Record<string, unknown>
   onSelect?: () => void
   onRemove?: () => void
   onDuplicate?: () => void
+  onToggle?: () => void
+  onExpand?: () => void
+  onCollapse?: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
 }
 
 function StageCard({
@@ -440,14 +872,24 @@ function StageCard({
   isSelected,
   isDragging,
   isOverlay,
+  isExpanded,
   dragHandleProps,
   onSelect,
   onRemove,
   onDuplicate,
+  onToggle,
+  onExpand,
+  onCollapse,
+  onContextMenu,
 }: StageCardProps) {
+  const isEnabled = stage.enabled ?? true
+  const hasError = stage._hasError ?? false
+
   const cardClassName = [
     isOverlay ? stageCardOverlayStyles : stageCardStyles,
     isDragging && !isOverlay ? stageCardDraggingStyles : '',
+    !isEnabled ? stageCardDisabledStyles : '',
+    hasError ? stageCardErrorStyles : '',
     isSelected
       ? css`
           border-color: ${palette.green.base};
@@ -464,7 +906,10 @@ function StageCard({
     <div
       className={cardClassName}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       data-testid={`stage-card-${index}`}
+      data-disabled={!isEnabled ? 'true' : undefined}
+      data-has-error={hasError ? 'true' : undefined}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -487,9 +932,58 @@ function StageCard({
           )}
           <div className={stageIndexStyles}>{index + 1}</div>
           <InlineCode>{stage.type}</InlineCode>
+          {hasError && (
+            <Tooltip
+              trigger={
+                <div className={errorIndicatorStyles} data-testid={`stage-error-indicator-${index}`}>
+                  <Icon glyph="Warning" />
+                </div>
+              }
+            >
+              {stage._errorMessage || 'Stage has errors'}
+            </Tooltip>
+          )}
         </div>
 
         <div className={stageActionsStyles}>
+          {onToggle && (
+            <button
+              className={toggleButtonStyles}
+              aria-label="Toggle stage"
+              aria-pressed={isEnabled ? 'true' : 'false'}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggle()
+              }}
+              data-testid={`stage-toggle-${index}`}
+            >
+              <Icon glyph={isEnabled ? 'Visibility' : 'VisibilityOff'} size="small" />
+            </button>
+          )}
+          {onExpand && !isExpanded && (
+            <IconButton
+              aria-label="Expand stage"
+              onClick={(e) => {
+                e.stopPropagation()
+                onExpand()
+              }}
+              data-testid={`stage-expand-${index}`}
+            >
+              <Icon glyph="ChevronDown" />
+            </IconButton>
+          )}
+          {onCollapse && isExpanded && (
+            <IconButton
+              aria-label="Collapse stage"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCollapse()
+              }}
+              data-testid={`stage-collapse-${index}`}
+            >
+              <Icon glyph="ChevronUp" />
+            </IconButton>
+          )}
           {onDuplicate && (
             <IconButton
               aria-label="Duplicate stage"
@@ -518,12 +1012,18 @@ function StageCard({
       </div>
 
       <div className={stageContentStyles}>{stagePreview}</div>
+
+      {isExpanded && (
+        <div className={expandedDetailsStyles} data-testid={`stage-expanded-details-${index}`}>
+          <pre data-testid={`stage-full-json-${index}`}>{JSON.stringify(stage, null, 2)}</pre>
+        </div>
+      )}
     </div>
   )
 }
 
 // Generate preview text for a stage
-function getStagePreview(stage: AggregationStage): string {
+function getStagePreview(stage: ExtendedAggregationStage): string {
   switch (stage.type) {
     case '$match': {
       if (!stage.match || stage.match.length === 0) {

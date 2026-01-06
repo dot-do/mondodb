@@ -8,6 +8,7 @@ beforeEach(() => {
 // Mock LeafyGreen Modal to avoid focus-trap issues in jsdom
 vi.mock('@leafygreen-ui/modal', async () => {
   const React = await import('react')
+  let modalIdCounter = 0
   return {
     default: function Modal({
       children,
@@ -20,6 +21,9 @@ vi.mock('@leafygreen-ui/modal', async () => {
       setOpen?: (open: boolean) => void
       className?: string
     }) {
+      // Generate unique ID for aria-labelledby
+      const modalId = React.useMemo(() => `modal-title-${++modalIdCounter}`, [])
+
       // Handle Escape key to close modal
       React.useEffect(() => {
         if (!open) return
@@ -37,6 +41,7 @@ vi.mock('@leafygreen-ui/modal', async () => {
         'data-testid': 'lg-modal',
         role: 'dialog',
         'aria-modal': 'true',
+        'aria-labelledby': modalId,
         className,
       }, children)
     },
@@ -115,12 +120,14 @@ userEvent.setup = (options = {}) => {
   })
 }
 
-// Mock clipboard API globally for all tests
-// We need to create a persistent mock that doesn't get cleared by vi.clearAllMocks()
+// Default clipboard mock for tests that don't set up their own
 const clipboardMock = {
   writeText: vi.fn().mockResolvedValue(undefined),
   readText: vi.fn().mockResolvedValue(''),
 }
+
+// Set up clipboard mock on navigator
+// Tests can override this in their own beforeEach using Object.defineProperty
 Object.defineProperty(navigator, 'clipboard', {
   value: clipboardMock,
   writable: true,
@@ -139,8 +146,8 @@ afterEach(() => {
   clipboardMock.readText.mockClear()
   // Clear all timers to prevent memory retention
   vi.clearAllTimers()
-  // Reset all mocks to prevent state accumulation
-  vi.resetAllMocks()
+  // Clear mock call history but preserve implementations
+  vi.clearAllMocks()
 })
 
 // Mock matchMedia for LeafyGreen components (only in browser environment)

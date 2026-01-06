@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { css } from '@leafygreen-ui/emotion'
 import { palette } from '@leafygreen-ui/palette'
 import { H3, Body, InlineCode } from '@leafygreen-ui/typography'
@@ -380,6 +380,25 @@ export function CreateIndexDialog({
   const [definition, setDefinition] = useState<IndexDefinition>(DEFAULT_DEFINITION)
   const [error, setError] = useState<string | null>(null)
   const [enableTTL, setEnableTTL] = useState(false)
+  const prevOpenRef = useRef(open)
+
+  // Reset form state when dialog opens (open changes from false to true)
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      // Dialog is opening - reset to initial state
+      setDefinition({
+        fields: [{ id: `field-${Date.now()}`, name: '', type: 1 }],
+        options: {
+          unique: false,
+          sparse: false,
+          background: false,
+        },
+      })
+      setError(null)
+      setEnableTTL(false)
+    }
+    prevOpenRef.current = open
+  }, [open])
 
   const createIndexMutation = useCreateIndexMutation(database, collection)
 
