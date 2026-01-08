@@ -2,6 +2,37 @@
 
 > MongoDB on the Edge. Natural Language First. AI-Native.
 
+## Getting Started
+
+### 1. Install
+
+```bash
+npm install mongo.do
+```
+
+### 2. Import and Use
+
+```typescript
+import { mongo } from 'mongo.do'
+
+const users = await mongo`users who haven't logged in this month`
+const vips = await mongo`customers with orders over $1000`
+```
+
+### 3. Deploy Your Own
+
+```bash
+npx create-dotdo mongo
+```
+
+### What's Next
+
+- [mongo.do](https://mongo.do) - Full documentation
+- [Docs](https://docs.mongo.do) - API reference
+- [Discord](https://discord.gg/dotdo) - Community support
+
+---
+
 MongoDB Atlas costs $57/month for a shared cluster. Self-hosting means connection pools, replica sets, and ops burden. Every query requires remembering `$match`, `$group`, `$lookup` syntax. Developers write database code instead of building products.
 
 **mongo.do** is the edge-native alternative. MongoDB-compatible. Deploys in seconds. Queries in plain English.

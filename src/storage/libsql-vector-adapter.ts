@@ -1,4 +1,10 @@
-import type { VectorStorageAdapter, VectorSearchOptions, VectorMatch } from './vector-types'
+import type { VectorStorageAdapter, VectorSearchOptions, VectorMatch, VectorBatchInput, VectorBatchResult } from './vector-types'
+
+/**
+ * Maximum number of statements per libSQL batch operation
+ * Keeps individual transactions manageable
+ */
+const LIBSQL_BATCH_LIMIT = 100
 
 interface LibSQLClient {
   execute: (stmt: { sql: string; args: unknown[] }) => Promise<{ rows?: unknown[]; rowsAffected?: number }>
@@ -59,6 +65,63 @@ export class LibSQLVectorAdapter implements VectorStorageAdapter {
         JSON.stringify(metadata || {})
       ]
     })
+  }
+
+  /**
+   * Batch upsert multiple vectors in a single efficient operation.
+   * Uses chunked batch transactions for optimal performance.
+   *
+   * @param collection - The collection namespace
+   * @param vectors - Array of vectors with documentId, vector values, and optional metadata
+   * @returns Result with count and IDs of upserted vectors
+   */
+  async upsertVectors(collection: string, vectors: VectorBatchInput[]): Promise<VectorBatchResult> {
+    if (vectors.length === 0) {
+      return { count: 0, ids: [] }
+    }
+
+    const client = this.ensureClient()
+
+    // Ensure table exists on first batch operation
+    if (!this.tableInitialized) {
+      await client.batch([
+        {
+          sql: `CREATE TABLE IF NOT EXISTS vector_embeddings (
+            document_id TEXT NOT NULL,
+            collection TEXT NOT NULL,
+            embedding F32_BLOB(1536),
+            metadata TEXT,
+            PRIMARY KEY (collection, document_id)
+          )`
+        }
+      ])
+      this.tableInitialized = true
+    }
+
+    const ids: string[] = []
+
+    // Process vectors in chunks to respect batch limits
+    for (let i = 0; i < vectors.length; i += LIBSQL_BATCH_LIMIT) {
+      const chunk = vectors.slice(i, i + LIBSQL_BATCH_LIMIT)
+
+      const statements = chunk.map(({ documentId, vector, metadata }) => ({
+        sql: `INSERT OR REPLACE INTO vector_embeddings (document_id, collection, embedding, metadata)
+              VALUES (?, ?, vector32(?), ?)`,
+        args: [
+          documentId,
+          collection,
+          new Float32Array(vector),
+          JSON.stringify(metadata || {})
+        ]
+      }))
+
+      await client.batch(statements)
+
+      // Collect IDs for return value
+      chunk.forEach(({ documentId }) => ids.push(documentId))
+    }
+
+    return { count: vectors.length, ids }
   }
 
   async deleteVector(collection: string, documentId: string): Promise<void> {

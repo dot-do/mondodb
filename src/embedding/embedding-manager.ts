@@ -43,6 +43,11 @@ export interface EmbeddingConfig {
 }
 
 /**
+ * Default concurrency for parallel chunk processing
+ */
+export const DEFAULT_UPSERT_CONCURRENCY = 3;
+
+/**
  * Options for embedding a single document
  */
 export interface EmbedDocumentOptions {
@@ -55,6 +60,12 @@ export interface EmbedDocumentOptions {
    * Override serialization options for this document
    */
   serialization?: SerializationOptions;
+
+  /**
+   * Number of parallel upsert operations (default: 3)
+   * Higher values increase throughput but may hit rate limits
+   */
+  concurrency?: number;
 }
 
 /**
@@ -171,10 +182,10 @@ export class EmbeddingManager {
   }
 
   /**
-   * Embed multiple documents in a batch
+   * Embed multiple documents in a batch with parallel chunk processing
    *
    * @param docs - Array of documents to embed (each must have _id field)
-   * @param options - Optional embedding options
+   * @param options - Optional embedding options including concurrency
    * @returns The embedding result
    */
   async embedDocuments(
@@ -213,16 +224,67 @@ export class EmbeddingManager {
       };
     });
 
-    // Upsert vectors in chunks to respect Vectorize batch limit
+    // Split vectors into chunks respecting Vectorize batch limit
+    const chunks: typeof vectors[] = [];
     for (let i = 0; i < vectors.length; i += VECTORIZE_BATCH_LIMIT) {
-      const chunk = vectors.slice(i, i + VECTORIZE_BATCH_LIMIT);
-      await this.vectorize.upsert(chunk);
+      chunks.push(vectors.slice(i, i + VECTORIZE_BATCH_LIMIT));
     }
+
+    // Process chunks with parallel execution
+    const concurrency = options.concurrency ?? DEFAULT_UPSERT_CONCURRENCY;
+    await this.processChunksParallel(chunks, concurrency);
 
     return {
       count: docs.length,
       ids: vectors.map(v => v.id)
     };
+  }
+
+  /**
+   * Process vector chunks in parallel with controlled concurrency
+   *
+   * @param chunks - Array of vector chunks to upsert
+   * @param concurrency - Maximum parallel operations
+   */
+  private async processChunksParallel(
+    chunks: { id: string; values: number[]; metadata: VectorizeMetadata }[][],
+    concurrency: number
+  ): Promise<void> {
+    if (chunks.length === 0) return;
+
+    // For small chunk counts, just run all in parallel
+    if (chunks.length <= concurrency) {
+      await Promise.all(chunks.map(chunk => this.vectorize.upsert(chunk)));
+      return;
+    }
+
+    // Process with controlled concurrency using a semaphore pattern
+    const executing: Promise<void>[] = [];
+    const queue = [...chunks];
+
+    while (queue.length > 0 || executing.length > 0) {
+      // Fill up to concurrency limit
+      while (executing.length < concurrency && queue.length > 0) {
+        const chunk = queue.shift()!;
+        const promise = this.vectorize.upsert(chunk).then(() => {
+          // Remove from executing when done
+          const idx = executing.indexOf(promise);
+          if (idx > -1) executing.splice(idx, 1);
+        });
+        executing.push(promise);
+      }
+
+      // Wait for at least one to complete if we're at capacity
+      if (executing.length >= concurrency) {
+        await Promise.race(executing);
+      }
+
+      // Exit if nothing left
+      if (queue.length === 0 && executing.length === 0) break;
+    }
+
+    // Wait for all remaining
+    await Promise.all(executing);
   }
 
   /**

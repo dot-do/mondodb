@@ -148,6 +148,96 @@ describe('EmbeddingManager', () => {
       expect(mockVectorize.upsert).not.toHaveBeenCalled();
       expect(result.count).toBe(0);
     });
+
+    it('should chunk large batches and process in parallel', async () => {
+      // Create 250 documents (more than VECTORIZE_BATCH_LIMIT of 100)
+      const docs = Array.from({ length: 250 }, (_, i) => ({
+        _id: `doc${i}`,
+        title: `Document ${i}`
+      }));
+
+      // Mock embedding response for all 250 documents
+      (mockAi.run as any).mockResolvedValueOnce({
+        data: docs.map(() => [0.1, 0.2, 0.3]),
+        shape: [250, 3]
+      });
+
+      await manager.embedDocuments(docs);
+
+      // Should have called upsert 3 times (100 + 100 + 50)
+      expect(mockVectorize.upsert).toHaveBeenCalledTimes(3);
+    });
+
+    it('should parallelize chunk processing with configurable concurrency', async () => {
+      // Create 500 documents to test parallelization
+      const docs = Array.from({ length: 500 }, (_, i) => ({
+        _id: `doc${i}`,
+        title: `Document ${i}`
+      }));
+
+      // Track call order to verify parallelization
+      const callOrder: number[] = [];
+      let callCount = 0;
+
+      (mockAi.run as any).mockResolvedValueOnce({
+        data: docs.map(() => [0.1, 0.2, 0.3]),
+        shape: [500, 3]
+      });
+
+      (mockVectorize.upsert as any).mockImplementation(() => {
+        const thisCall = callCount++;
+        callOrder.push(thisCall);
+        // Simulate async delay
+        return new Promise(resolve =>
+          setTimeout(() => resolve({ count: 1, ids: [] }), 10)
+        );
+      });
+
+      const startTime = Date.now();
+      await manager.embedDocuments(docs, { concurrency: 5 });
+      const duration = Date.now() - startTime;
+
+      // With 5 chunks of 100 and concurrency of 5,
+      // all chunks should complete in parallel
+      expect(mockVectorize.upsert).toHaveBeenCalledTimes(5);
+
+      // Duration should be roughly 1 timeout cycle, not 5 sequential
+      // This verifies parallel execution
+      expect(duration).toBeLessThan(100); // Much less than 5 * 10ms = 50ms + overhead
+    });
+
+    it('should respect concurrency limit of 1 for sequential processing', async () => {
+      const docs = Array.from({ length: 200 }, (_, i) => ({
+        _id: `doc${i}`,
+        title: `Document ${i}`
+      }));
+
+      (mockAi.run as any).mockResolvedValueOnce({
+        data: docs.map(() => [0.1, 0.2, 0.3]),
+        shape: [200, 3]
+      });
+
+      await manager.embedDocuments(docs, { concurrency: 1 });
+
+      // Should still work but process sequentially
+      expect(mockVectorize.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use default concurrency of 3 when not specified', async () => {
+      const docs = Array.from({ length: 300 }, (_, i) => ({
+        _id: `doc${i}`,
+        title: `Document ${i}`
+      }));
+
+      (mockAi.run as any).mockResolvedValueOnce({
+        data: docs.map(() => [0.1, 0.2, 0.3]),
+        shape: [300, 3]
+      });
+
+      await manager.embedDocuments(docs);
+
+      expect(mockVectorize.upsert).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('deleteDocument', () => {

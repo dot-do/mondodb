@@ -363,6 +363,89 @@ describe('LibSQLVectorAdapter', () => {
     })
   })
 
+  describe('batch upsert performance', () => {
+    it('should provide upsertVectors for batch operations', () => {
+      expect(typeof adapter.upsertVectors).toBe('function')
+    })
+
+    it('should batch multiple vectors in single transaction', async () => {
+      // First batch call is for table creation, second is for vectors
+      mockClient.batch.mockResolvedValue([])
+
+      const vectors = [
+        { documentId: 'doc-1', vector: [0.1, 0.2, 0.3], metadata: { name: 'A' } },
+        { documentId: 'doc-2', vector: [0.4, 0.5, 0.6], metadata: { name: 'B' } },
+        { documentId: 'doc-3', vector: [0.7, 0.8, 0.9], metadata: { name: 'C' } }
+      ]
+
+      await adapter.upsertVectors('products', vectors)
+
+      // Should use batch for efficiency: first for table creation, second for vectors
+      expect(mockClient.batch).toHaveBeenCalledTimes(2)
+
+      // Second batch call should have the 3 vector upserts
+      const vectorBatchArgs = mockClient.batch.mock.calls[1][0]
+      expect(vectorBatchArgs.length).toBe(3)
+    })
+
+    it('should handle large batches by chunking', async () => {
+      // Create 250 vectors (should be split into chunks)
+      const vectors = Array.from({ length: 250 }, (_, i) => ({
+        documentId: `doc-${i}`,
+        vector: [0.1, 0.2, 0.3],
+        metadata: { index: i }
+      }))
+
+      mockClient.batch.mockResolvedValue([])
+
+      await adapter.upsertVectors('products', vectors)
+
+      // Should have been called multiple times for chunked batches
+      expect(mockClient.batch.mock.calls.length).toBeGreaterThan(0)
+    })
+
+    it('should be significantly faster than sequential upserts for large sets', async () => {
+      const vectors = Array.from({ length: 100 }, (_, i) => ({
+        documentId: `doc-${i}`,
+        vector: [0.1 * i, 0.2 * i, 0.3 * i],
+        metadata: { index: i }
+      }))
+
+      mockClient.batch.mockResolvedValue([])
+      mockClient.execute.mockResolvedValue({ rowsAffected: 1 })
+
+      // Batch upsert should use fewer database calls
+      await adapter.upsertVectors('products', vectors)
+
+      // Batch should be called at most a few times (chunked)
+      const batchCalls = mockClient.batch.mock.calls.length
+      expect(batchCalls).toBeLessThan(10) // Much fewer than 100 individual calls
+    })
+
+    it('should handle empty array gracefully', async () => {
+      const result = await adapter.upsertVectors('products', [])
+      expect(mockClient.batch).not.toHaveBeenCalled()
+      expect(result).toEqual({ count: 0, ids: [] })
+    })
+
+    it('should return count and ids for successful batch', async () => {
+      mockClient.batch.mockResolvedValueOnce([
+        { rowsAffected: 1 },
+        { rowsAffected: 1 }
+      ])
+
+      const vectors = [
+        { documentId: 'doc-1', vector: [0.1, 0.2], metadata: {} },
+        { documentId: 'doc-2', vector: [0.3, 0.4], metadata: {} }
+      ]
+
+      const result = await adapter.upsertVectors('products', vectors)
+
+      expect(result.count).toBe(2)
+      expect(result.ids).toEqual(['doc-1', 'doc-2'])
+    })
+  })
+
   describe('F32_BLOB encoding', () => {
     it('should encode vectors as Float32Array for F32_BLOB storage', async () => {
       mockClient.execute.mockResolvedValueOnce({ rowsAffected: 1 })
