@@ -1,190 +1,258 @@
-# MondoDB
+# mongo.do
 
-**MongoDB on the Edge** — A MongoDB-compatible database that runs entirely on Cloudflare Workers, with native AI agent support, vector search, and real-time analytics.
+> MongoDB on the Edge. Natural Language First. AI-Native.
 
-[![npm version](https://img.shields.io/npm/v/mongo.do.svg)](https://www.npmjs.com/package/mongo.do)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+MongoDB Atlas costs $57/month for a shared cluster. Self-hosting means connection pools, replica sets, and ops burden. Every query requires remembering `$match`, `$group`, `$lookup` syntax. Developers write database code instead of building products.
 
----
+**mongo.do** is the edge-native alternative. MongoDB-compatible. Deploys in seconds. Queries in plain English.
 
-## Why MondoDB?
-
-Traditional databases require infrastructure management, connection pooling, and careful scaling. MondoDB eliminates all of that by running directly on Cloudflare's edge network:
-
-- **Zero Infrastructure** — No servers to manage, no connection limits, no cold starts
-- **Global by Default** — Data lives at the edge, close to your users
-- **MongoDB Compatible** — Drop-in replacement for most MongoDB operations
-- **AI-Native** — Built-in support for AI agents, vector search, and LLM tool calling
-- **Serverless Economics** — Pay only for what you use, scale to zero
+## AI-Native API
 
 ```typescript
-import { MongoClient } from 'mongo.do'
-
-const client = new MongoClient('https://your-worker.workers.dev')
-const db = client.db('myapp')
-const users = db.collection('users')
-
-// It's just MongoDB
-await users.insertOne({ name: 'Alice', email: 'alice@example.com' })
-const user = await users.findOne({ email: 'alice@example.com' })
+import { mongo } from 'mongo.do'           // Full SDK
+import { mongo } from 'mongo.do/tiny'      // Minimal client
+import { mongo } from 'mongo.do/vector'    // Vector search operations
 ```
 
----
+Natural language for database operations:
+
+```typescript
+import { mongo } from 'mongo.do'
+
+// Talk to it like a colleague
+const inactive = await mongo`users who haven't logged in this month`
+const vips = await mongo`customers with orders over $1000`
+const trending = await mongo`most popular products this week`
+
+// Chain like sentences
+await mongo`users in Austin`
+  .map(user => mongo`recent orders for ${user}`)
+  .map(orders => mongo`shipping status for ${orders}`)
+
+// Search like you think
+const tutorials = await mongo`tutorials similar to machine learning`.limit(10)
+const articles = await mongo`serverless database in title and content`.highlight()
+```
+
+## The Problem
+
+MongoDB Atlas dominates hosted MongoDB:
+
+| What Atlas Charges | The Reality |
+|--------------------|-------------|
+| **Shared Cluster** | $57/month minimum |
+| **Dedicated** | $95-2000+/month |
+| **Serverless** | $0.10/million reads + storage + transfer |
+| **Connection Limits** | 500-3000 depending on tier |
+| **Cold Starts** | Serverless has unpredictable latency |
+| **Vendor Lock-in** | Atlas-specific features trap you |
+
+### The Ops Tax
+
+Self-hosting means:
+
+- Replica set configuration
+- Connection pool management
+- Backup orchestration
+- Security patches
+- Scaling headaches
+- 3am pages
+
+### The Syntax Tax
+
+Every MongoDB query requires ceremony:
+
+```typescript
+// What you want: "users who haven't logged in this month"
+// What you write:
+db.users.aggregate([
+  { $match: { lastLogin: { $lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } },
+  { $project: { name: 1, email: 1, lastLogin: 1 } }
+])
+
+// What you want: "orders over $1000 by category"
+// What you write:
+db.orders.aggregate([
+  { $match: { amount: { $gt: 1000 } } },
+  { $group: { _id: "$category", total: { $sum: "$amount" }, count: { $sum: 1 } } },
+  { $sort: { total: -1 } }
+])
+```
+
+Developers memorize operators instead of building products.
+
+## The Solution
+
+**mongo.do** reimagines MongoDB for the edge:
+
+```
+MongoDB Atlas                  mongo.do
+-----------------------------------------------------------------
+$57/month minimum              $0 - run your own
+Connection pool limits         Unlimited edge connections
+Cold starts                    Always warm at the edge
+Verbose aggregation syntax     Natural language queries
+Atlas-specific features        Open source, no lock-in
+Ops burden                     Zero infrastructure
+```
+
+## One-Click Deploy
+
+```bash
+npx create-dotdo mongo
+```
+
+A MongoDB-compatible database. Running on infrastructure you control. Natural language from day one.
+
+```typescript
+import { Mongo } from 'mongo.do'
+
+export default Mongo({
+  name: 'my-database',
+  domain: 'db.myapp.com',
+  vector: true,  // Enable vector search
+})
+```
 
 ## Features
 
-### Core Database
-
-| Feature | Description |
-|---------|-------------|
-| **CRUD Operations** | `insertOne`, `insertMany`, `find`, `findOne`, `updateOne`, `updateMany`, `deleteOne`, `deleteMany`, `replaceOne`, `bulkWrite` |
-| **Aggregation Pipeline** | 20+ stages including `$match`, `$group`, `$lookup`, `$unwind`, `$facet`, `$bucket`, `$graphLookup` |
-| **Indexing** | Single-field, compound, text, geospatial (2dsphere), TTL, and unique indexes |
-| **Transactions** | Multi-document ACID transactions with `startSession()` and `withTransaction()` |
-| **Change Streams** | Real-time notifications via `collection.watch()` |
-
-### AI & Agents
-
-| Feature | Description |
-|---------|-------------|
-| **Vector Search** | Semantic similarity search powered by Cloudflare Vectorize with automatic embeddings |
-| **Full-Text Search** | FTS5-powered `$search` stage with scoring, highlights, and fuzzy matching |
-| **AgentFS** | Virtual filesystem for AI agents with glob, grep, KV store, and immutable audit logs |
-| **MCP Protocol** | Model Context Protocol server with Anthropic and Vercel AI SDK adapters |
-| **$function Operator** | Execute sandboxed JavaScript in aggregation pipelines |
-
-### Connectivity
-
-| Feature | Description |
-|---------|-------------|
-| **Wire Protocol** | Connect with MongoDB Compass, mongosh, and native drivers via TCP |
-| **HTTP/RPC** | JSON-RPC over HTTP with batching and request deduplication |
-| **WebSocket** | Persistent connections for real-time applications |
-| **Service Bindings** | Zero-latency Worker-to-Worker communication |
-
-### Developer Experience
-
-| Feature | Description |
-|---------|-------------|
-| **Studio UI** | Web-based database browser with query editor and document management |
-| **CLI Server** | Local development with `npx mongo.do serve --backend sqlite` |
-| **TypeScript** | Full type definitions with generics support |
-
----
-
-## Quick Start
-
-### Install
-
-```bash
-npm install mongo.do
-```
-
-### Deploy to Cloudflare Workers
+### CRUD Operations
 
 ```typescript
-// src/index.ts
-import { MondoEntrypoint, MondoDatabase } from 'mongo.do'
+// Find anyone
+const alice = await mongo`user alice@example.com`
+const active = await mongo`active users in Austin`
+const vips = await mongo`users with 10+ orders`
 
-export { MondoDatabase }
-export default MondoEntrypoint
+// AI infers what you need
+await mongo`alice@example.com`              // returns user
+await mongo`orders for alice@example.com`   // returns orders
+await mongo`alice order history`            // returns full timeline
 ```
 
-```jsonc
-// wrangler.jsonc
-{
-  "name": "my-mongo.do",
-  "main": "src/index.ts",
-  "compatibility_date": "2025-01-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "durable_objects": {
-    "bindings": [{ "name": "MONDO_DATABASE", "class_name": "MondoDatabase" }]
-  },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MondoDatabase"] }]
-}
-```
-
-```bash
-npx wrangler deploy
-```
-
-### Local Development
-
-```bash
-# Start a local server with SQLite backend
-npx mongo.do serve --port 27017 --backend sqlite
-
-# Connect with mongosh
-mongosh mongodb://localhost:27017/mydb
-```
-
----
-
-## Examples
-
-### Vector Search (Semantic Similarity)
+### Aggregation
 
 ```typescript
-// Create a vector index
-await collection.createIndex({ embedding: 'vector' }, {
-  vectorOptions: { dimensions: 1024, metric: 'cosine' }
-})
+// Complex queries are one line
+const revenue = await mongo`revenue by category this month`
+const growth = await mongo`user growth rate last 6 months`
+const top = await mongo`top 10 customers by lifetime value`
 
-// Search by similarity
-const results = await collection.aggregate([
-  {
-    $vectorSearch: {
-      queryVector: await getEmbedding('machine learning tutorials'),
-      path: 'embedding',
-      numCandidates: 100,
-      limit: 10
-    }
-  },
-  { $project: { title: 1, score: { $meta: 'vectorSearchScore' } } }
-]).toArray()
+// Joins read like relationships
+const enriched = await mongo`orders with customer and product details`
+```
+
+### Vector Search
+
+```typescript
+// Semantic search in plain English
+const similar = await mongo`tutorials similar to machine learning`.limit(10)
+const related = await mongo`products like this hiking backpack`
+const answers = await mongo`documents about serverless architecture`
+
+// Embeddings are automatic
+await mongo`index products for semantic search`
 ```
 
 ### Full-Text Search
 
 ```typescript
-// Create a text index
-await collection.createIndex({ title: 'text', content: 'text' })
-
-// Search with scoring
-const results = await collection.aggregate([
-  {
-    $search: {
-      text: { query: 'serverless database', path: ['title', 'content'] },
-      highlight: { path: 'content' }
-    }
-  }
-]).toArray()
+// Search with highlighting
+const results = await mongo`serverless database in title and content`.highlight()
+const fuzzy = await mongo`find articles matching "kubernets"`.fuzzy()
+const scored = await mongo`search "edge computing" with relevance scores`
 ```
 
-### AI Agent with MCP
+### Real-Time Changes
 
 ```typescript
-import { createMcpServer, createAnthropicAdapter } from 'mongo.do/mcp'
-import Anthropic from '@anthropic-ai/sdk'
+// Watch for changes naturally
+await mongo`watch orders for changes`
+  .on('insert', order => notify(order.customer))
+  .on('update', order => updateDashboard(order))
 
-const server = createMcpServer({ dbAccess })
-const adapter = createAnthropicAdapter({ server })
-await adapter.initialize()
-
-const client = new Anthropic()
-const response = await client.messages.create({
-  model: 'claude-sonnet-4-20250514',
-  tools: await adapter.getTools(),
-  messages: [{ role: 'user', content: 'Find all orders over $1000' }]
-})
+// Or ask directly
+const recent = await mongo`changes to products in last hour`
 ```
 
-### AgentFS — Virtual Filesystem for AI
+### Transactions
 
 ```typescript
-import { MonDoAgent } from 'mongo.do/agentfs'
+// Atomic operations read like instructions
+await mongo`
+  transfer $100 from alice to bob:
+  - subtract from alice balance
+  - add to bob balance
+  - log the transfer
+`.atomic()
 
-const agent = new MonDoAgent(db)
+// Or chain with transactions
+await mongo`alice account`.debit(100)
+  .then(mongo`bob account`.credit(100))
+  .atomic()
+```
+
+### Geospatial
+
+```typescript
+// Location queries are natural
+const nearby = await mongo`coffee shops within 1km of Times Square`
+const delivery = await mongo`restaurants that deliver to 10001`
+const route = await mongo`stores along my commute from Brooklyn to Manhattan`
+```
+
+### Indexes
+
+```typescript
+// Index creation is conversational
+await mongo`index users by email for fast lookup`
+await mongo`index products for full-text search on name and description`
+await mongo`index locations for geospatial queries`
+await mongo`index embeddings for vector similarity`
+```
+
+## AI-Native Database
+
+### Natural Language Queries
+
+```typescript
+// Complex analytics in plain English
+const insights = await mongo`
+  users who signed up last month
+  but haven't made a purchase
+  grouped by referral source
+`
+
+const cohort = await mongo`
+  retention rate for users who
+  signed up in January compared to February
+`
+
+const forecast = await mongo`
+  predict next month revenue based on
+  order trends from last 6 months
+`
+```
+
+### MCP Protocol
+
+```typescript
+import { createMcpServer } from 'mongo.do/mcp'
+
+const server = createMcpServer({ mongo })
+
+// AI agents can now query your database
+// "Find all orders over $1000"
+// "Show me user growth this quarter"
+// "Which products are trending?"
+```
+
+### AgentFS
+
+```typescript
+import { MongoAgent } from 'mongo.do/agent'
+
+const agent = new MongoAgent(mongo)
 
 // Glob pattern matching
 const files = await agent.glob('src/**/*.ts')
@@ -192,59 +260,64 @@ const files = await agent.glob('src/**/*.ts')
 // Content search
 const matches = await agent.grep('TODO', { path: 'src/', type: 'ts' })
 
-// Key-value store with TTL
+// Key-value with TTL
 await agent.kv.set('session:123', { user: 'alice' }, { ttl: 3600 })
 
 // Immutable audit log
-await agent.auditLog.append({
-  action: 'file_read',
-  path: '/src/index.ts',
-  agent: 'claude'
-})
+await agent.log({ action: 'query', query: 'users', agent: 'claude' })
 ```
 
-### Real-Time Change Streams
+## Promise Pipelining
+
+One network round trip. Record-replay pipelining.
 
 ```typescript
-const changeStream = collection.watch([
-  { $match: { operationType: { $in: ['insert', 'update'] } } }
+// Chain operations without await waterfalls
+const result = await mongo`customers in Texas`
+  .map(customer => mongo`orders for ${customer}`)
+  .map(orders => mongo`total revenue from ${orders}`)
+  .reduce((a, b) => a + b)
+
+// Parallel fan-out
+const [users, orders, products] = await Promise.all([
+  mongo`active users`,
+  mongo`pending orders`,
+  mongo`low stock products`,
 ])
 
-for await (const change of changeStream) {
-  console.log('Change detected:', change.operationType, change.documentKey)
-  await notifySubscribers(change)
-}
+// Pipeline with transformations
+await mongo`new signups this week`
+  .map(user => mongo`send welcome email to ${user}`)
+  .map(result => mongo`log email sent ${result}`)
 ```
 
-### Transactions
+## MongoDB Compatibility
+
+Full compatibility with MongoDB drivers:
 
 ```typescript
-const session = client.startSession()
+// Drop-in replacement
+import { MongoClient } from 'mongo.do'
 
-await session.withTransaction(async () => {
-  await accounts.updateOne({ userId: 'alice' }, { $inc: { balance: -100 } }, { session })
-  await accounts.updateOne({ userId: 'bob' }, { $inc: { balance: 100 } }, { session })
-})
+const client = new MongoClient('https://your-worker.workers.dev')
+const db = client.db('myapp')
+const users = db.collection('users')
+
+// Standard MongoDB operations work
+await users.insertOne({ name: 'Alice', email: 'alice@example.com' })
+await users.findOne({ email: 'alice@example.com' })
+await users.aggregate([...]).toArray()
 ```
 
-### Geospatial Queries
+### Wire Protocol Support
 
-```typescript
-// Create 2dsphere index
-await places.createIndex({ location: '2dsphere' })
+```bash
+# Connect with mongosh
+mongosh mongodb://your-worker.workers.dev/mydb
 
-// Find nearby locations
-const nearby = await places.find({
-  location: {
-    $near: {
-      $geometry: { type: 'Point', coordinates: [-73.97, 40.77] },
-      $maxDistance: 5000 // 5km
-    }
-  }
-}).toArray()
+# Connect with Compass
+# mongodb://your-worker.workers.dev
 ```
-
----
 
 ## Architecture
 
@@ -252,67 +325,44 @@ const nearby = await places.find({
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           Client Applications                           │
 ├─────────────────┬─────────────────┬─────────────────┬───────────────────┤
-│   MongoDB       │   HTTP/RPC      │   WebSocket     │  Service Binding  │
-│   Wire Protocol │   JSON-RPC      │   Real-time     │  Worker-to-Worker │
+│  Tagged Template│   MongoDB       │   HTTP/RPC      │  Service Binding  │
+│  mongo`query`   │   Wire Protocol │   JSON-RPC      │  Worker-to-Worker │
 ├─────────────────┴─────────────────┴─────────────────┴───────────────────┤
-│                         MondoDB Worker (Edge)                           │
+│                         mongo.do Worker (Edge)                          │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  Query Translator  │  Aggregation Engine  │  MCP Server  │  AgentFS     │
+│  Natural Language  │  Query Engine  │  MCP Server  │  Vector Search     │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                      Durable Objects (SQLite Storage)                   │
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│     Vectorize            │           R2 / OLAP (Coming Soon)            │
-│  (Vector Embeddings)     │    (ClickHouse, Iceberg, Data Catalog)       │
+│     Vectorize            │           R2 / Analytics                     │
+│  (Vector Embeddings)     │    (Large Objects, OLAP)                     │
 └──────────────────────────┴──────────────────────────────────────────────┘
 ```
 
-MondoDB translates MongoDB queries to SQLite at runtime:
+### Query Translation
 
-1. **Query Translation** — MongoDB operators → SQLite SQL with full expression support
-2. **Durable Object Storage** — Each database runs as an isolated Durable Object with SQLite
-3. **Edge Execution** — Queries execute at the edge, close to your users
-4. **Optional Integrations** — Vectorize for embeddings, R2 for large objects, ClickHouse for analytics
-
----
-
-## Connectivity Options
-
-### Wire Protocol (MongoDB Compatible)
-
-Connect using MongoDB Compass, mongosh, or any MongoDB driver:
-
-```bash
-# Local development
-npx mongo.do serve --port 27017
-
-# Connect with mongosh
-mongosh mongodb://localhost:27017/mydb
-
-# Connect with Compass
-# Use connection string: mongodb://localhost:27017
-```
-
-### HTTP RPC
+Natural language queries translate to optimized SQL:
 
 ```typescript
-// Direct HTTP calls
-const response = await fetch('https://your-worker.workers.dev/rpc', {
-  method: 'POST',
-  body: JSON.stringify({
-    method: 'find',
-    params: ['mydb', 'users', { active: true }]
-  })
-})
+// You write:
+await mongo`users who haven't logged in this month`
 
-// Batch requests
-const batch = await fetch('https://your-worker.workers.dev/rpc/batch', {
-  method: 'POST',
-  body: JSON.stringify([
-    { id: '1', method: 'find', params: ['mydb', 'users', {}] },
-    { id: '2', method: 'count', params: ['mydb', 'orders', {}] }
-  ])
-})
+// Translates to:
+SELECT * FROM users
+WHERE lastLogin < datetime('now', '-30 days')
+
+// You write:
+await mongo`revenue by category this quarter`
+
+// Translates to:
+SELECT category, SUM(amount) as revenue
+FROM orders
+WHERE createdAt >= datetime('now', 'start of quarter')
+GROUP BY category
+ORDER BY revenue DESC
 ```
+
+## Connectivity Options
 
 ### Service Bindings (Zero Latency)
 
@@ -320,104 +370,127 @@ const batch = await fetch('https://your-worker.workers.dev/rpc/batch', {
 // In your consuming worker
 export default {
   async fetch(request: Request, env: Env) {
-    const users = await env.MONDO.find('mydb', 'users', { active: true })
+    const users = await env.MONGO`active users in Austin`
     return Response.json(users)
   }
 }
 ```
 
----
+### HTTP RPC
+
+```typescript
+// Direct HTTP with natural language
+const response = await fetch('https://db.myapp.com/query', {
+  method: 'POST',
+  body: JSON.stringify({
+    query: 'orders over $1000 this week'
+  })
+})
+```
+
+### WebSocket (Real-Time)
+
+```typescript
+const ws = new WebSocket('wss://db.myapp.com/stream')
+ws.send(JSON.stringify({ watch: 'orders for changes' }))
+ws.onmessage = (event) => handleChange(JSON.parse(event.data))
+```
+
+## vs MongoDB Atlas
+
+| Feature | MongoDB Atlas | mongo.do |
+|---------|---------------|----------|
+| **Minimum Cost** | $57/month | $0 - run your own |
+| **Query Syntax** | Verbose operators | Natural language |
+| **Cold Starts** | Serverless has latency | Always at the edge |
+| **Connection Limits** | 500-3000 | Unlimited |
+| **Vector Search** | Atlas Search (paid) | Built-in with Vectorize |
+| **Data Location** | Atlas regions | Your Cloudflare account |
+| **Customization** | Limited | Full control |
+| **Lock-in** | Atlas features | MIT licensed |
+
+## Local Development
+
+```bash
+# Start a local server with SQLite backend
+npx mongo.do serve --port 27017 --backend sqlite
+
+# Connect with natural language
+mongo`users in Austin`
+
+# Or connect with mongosh
+mongosh mongodb://localhost:27017/mydb
+```
 
 ## Configuration
 
-### With Vector Search
+```typescript
+import { Mongo } from 'mongo.do'
 
-```jsonc
-{
-  "vectorize": {
-    "bindings": [{ "binding": "VECTORIZE", "index_name": "embeddings" }]
-  },
-  "ai": { "binding": "AI" },
-  "vars": {
-    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
-    "EMBEDDING_ENABLED": "true"
+export default Mongo({
+  name: 'my-database',
+  domain: 'db.myapp.com',
+
+  // Enable features
+  vector: true,           // Vector search with Vectorize
+  fulltext: true,         // FTS5 text search
+  analytics: true,        // OLAP with ClickHouse
+
+  // Storage tiers
+  storage: {
+    hot: 'sqlite',        // Recent data, fast queries
+    warm: 'r2',           // Historical data
+    cold: 'archive',      // Long-term retention
   }
-}
+})
 ```
-
-### With $function Operator
-
-```jsonc
-{
-  "compatibility_flags": ["nodejs_compat", "enable_ctx_exports"],
-  "worker_loaders": [{ "binding": "LOADER" }]
-}
-```
-
----
 
 ## Documentation
 
-Comprehensive guides are available at [docs/](docs/):
-
 | Guide | Description |
 |-------|-------------|
-| [CRUD Operations](docs/content/docs/guides/crud.mdx) | Insert, find, update, delete operations |
-| [Aggregation](docs/content/docs/guides/aggregation.mdx) | Pipeline stages and expressions |
-| [Vector Search](docs/content/docs/guides/vector-search.mdx) | Semantic similarity with Vectorize |
-| [Full-Text Search](docs/content/docs/guides/full-text-search.mdx) | FTS5-powered text search |
-| [AgentFS](docs/content/docs/guides/agentfs.mdx) | Virtual filesystem for AI agents |
-| [MCP Protocol](docs/content/docs/guides/mcp-protocol.mdx) | Model Context Protocol integration |
-| [Wire Protocol](docs/content/docs/guides/wire-protocol.mdx) | MongoDB-compatible TCP server |
-| [Transactions](docs/content/docs/guides/transactions.mdx) | Multi-document ACID transactions |
-| [Change Streams](docs/content/docs/guides/change-streams.mdx) | Real-time change notifications |
-| [Geospatial](docs/content/docs/guides/geospatial.mdx) | Location-based queries |
-| [Indexing](docs/content/docs/guides/indexing.mdx) | Index types and optimization |
-| [Analytics Layer](docs/content/docs/guides/analytics.mdx) | ClickHouse, Iceberg, CDC streaming |
-| [Studio UI](docs/content/docs/guides/studio.mdx) | Web-based database browser |
-| [CLI Server](docs/content/docs/guides/cli.mdx) | Local development server |
-| [Cloudflare Workers](docs/content/docs/guides/cloudflare-workers.mdx) | Deployment guide |
-
----
-
-## Analytics Layer
-
-MondoDB includes an integrated analytics layer for OLAP workloads:
-
-```typescript
-// Route analytical queries to ClickHouse via $analytics
-const revenue = await orders.aggregate([
-  {
-    $analytics: {
-      pipeline: [
-        { $match: { createdAt: { $gte: lastMonth } } },
-        { $group: { _id: '$category', total: { $sum: '$amount' } } },
-        { $sort: { total: -1 } }
-      ]
-    }
-  }
-]).toArray()
-```
-
-| Component | Description |
-|-----------|-------------|
-| **$analytics Stage** | Route queries to ClickHouse for analytical workloads |
-| **CDC Streaming** | Real-time change data capture via Cloudflare Pipelines |
-| **Apache Iceberg** | Open table format with time travel and schema evolution |
-| **R2 Data Catalog** | Schema registry and table metadata on R2 |
-
-See the [Analytics Layer Guide](docs/content/docs/guides/analytics.mdx) for details.
-
----
+| [Natural Language Queries](docs/natural-language.mdx) | How to write queries in plain English |
+| [Vector Search](docs/vector-search.mdx) | Semantic similarity with Vectorize |
+| [Full-Text Search](docs/full-text-search.mdx) | FTS5-powered text search |
+| [Real-Time Changes](docs/change-streams.mdx) | Watch for database changes |
+| [Transactions](docs/transactions.mdx) | Atomic multi-document operations |
+| [Geospatial](docs/geospatial.mdx) | Location-based queries |
+| [AgentFS](docs/agentfs.mdx) | Virtual filesystem for AI agents |
+| [MCP Protocol](docs/mcp-protocol.mdx) | Model Context Protocol integration |
+| [MongoDB Compatibility](docs/mongodb-compat.mdx) | Wire protocol and driver support |
+| [Studio UI](docs/studio.mdx) | Web-based database browser |
 
 ## Roadmap
 
-### Coming Soon
+### Core Database
+- [x] Natural Language Queries
+- [x] CRUD Operations
+- [x] Aggregation Pipeline
+- [x] Indexing
+- [x] Transactions
+- [x] Change Streams
 
-- **Multi-Region** — Cross-region replication with conflict resolution
-- **Sharding** — Horizontal partitioning for very large datasets
+### Search
+- [x] Vector Search (Vectorize)
+- [x] Full-Text Search (FTS5)
+- [x] Geospatial Queries
 
----
+### AI
+- [x] Natural Language to SQL
+- [x] MCP Protocol Server
+- [x] AgentFS Virtual Filesystem
+- [ ] Query Optimization Suggestions
+- [ ] Schema Inference
+
+### Connectivity
+- [x] HTTP/RPC
+- [x] WebSocket
+- [x] Service Bindings
+- [x] MongoDB Wire Protocol
+
+### Ops
+- [ ] Multi-Region Replication
+- [ ] Horizontal Sharding
 
 ## Development
 
@@ -435,20 +508,23 @@ npm run build
 npm run dev
 ```
 
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
-
----
-
 ## Contributing
 
 Contributions welcome! Please open an issue or submit a pull request.
 
+## License
+
+MIT License - Build something great.
+
 ---
 
 <p align="center">
-  <strong>Built for the edge. Designed for AI.</strong>
+  <strong>MongoDB, reimagined for the edge.</strong>
+  <br />
+  Natural language. Zero infrastructure. AI-native.
+  <br /><br />
+  <a href="https://mongo.do">Website</a> |
+  <a href="https://docs.mongo.do">Docs</a> |
+  <a href="https://discord.gg/dotdo">Discord</a> |
+  <a href="https://github.com/dotdo/mongo.do">GitHub</a>
 </p>

@@ -226,12 +226,22 @@ export class LocalSQLiteBackend implements MondoBackend {
 
     const rows = db.query(query).all(...params) as Array<{ name: string; options: string }>
 
-    return rows.map((row) => ({
-      name: row.name,
-      type: 'collection' as const,
-      options: JSON.parse(row.options) as Document,
-      info: { readOnly: false },
-    }))
+    return rows.map((row) => {
+      let options: Document
+      try {
+        options = JSON.parse(row.options) as Document
+      } catch (error) {
+        console.error(`Failed to parse options for collection ${row.name}:`, error)
+        options = {}
+      }
+
+      return {
+        name: row.name,
+        type: 'collection' as const,
+        options,
+        info: { readOnly: false },
+      }
+    })
   }
 
   async createCollection(dbName: string, name: string, options?: Document): Promise<void> {
@@ -370,7 +380,13 @@ export class LocalSQLiteBackend implements MondoBackend {
     const rows = db.query(sql).all(...params) as Array<{ _id: string; data: string }>
 
     let documents = rows.map((row) => {
-      const doc = JSON.parse(row.data) as Document
+      let doc: Document
+      try {
+        doc = JSON.parse(row.data) as Document
+      } catch (error) {
+        console.error(`Failed to parse document data for _id ${row._id}:`, error)
+        doc = {}
+      }
       doc._id = this.parseId(row._id)
       return doc
     })
@@ -488,7 +504,13 @@ export class LocalSQLiteBackend implements MondoBackend {
       return { acknowledged: true, matchedCount: 0, modifiedCount: 0, upsertedCount: 0 }
     }
 
-    const doc = JSON.parse(row.data) as Document
+    let doc: Document
+    try {
+      doc = JSON.parse(row.data) as Document
+    } catch (error) {
+      console.error(`Failed to parse document data for _id ${row._id}:`, error)
+      return { acknowledged: true, matchedCount: 1, modifiedCount: 0, upsertedCount: 0 }
+    }
     doc._id = this.parseId(row._id)
     const updatedDoc = this.applyUpdate(doc, update)
 
@@ -534,7 +556,13 @@ export class LocalSQLiteBackend implements MondoBackend {
 
     db.transaction(() => {
       for (const row of rows) {
-        const doc = JSON.parse(row.data) as Document
+        let doc: Document
+        try {
+          doc = JSON.parse(row.data) as Document
+        } catch (error) {
+          console.error(`Failed to parse document data for _id ${row._id}:`, error)
+          continue
+        }
         doc._id = this.parseId(row._id)
         const updatedDoc = this.applyUpdate(doc, update)
         stmt.run(JSON.stringify(updatedDoc), row.id)
@@ -676,7 +704,13 @@ export class LocalSQLiteBackend implements MondoBackend {
       .all(collectionId) as Array<{ _id: string; data: string }>
 
     let documents = rows.map((row) => {
-      const doc = JSON.parse(row.data) as Document
+      let doc: Document
+      try {
+        doc = JSON.parse(row.data) as Document
+      } catch (error) {
+        console.error(`Failed to parse document data for _id ${row._id}:`, error)
+        doc = {}
+      }
       doc._id = this.parseId(row._id)
       return doc
     })

@@ -161,7 +161,9 @@ export class AnthropicAdapter extends BaseAdapter {
   constructor(config: AnthropicAdapterConfig) {
     super(config)
     this.streamingThreshold = config.streamingThreshold ?? DEFAULT_STREAMING_THRESHOLD
-    this.verboseErrors = config.verboseErrors ?? process.env.NODE_ENV === 'development'
+    // Default to false for verbose errors since process.env is not available in Workers
+    // Pass verboseErrors: true explicitly in config for development environments
+    this.verboseErrors = config.verboseErrors ?? false
     this.transformToolName = config.transformToolName ?? this.defaultToolNameTransform.bind(this)
   }
 

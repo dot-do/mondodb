@@ -155,9 +155,9 @@ export class McpError extends Error {
       originalError: error.message,
       retryable: isTransientErrorCode(errorCode),
     }
-    if (process.env.NODE_ENV === 'development' && error.stack) {
-      data.stack = error.stack
-    }
+    // Note: Stack traces are intentionally omitted for security.
+    // In Cloudflare Workers, process.env is not available.
+    // Stack traces in production error responses can leak implementation details.
     return new McpError(errorCode, error.message, data)
   }
 }
