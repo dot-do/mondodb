@@ -5,7 +5,30 @@
  * This module enables querying Iceberg tables stored in object storage
  * (S3, GCS, Azure Blob) through ClickHouse's native Iceberg support.
  *
+ * ## Key Features
+ * - Connection pooling with configurable size
+ * - Metadata caching for catalog and table discovery
+ * - Automatic retry with exponential backoff for transient errors
+ * - SQL injection protection via identifier escaping
+ * - JWT and Basic auth support
+ *
+ * ## Usage
+ * ```typescript
+ * const connection = await createIcebergConnection({
+ *   host: 'clickhouse.example.com',
+ *   database: 'analytics',
+ *   icebergCatalog: 'iceberg_catalog',
+ *   username: 'user',
+ *   password: 'secret'
+ * });
+ *
+ * const catalog = await discoverCatalog(connection, 'iceberg_catalog');
+ * const tables = await discoverTables(connection);
+ * const schema = await getTableSchema(connection, 'events');
+ * ```
+ *
  * Issue: mongo.do-vyf4
+ * Refactored: workers-3p3vc
  */
 
 // =============================================================================
@@ -13,7 +36,24 @@
 // =============================================================================
 
 /**
- * Configuration for connecting to ClickHouse with Iceberg support
+ * Configuration for connecting to ClickHouse with Iceberg support.
+ *
+ * @example
+ * ```typescript
+ * const config: IcebergConnectionConfig = {
+ *   host: 'clickhouse.example.com',
+ *   port: 8443,
+ *   database: 'analytics',
+ *   username: 'admin',
+ *   password: 'secret',
+ *   secure: true,
+ *   icebergCatalog: 'iceberg_catalog',
+ *   connectionTimeout: 10000,
+ *   queryTimeout: 60000,
+ *   enableMetadataCache: true,
+ *   metadataCacheTtl: 300000
+ * };
+ * ```
  */
 export interface IcebergConnectionConfig {
   /** ClickHouse server hostname */
@@ -32,18 +72,25 @@ export interface IcebergConnectionConfig {
   secure?: boolean;
   /** Iceberg catalog name */
   icebergCatalog: string;
-  /** Connection timeout in milliseconds */
+  /** Connection timeout in milliseconds (default: 30000) */
   connectionTimeout?: number;
-  /** Query timeout in milliseconds */
+  /** Query timeout in milliseconds (default: 30000) */
   queryTimeout?: number;
-  /** Connection pool size */
+  /** Connection pool size (default: 10) */
   poolSize?: number;
-  /** Maximum retry attempts for transient errors */
+  /** Maximum retry attempts for transient errors (default: 3) */
   maxRetries?: number;
+  /** Enable metadata caching for catalog and table discovery (default: false) */
+  enableMetadataCache?: boolean;
+  /** Metadata cache TTL in milliseconds (default: 300000 = 5 minutes) */
+  metadataCacheTtl?: number;
 }
 
 /**
- * Represents an Iceberg catalog in ClickHouse
+ * Represents an Iceberg catalog in ClickHouse.
+ *
+ * An Iceberg catalog is a namespace for organizing Iceberg tables.
+ * It provides metadata about the warehouse location and configuration.
  */
 export interface IcebergCatalog {
   /** Catalog name */
@@ -59,7 +106,10 @@ export interface IcebergCatalog {
 }
 
 /**
- * Represents an Iceberg table
+ * Represents an Iceberg table with its metadata.
+ *
+ * Iceberg tables support ACID transactions, schema evolution,
+ * and time travel queries.
  */
 export interface IcebergTable {
   /** Table name */
@@ -81,7 +131,9 @@ export interface IcebergTable {
 }
 
 /**
- * Represents an Iceberg table schema
+ * Represents an Iceberg table schema.
+ *
+ * The schema contains column definitions including types and constraints.
  */
 export interface IcebergSchema {
   /** Schema columns */
@@ -89,7 +141,9 @@ export interface IcebergSchema {
 }
 
 /**
- * Represents a column in an Iceberg table
+ * Represents a column in an Iceberg table.
+ *
+ * Columns have types, nullability constraints, and optional metadata.
  */
 export interface IcebergColumn {
   /** Column name */
@@ -106,6 +160,15 @@ export interface IcebergColumn {
   comment?: string;
   /** Whether this column is part of the partition key */
   isPartitionKey?: boolean;
+}
+
+/**
+ * Cache entry with TTL support.
+ * @internal
+ */
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
 }
 
 /**
@@ -151,7 +214,8 @@ interface ColumnRow {
 // =============================================================================
 
 /**
- * Error for Iceberg connection issues
+ * Base error for Iceberg operations.
+ * Provides structured error information including error codes and retry hints.
  */
 export class IcebergConnectionError extends Error {
   constructor(
@@ -164,12 +228,134 @@ export class IcebergConnectionError extends Error {
   }
 }
 
+/**
+ * Error for catalog-related operations.
+ */
+export class IcebergCatalogError extends IcebergConnectionError {
+  constructor(
+    message: string,
+    public readonly catalogName: string,
+    code?: number
+  ) {
+    super(message, code, false);
+    this.name = 'IcebergCatalogError';
+  }
+}
+
+/**
+ * Error for table-related operations.
+ */
+export class IcebergTableError extends IcebergConnectionError {
+  constructor(
+    message: string,
+    public readonly tableName: string,
+    code?: number
+  ) {
+    super(message, code, false);
+    this.name = 'IcebergTableError';
+  }
+}
+
+// =============================================================================
+// Metadata Cache
+// =============================================================================
+
+/**
+ * Simple in-memory cache with TTL support for metadata operations.
+ * @internal
+ */
+class MetadataCache {
+  private readonly cache = new Map<string, CacheEntry<unknown>>();
+  private readonly ttl: number;
+  private readonly enabled: boolean;
+
+  constructor(enabled: boolean, ttlMs: number = 300000) {
+    this.enabled = enabled;
+    this.ttl = ttlMs;
+  }
+
+  /**
+   * Get a cached value if it exists and hasn't expired.
+   */
+  get<T>(key: string): T | undefined {
+    if (!this.enabled) return undefined;
+
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+
+    return entry.value as T;
+  }
+
+  /**
+   * Set a value in the cache with the configured TTL.
+   */
+  set<T>(key: string, value: T): void {
+    if (!this.enabled) return;
+
+    this.cache.set(key, {
+      value,
+      expiresAt: Date.now() + this.ttl,
+    });
+  }
+
+  /**
+   * Invalidate a specific cache entry.
+   */
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+
+  /**
+   * Clear all cached entries.
+   */
+  clear(): void {
+    this.cache.clear();
+  }
+
+  /**
+   * Get cache statistics for monitoring.
+   */
+  stats(): { size: number; enabled: boolean; ttl: number } {
+    return {
+      size: this.cache.size,
+      enabled: this.enabled,
+      ttl: this.ttl,
+    };
+  }
+}
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
 
 /**
- * Validate the connection configuration
+ * Escape a SQL identifier (table name, column name, etc.) to prevent SQL injection.
+ * ClickHouse uses backticks for identifier quoting.
+ * @internal
+ */
+function escapeIdentifier(identifier: string): string {
+  // Remove any existing backticks and escape internal backticks
+  return `\`${identifier.replace(/`/g, '``')}\``;
+}
+
+/**
+ * Escape a SQL string literal to prevent SQL injection.
+ * @internal
+ */
+function escapeString(value: string): string {
+  // Escape single quotes by doubling them
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Validate the connection configuration.
+ * @throws {IcebergConnectionError} If configuration is invalid.
+ * @internal
  */
 function validateConfig(config: IcebergConnectionConfig): void {
   if (!config.host || config.host.trim() === '') {
@@ -255,12 +441,31 @@ function createTimeoutPromise(ms: number, message: string): Promise<never> {
 // =============================================================================
 
 /**
- * Client for interacting with ClickHouse Iceberg tables
+ * Client for interacting with ClickHouse Iceberg tables.
+ *
+ * This client provides methods for:
+ * - Executing queries against ClickHouse
+ * - Managing connection lifecycle
+ * - Caching metadata for performance
+ *
+ * @example
+ * ```typescript
+ * const client = new ClickHouseIcebergClient({
+ *   host: 'clickhouse.example.com',
+ *   database: 'analytics',
+ *   icebergCatalog: 'iceberg_catalog',
+ *   enableMetadataCache: true
+ * });
+ *
+ * const result = await client.executeQuery('SELECT 1');
+ * await client.close();
+ * ```
  */
 export class ClickHouseIcebergClient {
   private _closed = false;
   private _config: IcebergConnectionConfig;
   private _baseUrl: string;
+  private _metadataCache: MetadataCache;
 
   constructor(config: IcebergConnectionConfig) {
     this._config = {
@@ -270,11 +475,17 @@ export class ClickHouseIcebergClient {
       queryTimeout: config.queryTimeout ?? 30000,
       poolSize: config.poolSize ?? 10,
       maxRetries: config.maxRetries ?? 3,
+      enableMetadataCache: config.enableMetadataCache ?? false,
+      metadataCacheTtl: config.metadataCacheTtl ?? 300000,
       ...config,
     };
 
     const protocol = this._config.secure ? 'https' : 'http';
     this._baseUrl = `${protocol}://${this._config.host}:${this._config.port}`;
+    this._metadataCache = new MetadataCache(
+      this._config.enableMetadataCache ?? false,
+      this._config.metadataCacheTtl ?? 300000
+    );
   }
 
   /**
@@ -327,17 +538,41 @@ export class ClickHouseIcebergClient {
   }
 
   /**
-   * Close the connection
+   * Close the connection and clear cached metadata.
    */
   async close(): Promise<void> {
     this._closed = true;
+    this._metadataCache.clear();
   }
 
   /**
-   * Get the connection pool size
+   * Get the connection pool size.
    */
   getPoolSize(): number {
     return this._config.poolSize ?? 10;
+  }
+
+  /**
+   * Get metadata cache for internal use.
+   * @internal
+   */
+  getCache(): MetadataCache {
+    return this._metadataCache;
+  }
+
+  /**
+   * Clear all cached metadata.
+   * Useful when you know the schema has changed.
+   */
+  clearCache(): void {
+    this._metadataCache.clear();
+  }
+
+  /**
+   * Get cache statistics for monitoring.
+   */
+  getCacheStats(): { size: number; enabled: boolean; ttl: number } {
+    return this._metadataCache.stats();
   }
 
   /**
@@ -533,7 +768,22 @@ export async function createIcebergConnection(
 }
 
 /**
- * Discover an Iceberg catalog in ClickHouse
+ * Discover an Iceberg catalog in ClickHouse.
+ *
+ * This function queries the ClickHouse system tables to find catalog metadata.
+ * Results are cached if metadata caching is enabled on the connection.
+ *
+ * @param connection - The ClickHouse Iceberg client
+ * @param catalogName - Name of the catalog to discover
+ * @returns The catalog metadata
+ * @throws {IcebergConnectionError} If connection is closed
+ * @throws {IcebergCatalogError} If catalog is not found
+ *
+ * @example
+ * ```typescript
+ * const catalog = await discoverCatalog(connection, 'iceberg_catalog');
+ * console.log(catalog.warehouse); // 's3://data-lake/iceberg'
+ * ```
  */
 export async function discoverCatalog(
   connection: ClickHouseIcebergClient,
@@ -543,8 +793,16 @@ export async function discoverCatalog(
     throw new IcebergConnectionError('Connection is closed');
   }
 
+  // Check cache first
+  const cacheKey = `catalog:${catalogName}`;
+  const cached = connection.getCache().get<IcebergCatalog>(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // Query system tables for catalog information
   // ClickHouse stores Iceberg catalog info in system.named_collections or similar
+  // Use escapeString to prevent SQL injection
   const sql = `
     SELECT
       name,
@@ -553,14 +811,14 @@ export async function discoverCatalog(
       metadata_path,
       created_at
     FROM system.iceberg_catalogs
-    WHERE name = '${catalogName}'
+    WHERE name = ${escapeString(catalogName)}
     LIMIT 1
   `;
 
   const result = await connection.executeQuery<CatalogRow>(sql);
 
   if (!result.data || result.data.length === 0) {
-    throw new IcebergConnectionError(`Catalog '${catalogName}' not found`, 404, false);
+    throw new IcebergCatalogError(`Catalog '${catalogName}' not found`, catalogName, 404);
   }
 
   const row = result.data[0];
@@ -572,21 +830,64 @@ export async function discoverCatalog(
     createdAt: row.created_at ? new Date(row.created_at) : undefined,
   };
 
+  // Cache the result
+  connection.getCache().set(cacheKey, catalog);
+
   return catalog;
 }
 
 /**
- * Discover tables in an Iceberg catalog
+ * Options for discovering Iceberg tables.
+ */
+export interface DiscoverTablesOptions {
+  /** Filter tables by namespace */
+  namespace?: string;
+  /** Skip cache and fetch fresh data */
+  skipCache?: boolean;
+}
+
+/**
+ * Discover tables in an Iceberg catalog.
+ *
+ * This function queries the ClickHouse system tables to list all Iceberg tables
+ * in the configured catalog. Results are cached if metadata caching is enabled.
+ *
+ * @param connection - The ClickHouse Iceberg client
+ * @param options - Optional filters for table discovery
+ * @returns Array of table metadata
+ * @throws {IcebergConnectionError} If connection is closed
+ *
+ * @example
+ * ```typescript
+ * // Get all tables
+ * const tables = await discoverTables(connection);
+ *
+ * // Filter by namespace
+ * const analyticsTable = await discoverTables(connection, {
+ *   namespace: 'analytics'
+ * });
+ * ```
  */
 export async function discoverTables(
   connection: ClickHouseIcebergClient,
-  options?: { namespace?: string }
+  options?: DiscoverTablesOptions
 ): Promise<IcebergTable[]> {
   if (connection.isClosed()) {
     throw new IcebergConnectionError('Connection is closed');
   }
 
   const config = connection.getConfig();
+
+  // Check cache first (unless skipCache is set)
+  const cacheKey = `tables:${config.icebergCatalog}:${options?.namespace ?? 'all'}`;
+  if (!options?.skipCache) {
+    const cached = connection.getCache().get<IcebergTable[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
+
+  // Build query with proper escaping
   let sql = `
     SELECT
       namespace,
@@ -598,11 +899,11 @@ export async function discoverTables(
       total_records,
       total_size_bytes
     FROM system.iceberg_tables
-    WHERE catalog = '${config.icebergCatalog}'
+    WHERE catalog = ${escapeString(config.icebergCatalog)}
   `;
 
   if (options?.namespace) {
-    sql += ` AND namespace = '${options.namespace}'`;
+    sql += ` AND namespace = ${escapeString(options.namespace)}`;
   }
 
   const result = await connection.executeQuery<TableRow>(sql);
@@ -611,7 +912,7 @@ export async function discoverTables(
     return [];
   }
 
-  return result.data.map((row) => ({
+  const tables = result.data.map((row) => ({
     name: row.table_name,
     namespace: row.namespace,
     format: row.format,
@@ -621,14 +922,47 @@ export async function discoverTables(
     totalRecords: row.total_records,
     totalSizeBytes: row.total_size_bytes,
   }));
+
+  // Cache the result
+  connection.getCache().set(cacheKey, tables);
+
+  return tables;
 }
 
 /**
- * Get the schema of an Iceberg table
+ * Options for getting table schema.
+ */
+export interface GetSchemaOptions {
+  /** Skip cache and fetch fresh schema */
+  skipCache?: boolean;
+}
+
+/**
+ * Get the schema of an Iceberg table.
+ *
+ * This function queries ClickHouse system tables to retrieve the column
+ * definitions for a specific table. Results are cached if metadata caching
+ * is enabled.
+ *
+ * @param connection - The ClickHouse Iceberg client
+ * @param tableName - Name of the table to get schema for
+ * @param options - Optional configuration
+ * @returns The table schema with column definitions
+ * @throws {IcebergConnectionError} If connection is closed
+ * @throws {IcebergTableError} If table is not found
+ *
+ * @example
+ * ```typescript
+ * const schema = await getTableSchema(connection, 'events');
+ * for (const column of schema.columns) {
+ *   console.log(`${column.name}: ${column.type}`);
+ * }
+ * ```
  */
 export async function getTableSchema(
   connection: ClickHouseIcebergClient,
-  tableName: string
+  tableName: string,
+  options?: GetSchemaOptions
 ): Promise<IcebergSchema> {
   if (connection.isClosed()) {
     throw new IcebergConnectionError('Connection is closed');
@@ -636,7 +970,17 @@ export async function getTableSchema(
 
   const config = connection.getConfig();
 
+  // Check cache first (unless skipCache is set)
+  const cacheKey = `schema:${config.database}:${tableName}`;
+  if (!options?.skipCache) {
+    const cached = connection.getCache().get<IcebergSchema>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+  }
+
   // Query DESCRIBE TABLE to get column information
+  // Use escapeString to prevent SQL injection
   const sql = `
     SELECT
       name,
@@ -646,7 +990,7 @@ export async function getTableSchema(
       default_expression as default,
       comment
     FROM system.columns
-    WHERE database = '${config.database}' AND table = '${tableName}'
+    WHERE database = ${escapeString(config.database)} AND table = ${escapeString(tableName)}
     ORDER BY position
   `;
 
@@ -654,7 +998,7 @@ export async function getTableSchema(
     const result = await connection.executeQuery<ColumnRow>(sql);
 
     if (!result.data || result.data.length === 0) {
-      throw new IcebergConnectionError(`Table '${tableName}' not found`, 404, false);
+      throw new IcebergTableError(`Table '${tableName}' not found`, tableName, 404);
     }
 
     const columns: IcebergColumn[] = result.data.map((row) => ({
@@ -667,18 +1011,146 @@ export async function getTableSchema(
       isPartitionKey: row.is_partition_key ?? false,
     }));
 
-    return { columns };
+    const schema: IcebergSchema = { columns };
+
+    // Cache the result
+    connection.getCache().set(cacheKey, schema);
+
+    return schema;
   } catch (error) {
-    // Check if it's a table not found error
-    if (error instanceof IcebergConnectionError && error.code === 404) {
+    // Check if it's already a typed error
+    if (error instanceof IcebergTableError || error instanceof IcebergCatalogError) {
       throw error;
+    }
+    if (error instanceof IcebergConnectionError && error.code === 404) {
+      throw new IcebergTableError(`Table '${tableName}' not found`, tableName, 404);
     }
 
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('not found') || message.includes("doesn't exist")) {
-      throw new IcebergConnectionError(`Table '${tableName}' not found`, 404, false);
+      throw new IcebergTableError(`Table '${tableName}' not found`, tableName, 404);
     }
 
     throw error;
+  }
+}
+
+// =============================================================================
+// Unified Iceberg API
+// =============================================================================
+
+/**
+ * Unified Iceberg API providing a single entry point for all Iceberg operations.
+ *
+ * This class wraps the connection and provides methods for catalog discovery,
+ * table listing, and schema introspection with automatic caching.
+ *
+ * @example
+ * ```typescript
+ * const iceberg = await Iceberg.connect({
+ *   host: 'clickhouse.example.com',
+ *   database: 'analytics',
+ *   icebergCatalog: 'iceberg_catalog',
+ *   enableMetadataCache: true
+ * });
+ *
+ * const catalog = await iceberg.catalog();
+ * const tables = await iceberg.tables();
+ * const schema = await iceberg.schema('events');
+ *
+ * await iceberg.close();
+ * ```
+ */
+export class Iceberg {
+  private constructor(private readonly _client: ClickHouseIcebergClient) {}
+
+  /**
+   * Create a new Iceberg connection.
+   *
+   * @param config - Connection configuration
+   * @returns A new Iceberg instance
+   */
+  static async connect(config: IcebergConnectionConfig): Promise<Iceberg> {
+    const client = await createIcebergConnection(config);
+    return new Iceberg(client);
+  }
+
+  /**
+   * Get the underlying ClickHouse client.
+   * Use this for advanced operations not covered by the unified API.
+   */
+  get client(): ClickHouseIcebergClient {
+    return this._client;
+  }
+
+  /**
+   * Discover the configured Iceberg catalog.
+   *
+   * @param catalogName - Optional catalog name (uses config default if not provided)
+   * @returns Catalog metadata
+   */
+  async catalog(catalogName?: string): Promise<IcebergCatalog> {
+    const name = catalogName ?? this._client.getConfig().icebergCatalog;
+    return discoverCatalog(this._client, name);
+  }
+
+  /**
+   * List all tables in the Iceberg catalog.
+   *
+   * @param options - Optional filters
+   * @returns Array of table metadata
+   */
+  async tables(options?: DiscoverTablesOptions): Promise<IcebergTable[]> {
+    return discoverTables(this._client, options);
+  }
+
+  /**
+   * Get the schema of a specific table.
+   *
+   * @param tableName - Name of the table
+   * @param options - Optional configuration
+   * @returns Table schema with column definitions
+   */
+  async schema(tableName: string, options?: GetSchemaOptions): Promise<IcebergSchema> {
+    return getTableSchema(this._client, tableName, options);
+  }
+
+  /**
+   * Execute a raw SQL query against ClickHouse.
+   *
+   * @param sql - SQL query to execute
+   * @param timeout - Optional query timeout
+   * @returns Query results
+   */
+  async query<T>(sql: string, timeout?: number): Promise<{ data: T[] }> {
+    return this._client.executeQuery<T>(sql, timeout);
+  }
+
+  /**
+   * Clear all cached metadata.
+   */
+  clearCache(): void {
+    this._client.clearCache();
+  }
+
+  /**
+   * Get cache statistics.
+   */
+  cacheStats(): { size: number; enabled: boolean; ttl: number } {
+    return this._client.getCacheStats();
+  }
+
+  /**
+   * Check if the connection is closed.
+   */
+  isClosed(): boolean {
+    return this._client.isClosed();
+  }
+
+  /**
+   * Close the connection and release resources.
+   */
+  async close(): Promise<void> {
+    return this._client.close();
   }
 }

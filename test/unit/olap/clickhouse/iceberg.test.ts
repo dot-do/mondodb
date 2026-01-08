@@ -15,11 +15,17 @@ import {
   discoverCatalog,
   discoverTables,
   getTableSchema,
+  Iceberg,
+  IcebergConnectionError,
+  IcebergCatalogError,
+  IcebergTableError,
   type IcebergConnectionConfig,
   type IcebergCatalog,
   type IcebergTable,
   type IcebergSchema,
   type IcebergColumn,
+  type DiscoverTablesOptions,
+  type GetSchemaOptions,
 } from '../../../../src/olap/clickhouse/iceberg';
 
 // ============================================================================
@@ -711,6 +717,332 @@ describe('ClickHouse Iceberg Integration', () => {
 
       expect(connection).toBeDefined();
       expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // ==========================================================================
+  // Metadata Cache Tests (Refactor: workers-3p3vc)
+  // ==========================================================================
+
+  describe('metadata caching', () => {
+    it('should cache catalog discovery results', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+        enableMetadataCache: true,
+        metadataCacheTtl: 60000,
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            {
+              name: 'iceberg_catalog',
+              type: 'iceberg',
+              warehouse: 's3://data-lake/iceberg',
+            },
+          ])
+        );
+
+      const connection = await createIcebergConnection(config);
+
+      // First call should hit the database
+      const catalog1 = await discoverCatalog(connection, 'iceberg_catalog');
+      expect(catalog1.name).toBe('iceberg_catalog');
+
+      // Second call should return cached result (no additional fetch)
+      const catalog2 = await discoverCatalog(connection, 'iceberg_catalog');
+      expect(catalog2.name).toBe('iceberg_catalog');
+
+      // Only 2 fetch calls: connection test + first catalog query
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should cache table discovery results', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+        enableMetadataCache: true,
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            { namespace: 'analytics', table_name: 'events', format: 'Iceberg' },
+          ])
+        );
+
+      const connection = await createIcebergConnection(config);
+
+      const tables1 = await discoverTables(connection);
+      const tables2 = await discoverTables(connection);
+
+      expect(tables1).toEqual(tables2);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip cache when skipCache option is set', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+        enableMetadataCache: true,
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            { namespace: 'analytics', table_name: 'events', format: 'Iceberg' },
+          ])
+        )
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            { namespace: 'analytics', table_name: 'events', format: 'Iceberg' },
+            { namespace: 'analytics', table_name: 'users', format: 'Iceberg' },
+          ])
+        );
+
+      const connection = await createIcebergConnection(config);
+
+      const tables1 = await discoverTables(connection);
+      expect(tables1).toHaveLength(1);
+
+      const tables2 = await discoverTables(connection, { skipCache: true });
+      expect(tables2).toHaveLength(2);
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should clear cache on connection close', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+        enableMetadataCache: true,
+      };
+
+      mockFetch.mockResolvedValue(createMockClickHouseResponse([{ version: '24.3.1' }]));
+
+      const connection = await createIcebergConnection(config);
+      expect(connection.getCacheStats().enabled).toBe(true);
+
+      await connection.close();
+      expect(connection.getCacheStats().size).toBe(0);
+    });
+
+    it('should provide cache statistics', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+        enableMetadataCache: true,
+        metadataCacheTtl: 120000,
+      };
+
+      mockFetch.mockResolvedValue(createMockClickHouseResponse([{ version: '24.3.1' }]));
+
+      const connection = await createIcebergConnection(config);
+      const stats = connection.getCacheStats();
+
+      expect(stats.enabled).toBe(true);
+      expect(stats.ttl).toBe(120000);
+      expect(stats.size).toBe(0);
+    });
+  });
+
+  // ==========================================================================
+  // Unified Iceberg API Tests (Refactor: workers-3p3vc)
+  // ==========================================================================
+
+  describe('Unified Iceberg API', () => {
+    it('should create connection via Iceberg.connect', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch.mockResolvedValue(createMockClickHouseResponse([{ version: '24.3.1' }]));
+
+      const iceberg = await Iceberg.connect(config);
+
+      expect(iceberg).toBeDefined();
+      expect(iceberg.isClosed()).toBe(false);
+
+      await iceberg.close();
+      expect(iceberg.isClosed()).toBe(true);
+    });
+
+    it('should provide access to underlying client', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch.mockResolvedValue(createMockClickHouseResponse([{ version: '24.3.1' }]));
+
+      const iceberg = await Iceberg.connect(config);
+
+      expect(iceberg.client).toBeInstanceOf(ClickHouseIcebergClient);
+      expect(iceberg.client.getConfig().database).toBe('analytics');
+    });
+
+    it('should discover catalog through unified API', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            {
+              name: 'iceberg_catalog',
+              type: 'iceberg',
+              warehouse: 's3://data-lake/iceberg',
+            },
+          ])
+        );
+
+      const iceberg = await Iceberg.connect(config);
+      const catalog = await iceberg.catalog();
+
+      expect(catalog.name).toBe('iceberg_catalog');
+      expect(catalog.warehouse).toBe('s3://data-lake/iceberg');
+    });
+
+    it('should list tables through unified API', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            { namespace: 'analytics', table_name: 'events', format: 'Iceberg' },
+            { namespace: 'analytics', table_name: 'users', format: 'Iceberg' },
+          ])
+        );
+
+      const iceberg = await Iceberg.connect(config);
+      const tables = await iceberg.tables();
+
+      expect(tables).toHaveLength(2);
+      expect(tables[0].name).toBe('events');
+    });
+
+    it('should get schema through unified API', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(
+          createMockClickHouseResponse([
+            { name: 'id', type: 'String', position: 0 },
+            { name: 'timestamp', type: 'DateTime64', position: 1 },
+          ])
+        );
+
+      const iceberg = await Iceberg.connect(config);
+      const schema = await iceberg.schema('events');
+
+      expect(schema.columns).toHaveLength(2);
+      expect(schema.columns[0].name).toBe('id');
+    });
+
+    it('should execute raw queries through unified API', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ count: 42 }]));
+
+      const iceberg = await Iceberg.connect(config);
+      const result = await iceberg.query<{ count: number }>('SELECT count() as count FROM events');
+
+      expect(result.data[0].count).toBe(42);
+    });
+  });
+
+  // ==========================================================================
+  // Typed Error Tests (Refactor: workers-3p3vc)
+  // ==========================================================================
+
+  describe('typed errors', () => {
+    it('should throw IcebergCatalogError when catalog not found', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'nonexistent',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(createMockClickHouseResponse([]));
+
+      const connection = await createIcebergConnection(config);
+
+      try {
+        await discoverCatalog(connection, 'nonexistent');
+        expect.fail('Should have thrown IcebergCatalogError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(IcebergCatalogError);
+        expect((error as IcebergCatalogError).catalogName).toBe('nonexistent');
+      }
+    });
+
+    it('should throw IcebergTableError when table not found', async () => {
+      const config: IcebergConnectionConfig = {
+        host: 'clickhouse.example.com',
+        port: 8443,
+        database: 'analytics',
+        icebergCatalog: 'iceberg_catalog',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(createMockClickHouseResponse([{ version: '24.3.1' }]))
+        .mockResolvedValueOnce(createMockClickHouseResponse([]));
+
+      const connection = await createIcebergConnection(config);
+
+      try {
+        await getTableSchema(connection, 'nonexistent');
+        expect.fail('Should have thrown IcebergTableError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(IcebergTableError);
+        expect((error as IcebergTableError).tableName).toBe('nonexistent');
+      }
     });
   });
 });
