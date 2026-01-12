@@ -1,0 +1,19 @@
+name: mongo_do
+description: MongoDB-compatible Dart client for mongo.do - Natural language first, AI-native database operations with promise pipelining.
+version: 0.1.0
+homepage: https://mongo.do
+repository: https://github.com/dotdo/mongo-dart-sdk
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  http: ^1.1.0
+  meta: ^1.9.1
+
+dev_dependencies:
+  test: ^1.24.0
+  lints: ^3.0.0
+  mockito: ^5.4.0
+  build_runner: ^2.4.0

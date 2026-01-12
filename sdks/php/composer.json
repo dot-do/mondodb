@@ -1,0 +1,58 @@
+{
+    "name": "mongo.do/sdk",
+    "description": "MongoDB SDK for PHP - PyMongo-compatible API over RPC",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "mongodb",
+        "mongo",
+        "database",
+        "sdk",
+        "rpc",
+        "dotdo"
+    ],
+    "authors": [
+        {
+            "name": "DotDo",
+            "email": "dev@dotdo.io"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "MongoDo\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MongoDo\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit --colors=always",
+        "analyze": "phpstan analyse src --level=8"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0.x-dev"
+        },
+        "laravel": {
+            "providers": [
+                "MongoDo\\Laravel\\MongoServiceProvider"
+            ],
+            "aliases": {
+                "Mongo": "MongoDo\\Facades\\Mongo"
+            }
+        }
+    }
+}
