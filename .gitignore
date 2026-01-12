@@ -32,3 +32,13 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+__pycache__/
+*.pyc
+.coverage
+*.egg-info/
+dist/
+build/
+node_modules/
+coverage/
+.pytest_cache/
