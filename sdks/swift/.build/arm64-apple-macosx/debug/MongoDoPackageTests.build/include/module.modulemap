@@ -1,0 +1,3 @@
+module MongoDoPackageTests {
+    header "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/include/MongoDoPackageTests-Swift.h"
+}

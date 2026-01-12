@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/master.swiftdeps"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.dia"
+  }
+}

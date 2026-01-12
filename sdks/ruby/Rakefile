@@ -1,0 +1,55 @@
+# frozen_string_literal: true
+
+require 'bundler/gem_tasks'
+require 'rspec/core/rake_task'
+require 'rubocop/rake_task'
+
+RSpec::Core::RakeTask.new(:spec)
+RuboCop::RakeTask.new
+
+desc 'Run all tests'
+task default: %i[spec rubocop]
+
+desc 'Run tests with coverage'
+task :coverage do
+  ENV['COVERAGE'] = 'true'
+  Rake::Task[:spec].invoke
+end
+
+desc 'Generate YARD documentation'
+task :doc do
+  require 'yard'
+  YARD::Rake::YardocTask.new do |t|
+    t.files = ['lib/**/*.rb']
+    t.options = ['--output-dir', 'doc/yard']
+  end
+end
+
+namespace :test do
+  desc 'Run unit tests only'
+  RSpec::Core::RakeTask.new(:unit) do |t|
+    t.rspec_opts = '--tag ~integration'
+  end
+
+  desc 'Run integration tests only'
+  RSpec::Core::RakeTask.new(:integration) do |t|
+    t.rspec_opts = '--tag integration'
+  end
+end
+
+desc 'Start interactive console'
+task :console do
+  require 'pry'
+  require_relative 'lib/mongo_do'
+  Pry.start
+end
+
+desc 'Validate gemspec'
+task :validate do
+  spec = Gem::Specification.load('mongo.do.gemspec')
+  puts "Name: #{spec.name}"
+  puts "Version: #{spec.version}"
+  puts "Summary: #{spec.summary}"
+  puts "Ruby version: #{spec.required_ruby_version}"
+  puts 'Gemspec is valid!'
+end

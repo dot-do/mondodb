@@ -1,0 +1,40 @@
+{
+  "": {
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/master.swiftdeps"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/Document.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.dia"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoClient.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.dia"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCollection.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.dia"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCursor.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.dia"
+  },
+  "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoDatabase.swift": {
+    "dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.d",
+    "object": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.swift.o",
+    "swiftmodule": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase~partial.swiftmodule",
+    "swift-dependencies": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.swiftdeps",
+    "diagnostics": "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.dia"
+  }
+}

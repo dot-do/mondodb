@@ -1,0 +1,722 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.xctest/Contents/MacOS/MongoDoPackageTests",
+      "packagePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift",
+      "productName" : "MongoDoPackageTests"
+    }
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.MongoDo-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "fileList" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/sources",
+      "importPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/Document.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCollection.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCursor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoDatabase.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "MongoDo",
+      "moduleOutputPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDo.swiftmodule",
+      "objects" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx12.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j28",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/include/MongoDo-Swift.h",
+        "-swift-version",
+        "5",
+        "-enable-experimental-feature",
+        "StrictConcurrency",
+        "-I",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-L",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-plugin-path",
+        "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "swift"
+      ],
+      "outputFileMapPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDo.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/Document.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoClient.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCollection.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCursor.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoDatabase.swift"
+      ],
+      "tempsPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.MongoDoPackageTests-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "fileList" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/sources",
+      "importPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDoTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "MongoDoPackageTests",
+      "moduleOutputPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDoPackageTests.swiftmodule",
+      "objects" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx12.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j28",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/include/MongoDoPackageTests-Swift.h",
+        "-I",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-L",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-plugin-path",
+        "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "swift"
+      ],
+      "outputFileMapPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDoPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.MongoDoTests-arm64-apple-macosx26.0-debug.module" : {
+      "executable" : "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "fileList" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/sources",
+      "importPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/DocumentTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoClientTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCollectionTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCursorTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoDatabaseTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDo.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "MongoDoTests",
+      "moduleOutputPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDoTests.swiftmodule",
+      "objects" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/DocumentTests.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoClientTests.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCollectionTests.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCursorTests.swift.o",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoDatabaseTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx12.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-Xfrontend",
+        "-enable-cross-import-overlays",
+        "-j28",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-swift-version",
+        "5",
+        "-I",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-L",
+        "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+        "-plugin-path",
+        "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "swift"
+      ],
+      "outputFileMapPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/DocumentTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoClientTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCollectionTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCursorTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoDatabaseTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules/MongoDoTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/DocumentTests.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoClientTests.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCollectionTests.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCursorTests.swift",
+        "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoDatabaseTests.swift"
+      ],
+      "tempsPath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "MongoDo" : [
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "-module-name",
+      "MongoDo",
+      "-package-name",
+      "swift",
+      "-c",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/Document.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoClient.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCollection.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCursor.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoDatabase.swift",
+      "-I",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx12.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j28",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/include/MongoDo-Swift.h",
+      "-swift-version",
+      "5",
+      "-enable-experimental-feature",
+      "StrictConcurrency",
+      "-I",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-L",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-plugin-path",
+      "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "swift",
+      "-driver-use-frontend-path",
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+    ],
+    "MongoDoPackageTests" : [
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "-module-name",
+      "MongoDoPackageTests",
+      "-package-name",
+      "swift",
+      "-c",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift",
+      "-I",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx12.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j28",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/include/MongoDoPackageTests-Swift.h",
+      "-I",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-L",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-plugin-path",
+      "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "swift",
+      "-driver-use-frontend-path",
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+    ],
+    "MongoDoTests" : [
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc",
+      "-module-name",
+      "MongoDoTests",
+      "-package-name",
+      "swift",
+      "-c",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/DocumentTests.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoClientTests.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCollectionTests.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCursorTests.swift",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoDatabaseTests.swift",
+      "-I",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx12.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-Xfrontend",
+      "-enable-cross-import-overlays",
+      "-j28",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-swift-version",
+      "5",
+      "-I",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-L",
+      "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+      "-plugin-path",
+      "/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "swift",
+      "-driver-use-frontend-path",
+      "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "MongoDo" : [
+
+    ],
+    "MongoDoPackageTests" : [
+      "MongoDoTests",
+      "MongoDo"
+    ],
+    "MongoDoTests" : [
+      "MongoDo"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift" : {
+      "inputs" : [
+
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/Document.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCollection.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoCursor.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Sources/MongoDo/MongoDatabase.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/sources"
+    },
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/sources"
+    },
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/Document.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCollection.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoCursor.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDo.build/MongoDatabase.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/DocumentTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoClientTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCollectionTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoCursorTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/MongoDatabaseTests.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoPackageTests.product/Objects.LinkFileList"
+    },
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/DocumentTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoClientTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCollectionTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoCursorTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/Tests/MongoDoTests/MongoDatabaseTests.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/MongoDoTests.build/sources"
+    },
+    "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Library/Developer/CommandLineTools/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/nathanclevenger/projects/dot-do-capnweb/sdks/mongo/sdks/swift/.build/arm64-apple-macosx/debug/swift-version--1AB21518FC5DEDBE.txt"
+    }
+  }
+}

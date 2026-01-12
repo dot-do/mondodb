@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <PackageId>Mongo.Do</PackageId>
+    <RootNamespace>Mongo.Do</RootNamespace>
+    <AssemblyName>Mongo.Do</AssemblyName>
+    <Version>0.1.0</Version>
+    <Authors>DotDo Team</Authors>
+    <Description>MongoDB SDK for DotDo platform - MongoDB.Driver compatible API with async/await and promise pipelining</Description>
+    <PackageTags>mongodb;mongo;dotdo;sdk;nosql;database</PackageTags>
+    <PackageProjectUrl>https://mongo.do</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dot-do/mongo</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <!-- SDK Source Files -->
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Package README -->
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Dependencies -->
+  <ItemGroup>
+    <!-- JSON serialization -->
+    <PackageReference Include="System.Text.Json" Version="8.0.4" />
+    <!-- WebSocket support -->
+    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
+    <!-- ASP.NET Core integration (optional) -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Routing.Abstractions" Version="2.2.0" />
+  </ItemGroup>
+
+</Project>

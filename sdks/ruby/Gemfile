@@ -1,0 +1,26 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gemspec
+
+group :development, :test do
+  gem 'bundler', '~> 2.0'
+  gem 'rake', '~> 13.0'
+  gem 'rspec', '~> 3.12'
+  gem 'rubocop', '~> 1.50'
+  gem 'rubocop-rspec', '~> 2.20'
+  gem 'simplecov', '~> 0.22'
+  gem 'webmock', '~> 3.19'
+  gem 'yard', '~> 0.9'
+end
+
+group :development do
+  gem 'pry', '~> 0.14'
+  gem 'pry-byebug', '~> 3.10'
+end
+
+# Optional: async support for Ruby 3.2+
+group :async do
+  gem 'async', '~> 2.6'
+end
